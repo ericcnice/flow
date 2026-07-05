@@ -76,6 +76,7 @@ export type ScoringEventType =
   | "SET" // um set foi vencido
   | "MATCH" // a partida foi vencida
   | "TIEBREAK_START" // um tiebreak / super tiebreak começou
+  | "SIDE_OUT" // (pickleball) o recebedor venceu o rally e ganhou o saque, sem ponto
 
 /** Um evento ocorrido durante a marcação de um ponto. */
 export type ScoringEvent = {
@@ -274,4 +275,28 @@ export type TableTennisRules = {
   winBy: number
   /** Melhor de 5 ou de 7 games — padrão 5 (primeiro a 3; em 7, primeiro a 4). */
   bestOf: 5 | 7
+}
+
+/**
+ * Regras configuráveis do pickleball — uma TERCEIRA família: side-out scoring
+ * (só o lado que saca pode marcar ponto). Não é rally scoring (squash/ping pong)
+ * nem a família do tênis; a lógica vive em sports/pickleball.ts, autocontida.
+ *
+ * Reaproveita o {@link GameState} pela mesma reinterpretação dos esportes de
+ * game corrido: `points` = pontos do game atual por lado; `games` = games
+ * ganhos; `currentSet` = nº do game; `completedSets` = games encerrados;
+ * `sets`/`advantage`/`tiebreakPoints`/`isTiebreak*` ficam inertes. O campo
+ * `server` (já existente) é central aqui: indica o lado que está sacando.
+ *
+ * Fase 0 SIMPLIFICADA: um único "lado" sacador por vez; o side-out passa o saque
+ * direto ao outro lado. NÃO modela os dois-sacadores/segundo-saque nem o 3º
+ * número do placar de duplas — fica como refinamento futuro.
+ */
+export type PickleballRules = {
+  /** Pontos para vencer um game (padrão 11; opção 15). */
+  target: number
+  /** Diferença mínima para fechar o game (padrão 2; 10-10 segue até abrir 2). */
+  winBy: number
+  /** Melhor de N games — padrão 3 (primeiro a 2). */
+  bestOf: 3 | 5
 }
