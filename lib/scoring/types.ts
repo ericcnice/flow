@@ -176,3 +176,59 @@ export type BeachRules = {
   /** Melhor de 3 ou de 5 sets — beach raramente é de 5, padrão 3. */
   bestOf: 3 | 5
 }
+
+/**
+ * Forma canônica de regras que o núcleo de racquete (sports/racket-core.ts)
+ * entende. {@link TennisRules} e {@link BeachRules} são estruturalmente
+ * compatíveis (usam `advantage` diretamente). O padel converte
+ * `goldenPoint` → `advantage` antes de delegar. Cada esporte mantém seu próprio
+ * tipo de regras (para poder divergir), mas todos compartilham este algoritmo
+ * enquanto a mecânica for igual.
+ */
+export type RacketRules = {
+  gamesPerSet: number
+  advantage: boolean
+  tiebreak: {
+    enabled: boolean
+    target: number
+    mode: TiebreakMode
+  }
+  superTiebreak: {
+    enabled: boolean
+    target: number
+    mode: TiebreakMode
+  }
+  bestOf: 3 | 5
+}
+
+/**
+ * Regras configuráveis do padel.
+ *
+ * Mesma mecânica de racquete, mas com o "ponto de ouro" (golden point / punto
+ * de oro) no lugar da vantagem: quando `goldenPoint` é true (padrão real do
+ * padel profissional), o 40-40 é ponto seco — o próximo ponto decide o game.
+ * Quando false, vale a vantagem tradicional. O detalhe de qual lado escolhe o
+ * lado do saque no ponto de ouro é assunto da UI, não do motor.
+ */
+export type PadelRules = {
+  /** Games para vencer um set (padrão 6). */
+  gamesPerSet: number
+  /** true = ponto seco no 40-40 (no-ad); false = vantagem tradicional. */
+  goldenPoint: boolean
+  /** Tiebreak comum, disputado em gamesPerSet-gamesPerSet (ex.: 6-6). */
+  tiebreak: {
+    enabled: boolean
+    /** Pontos para vencer (padrão 7). */
+    target: number
+    mode: TiebreakMode
+  }
+  /** Super tiebreak que substitui o set decisivo (padrão desligado). */
+  superTiebreak: {
+    enabled: boolean
+    /** Pontos para vencer (padrão 10). */
+    target: number
+    mode: TiebreakMode
+  }
+  /** Melhor de 3 ou de 5 sets — padel é quase sempre de 3, padrão 3. */
+  bestOf: 3 | 5
+}
