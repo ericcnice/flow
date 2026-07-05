@@ -2,9 +2,8 @@
 
 import { useState, useEffect, useRef } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
-import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Menu } from "lucide-react"
+import { Menu, Undo2, Volume2 } from "lucide-react"
 import { GameMenu } from "@/components/game-menu"
 import { ThirdSetModal } from "@/components/third-set-modal"
 
@@ -324,210 +323,176 @@ export default function JogoPage() {
     return pointLabel(gs[side]) // "0" | "15" | "30" | "40" | "AD"
   }
 
-  // Renderiza os blocos de sets (a partir de completedSets + set atual do motor)
-  const renderSetBlocks = () => {
-    return Array.from({ length: maxSets }).map((_, index) => {
-      const setNum = index + 1
-      const setData = gs.completedSets.find((s) => s.set === setNum)
-      const isCompleted = setData !== undefined
-      const blueWon = isCompleted && setData.A > setData.B
-      const redWon = isCompleted && setData.B > setData.A
+  // --- Bloco de um lado (ScoreBot): número gigante + nome/sacador no canto ---
+  // Toda a área é tocável e marca ponto para o lado (engine.pointFor via
+  // handleScoreClick). O nome e o indicador de saque param a propagação para não
+  // marcarem ponto quando editados/alternados. Cores vêm de variáveis CSS P&B.
+  const renderBlock = (team: "blue" | "red") => {
+    const side: Side = sideOf(team)
+    const isA = team === "blue"
+    const name = isA ? bluePlayerName : redPlayerName
+    const setName = isA ? setBluePlayerName : setRedPlayerName
+    const editing = isA ? editingBluePlayer : editingRedPlayer
+    const setEditing = isA ? setEditingBluePlayer : setEditingRedPlayer
+    const animating = isA ? animatingBlue : animatingRed
+    const blinking = isA ? blueCardBlinking : redCardBlinking
+    const isServing = isA ? blueServing : !blueServing
+    const isWinner = isA ? blueWinner : redWinner
+    const bgVar = isA ? "--lado-a-bg" : "--lado-b-bg"
+    const txtVar = isA ? "--lado-a-texto" : "--lado-b-texto"
 
-      const blueVal = isCompleted
-        ? setData.A
-        : setNum < gs.currentSet
-          ? 0
-          : setNum === gs.currentSet
-            ? gs.A.games
-            : "-"
-      const redVal = isCompleted
-        ? setData.B
-        : setNum < gs.currentSet
-          ? 0
-          : setNum === gs.currentSet
-            ? gs.B.games
-            : "-"
+    return (
+      <div
+        role="button"
+        tabIndex={0}
+        aria-label={`Marcar ponto para ${name}`}
+        onClick={() => handleScoreClick(team)}
+        className={`relative flex-1 basis-0 flex flex-col items-stretch justify-center overflow-hidden cursor-pointer select-none
+          ${blinking ? "win-blink" : ""}`}
+        style={{ backgroundColor: `var(${bgVar})`, color: `var(${txtVar})` }}
+      >
+        {/* Canto: nome do jogador (pequeno) + indicador de saque */}
+        <div className="absolute top-0 left-0 right-0 z-10 flex items-start justify-between gap-2 px-4 pt-3 md:px-5 md:pt-4">
+          {editing ? (
+            <Input
+              value={name}
+              onClick={(e) => e.stopPropagation()}
+              onChange={(e) => setName(e.target.value)}
+              onBlur={() => {
+                setEditing(false)
+                updatePlayerName(team, name)
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  setEditing(false)
+                  updatePlayerName(team, name)
+                }
+              }}
+              autoFocus
+              className="h-8 max-w-[70%] bg-transparent border-current/40 text-base font-semibold player-name"
+              style={{ color: `var(${txtVar})` }}
+            />
+          ) : (
+            <span
+              onClick={(e) => {
+                e.stopPropagation()
+                setEditing(true)
+              }}
+              className="player-name truncate text-sm md:text-base font-semibold uppercase tracking-wide opacity-90 max-w-[75%]"
+            >
+              {name}
+            </span>
+          )}
 
-      return (
-        <div key={`set-${setNum}`} className="flex flex-col items-center">
-          {/* Blue score */}
-          <div
-            className={`${maxSets === 3 ? "w-[80px]" : "w-[60px]"} h-12 flex items-center justify-center rounded-md set-block
-            ${blueWon ? "bg-[#FEE100]" : "bg-[#696969] border border-[#929292]"}`}
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation()
+              toggleServing()
+            }}
+            title={
+              initialServingSet
+                ? "Toque para alterar o sacador"
+                : "O sacador não pode ser alterado após o início da partida"
+            }
+            aria-label="Indicador de saque"
+            className="shrink-0 -mt-0.5"
           >
-            <span className={`text-lg font-bold ${blueWon ? "text-[#383838]" : "text-[#FEE100]"}`}>{blueVal}</span>
-          </div>
-
-          {/* Red score */}
-          <div
-            className={`${maxSets === 3 ? "w-[80px]" : "w-[60px]"} h-12 flex items-center justify-center rounded-md set-block
-            ${redWon ? "bg-[#FEE100]" : "bg-[#696969] border border-[#929292]"}`}
-          >
-            <span className={`text-lg font-bold ${redWon ? "text-[#383838]" : "text-[#FEE100]"}`}>{redVal}</span>
-          </div>
+            <span
+              className={`block w-3.5 h-3.5 rounded-full serving-indicator ${!initialServingSet ? "opacity-60" : ""}`}
+              style={{
+                backgroundColor: isServing ? "currentColor" : "transparent",
+                border: "2px solid currentColor",
+                opacity: isServing ? 1 : 0.35,
+              }}
+            />
+          </button>
         </div>
-      )
-    })
+
+        {/* Número gigante */}
+        <div className={`giant-number text-center px-2 ${animating ? "score-animation" : ""}`}>{bigNumber(side)}</div>
+
+        {/* Rodapé do bloco: tiebreak / vencedor (discretos) */}
+        {(isTiebreak || (finished && isWinner)) && (
+          <div className="absolute bottom-0 left-0 right-0 pb-3 text-center text-xs md:text-sm font-bold tracking-[0.2em] opacity-80">
+            {finished && isWinner ? "VENCEDOR" : "TIEBREAK"}
+          </div>
+        )}
+      </div>
+    )
   }
 
   return (
-    <div className="flex flex-col min-h-screen py-6 px-4 bg-[#383838]">
-      <div className="flex justify-between items-center mb-6">
-        <div>
-          <h1 className="text-2xl font-bold text-white">Quadra {gameConfig.quadra}</h1>
-          {finished && (
-            <p className="text-[#FEE100] font-bold">{blueWinner ? bluePlayerName : redPlayerName} venceu a partida!</p>
-          )}
+    <div
+      className="flex flex-col h-[100dvh] overflow-hidden mono-tabular"
+      style={{ backgroundColor: "var(--palco-fundo)", color: "var(--palco-discreto)" }}
+    >
+      {/* Topo discreto: placar de sets/games + cronômetro. Não compete com o número. */}
+      <header
+        className="flex items-center justify-between gap-3 px-4 py-2 text-xs md:text-sm"
+        style={{ borderBottom: "1px solid var(--palco-divisor)" }}
+      >
+        <div className="flex items-center gap-4 tracking-wide whitespace-nowrap overflow-hidden">
+          <span className="uppercase opacity-70">Quadra {gameConfig.quadra}</span>
+          <span>
+            <span className="opacity-60">sets </span>
+            {gs.A.sets}-{gs.B.sets}
+          </span>
+          <span>
+            <span className="opacity-60">games </span>
+            {gs.A.games}-{gs.B.games}
+          </span>
+          {isTiebreak && <span className="opacity-90 font-bold tracking-widest">TB</span>}
         </div>
-        <Button variant="ghost" size="icon" className="text-[#FEE100]" onClick={() => setMenuOpen(true)}>
-          <Menu className="h-8 w-8" />
-        </Button>
-      </div>
+        <span className="tabular-nums opacity-80 shrink-0">{elapsedTime}</span>
+      </header>
 
-      <div className="flex-1 flex flex-col gap-6">
-        {/* Blue Player Card */}
-        <div
-          className={`relative bg-[#696969] rounded-lg p-4 shadow-lg mx-auto w-full max-w-[280px] h-48
-            ${blueCardBlinking ? "blink-animation" : ""}
-            ${finished && blueWinner ? "bg-[#FEE100]" : ""}`}
+      {/* Palco: dois blocos ocupando a tela. Lado a lado em tela larga; empilhados em portrait. */}
+      <main
+        className="flex-1 flex flex-col md:flex-row min-h-0"
+        style={{ gap: "1px", backgroundColor: "var(--palco-divisor)" }}
+      >
+        {renderBlock("blue")}
+        {renderBlock("red")}
+      </main>
+
+      {/* Controles discretos embaixo, fora do caminho do número. */}
+      <footer
+        className="flex items-center justify-center gap-8 px-4 py-2"
+        style={{ borderTop: "1px solid var(--palco-divisor)" }}
+      >
+        <button
+          type="button"
+          onClick={undoLastPoint}
+          className="flex flex-col items-center gap-0.5 text-[10px] uppercase tracking-wide opacity-80 hover:opacity-100 disabled:opacity-30"
+          aria-label="Voltar ponto"
         >
-          <div className="absolute top-4 right-4 z-10" onClick={toggleServing}>
-            <div
-              className={`w-6 h-6 rounded-full ${blueServing ? "bg-[#FEE100]" : "bg-[#929292]"} serving-indicator cursor-pointer ${!initialServingSet ? "opacity-50" : ""}`}
-              title={
-                initialServingSet
-                  ? "Clique para alterar o sacador"
-                  : "O sacador não pode ser alterado após o início da partida"
-              }
-            ></div>
-          </div>
+          <Undo2 className="h-6 w-6" />
+          <span>voltar</span>
+        </button>
 
-          {editingBluePlayer ? (
-            <div className="mb-4">
-              <Input
-                value={bluePlayerName}
-                onChange={(e) => setBluePlayerName(e.target.value)}
-                onBlur={() => {
-                  setEditingBluePlayer(false)
-                  updatePlayerName("blue", bluePlayerName)
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    setEditingBluePlayer(false)
-                    updatePlayerName("blue", bluePlayerName)
-                  }
-                }}
-                autoFocus
-                className="text-2xl font-bold text-white bg-[#696969] border-[#FEE100] player-name"
-              />
-            </div>
-          ) : (
-            <h2
-              className={`text-2xl font-bold mb-4 player-name cursor-pointer ${finished && blueWinner ? "text-[#383838]" : "text-white"}`}
-              onClick={() => setEditingBluePlayer(true)}
-            >
-              {bluePlayerName}
-            </h2>
-          )}
-
-          <div
-            className={`text-center text-9xl score-number cursor-pointer
-              ${animatingBlue ? "score-animation" : ""}
-              ${finished && blueWinner ? "text-[#383838]" : "text-[#FEE100]"}`}
-            onClick={() => handleScoreClick("blue")}
-          >
-            {bigNumber("A")}
-          </div>
-
-          {isTiebreak && (
-            <div
-              className={`absolute bottom-2 left-0 right-0 text-center font-bold text-sm ${finished && blueWinner ? "text-[#383838]" : "text-[#FEE100]"}`}
-            >
-              TIEBREAK
-            </div>
-          )}
-        </div>
-
-        {/* Set Blocks - Centered between player cards */}
-        <div className="flex justify-center gap-[20px] my-4 w-full max-w-[280px] mx-auto">{renderSetBlocks()}</div>
-
-        {/* Red Player Card */}
-        <div
-          className={`relative bg-[#696969] rounded-lg p-4 shadow-lg mx-auto w-full max-w-[280px] h-48
-            ${redCardBlinking ? "blink-animation" : ""}
-            ${finished && redWinner ? "bg-[#FEE100]" : ""}`}
+        {/* Placeholder de voz (etapa futura — sem funcionalidade). */}
+        <button
+          type="button"
+          disabled
+          aria-label="Voz do árbitro (em breve)"
+          title="Voz do árbitro (em breve)"
+          className="flex flex-col items-center gap-0.5 text-[10px] uppercase tracking-wide opacity-30 cursor-not-allowed"
         >
-          <div className="absolute top-4 right-4 z-10" onClick={toggleServing}>
-            <div
-              className={`w-6 h-6 rounded-full ${!blueServing ? "bg-[#FEE100]" : "bg-[#929292]"} serving-indicator cursor-pointer ${!initialServingSet ? "opacity-50" : ""}`}
-              title={
-                initialServingSet
-                  ? "Clique para alterar o sacador"
-                  : "O sacador não pode ser alterado após o início da partida"
-              }
-            ></div>
-          </div>
+          <Volume2 className="h-6 w-6" />
+          <span>voz</span>
+        </button>
 
-          {editingRedPlayer ? (
-            <div className="mb-4">
-              <Input
-                value={redPlayerName}
-                onChange={(e) => setRedPlayerName(e.target.value)}
-                onBlur={() => {
-                  setEditingRedPlayer(false)
-                  updatePlayerName("red", redPlayerName)
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    setEditingRedPlayer(false)
-                    updatePlayerName("red", redPlayerName)
-                  }
-                }}
-                autoFocus
-                className="text-2xl font-bold text-white bg-[#696969] border-[#FEE100] player-name"
-              />
-            </div>
-          ) : (
-            <h2
-              className={`text-2xl font-bold mb-4 player-name cursor-pointer ${finished && redWinner ? "text-[#383838]" : "text-white"}`}
-              onClick={() => setEditingRedPlayer(true)}
-            >
-              {redPlayerName}
-            </h2>
-          )}
-
-          <div
-            className={`text-center text-9xl score-number cursor-pointer
-              ${animatingRed ? "score-animation" : ""}
-              ${finished && redWinner ? "text-[#383838]" : "text-[#FEE100]"}`}
-            onClick={() => handleScoreClick("red")}
-          >
-            {bigNumber("B")}
-          </div>
-
-          {isTiebreak && (
-            <div
-              className={`absolute bottom-2 left-0 right-0 text-center font-bold text-sm ${finished && redWinner ? "text-[#383838]" : "text-[#FEE100]"}`}
-            >
-              TIEBREAK
-            </div>
-          )}
-        </div>
-      </div>
-
-      <div className="mt-4 flex justify-center">
-        <div className="bg-[#696969] px-4 py-2 rounded-md digital-clock text-[#FEE100] text-3xl w-full max-w-[280px] text-center">
-          {elapsedTime}
-        </div>
-      </div>
-
-      {finished && (
-        <div className="mt-4 flex justify-center">
-          <Button className="bg-[#FEE100] text-[#383838] hover:bg-[#e6cb00]" onClick={() => setMenuOpen(true)}>
-            Reiniciar Partida
-          </Button>
-        </div>
-      )}
+        <button
+          type="button"
+          onClick={() => setMenuOpen(true)}
+          className="flex flex-col items-center gap-0.5 text-[10px] uppercase tracking-wide opacity-80 hover:opacity-100"
+          aria-label="Menu"
+        >
+          <Menu className="h-6 w-6" />
+          <span>menu</span>
+        </button>
+      </footer>
 
       {/* Menu Modal */}
       <GameMenu

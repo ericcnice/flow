@@ -25,6 +25,19 @@
     --input: 0 0% 57%;
     --ring: 60 100% 94%;
     --radius: 0.5rem;
+
+    /* --- Tela de jogo "palco" (ScoreBot) -------------------------------
+       Tema P&B. Trocar SÓ estas variáveis (ex.: para cores de Grand Slam)
+       muda o tema inteiro sem tocar no JSX. Lado A = azul→A, Lado B = vermelho→B.
+       Em P&B os dois lados são distinguidos por inversão: A é claro (número
+       escuro), B é escuro (número claro). */
+    --lado-a-bg: #f5f5f5;
+    --lado-a-texto: #0a0a0a;
+    --lado-b-bg: #0a0a0a;
+    --lado-b-texto: #f5f5f5;
+    --palco-fundo: #000000;
+    --palco-discreto: #8a8a8a;
+    --palco-divisor: #262626;
   }
 
   .dark {
@@ -117,4 +130,41 @@
 
 .blink-animation {
   animation: blinkYellow 0.5s ease-in-out 3;
+}
+
+/* --- Tela de jogo "palco" (ScoreBot) ---------------------------------- */
+
+/* Fonte monoespaçada para o número não "tremer" ao trocar de valor.
+   Geist Mono é preferida; cai na mono do sistema quando não instalada. */
+.mono-tabular {
+  font-family: "Geist Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo,
+    Consolas, "Liberation Mono", monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Número gigante do ponto: ocupa a maior parte do bloco, legível de longe.
+   min(vw, vh) garante que caiba tanto lado-a-lado quanto empilhado. */
+.giant-number {
+  font-family: "Geist Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo,
+    Consolas, "Liberation Mono", monospace;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  font-size: min(42vw, 46vh);
+  line-height: 0.78;
+  letter-spacing: -0.04em;
+}
+
+/* Piscar do bloco vencedor em P&B (sem cor): flash neutro de borda interna. */
+@keyframes stageWinBlink {
+  0%,
+  100% {
+    box-shadow: inset 0 0 0 0 var(--palco-discreto);
+  }
+  50% {
+    box-shadow: inset 0 0 0 14px var(--palco-discreto);
+  }
+}
+
+.win-blink {
+  animation: stageWinBlink 0.5s ease-in-out 3;
 }
