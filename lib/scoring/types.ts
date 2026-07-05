@@ -137,3 +137,34 @@ export type TennisRules = {
   /** Melhor de 3 ou de 5 sets. */
   bestOf: 3 | 5
 }
+
+/**
+ * Regras configuráveis do beach tennis.
+ *
+ * Estruturalmente igual a {@link TennisRules} (o algoritmo de racquete é o
+ * mesmo), mas os PADRÕES refletem o esporte real: no-ad por padrão (ponto de
+ * ouro no 40-40) e melhor de 3. O tipo é declarado à parte de propósito, para
+ * que tênis e beach possam divergir livremente no futuro sem um acoplar o outro.
+ */
+export type BeachRules = {
+  /** Games para vencer um set. Padrão 6; formato de vila/clube usa 4. */
+  gamesPerSet: number
+  /** Com vantagem (deuce/AD) ou sem vantagem — no beach o padrão é SEM. */
+  advantage: boolean
+  /** Tiebreak comum, disputado em gamesPerSet-gamesPerSet (ex.: 6-6 ou 4-4). */
+  tiebreak: {
+    enabled: boolean
+    /** Pontos para vencer (padrão 7). */
+    target: number
+    mode: TiebreakMode
+  }
+  /** Super tiebreak que substitui o set decisivo (padrão desligado). */
+  superTiebreak: {
+    enabled: boolean
+    /** Pontos para vencer (padrão 10). */
+    target: number
+    mode: TiebreakMode
+  }
+  /** Melhor de 3 ou de 5 sets — beach raramente é de 5, padrão 3. */
+  bestOf: 3 | 5
+}
