@@ -254,3 +254,24 @@ export type SquashRules = {
   /** Melhor de 3 ou de 5 games — padrão 5 (primeiro a 3 games). */
   bestOf: 3 | 5
 }
+
+/**
+ * Regras configuráveis do tênis de mesa (ping pong) — MESMA FAMÍLIA do squash
+ * (rally scoring / pontos corridos). Reaproveita o {@link GameState} pela mesma
+ * reinterpretação do squash: `points` = contagem corrida do game; `games` =
+ * games ganhos; `currentSet` = nº do game; `completedSets` = games encerrados;
+ * `sets`/`advantage`/`tiebreakPoints`/`isTiebreak*` ficam inertes.
+ *
+ * A lógica vive em sports/tabletennis.ts, autocontida (NÃO compartilha um core
+ * com o squash: ainda são só dois esportes de rally, e o tênis de mesa diverge
+ * na troca de saque a cada 2 pontos). Extrair um "rally-core" fica para quando
+ * houver um terceiro consumidor genuíno.
+ */
+export type TableTennisRules = {
+  /** Pontos para vencer um game (padrão 11). */
+  target: number
+  /** Diferença mínima para fechar o game (padrão 2; 10-10 segue até abrir 2). */
+  winBy: number
+  /** Melhor de 5 ou de 7 games — padrão 5 (primeiro a 3; em 7, primeiro a 4). */
+  bestOf: 5 | 7
+}
