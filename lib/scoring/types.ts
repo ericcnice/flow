@@ -232,3 +232,25 @@ export type PadelRules = {
   /** Melhor de 3 ou de 5 sets — padel é quase sempre de 3, padrão 3. */
   bestOf: 3 | 5
 }
+
+/**
+ * Regras configuráveis do squash — uma FAMÍLIA diferente (rally scoring / PARS),
+ * sem 15/30/40 e sem a mecânica de games do tênis. Por isso o squash NÃO usa o
+ * racket-core; a lógica vive em sports/squash.ts.
+ *
+ * Sobre o {@link GameState}: o squash reaproveita os campos existentes por
+ * reinterpretação (sem alterar o tipo, para não afetar os outros esportes):
+ *  - `points` de cada lado = contagem corrida do game atual (0,1,2…11+);
+ *  - `games` = games ganhos (a partida é decidida por eles);
+ *  - `currentSet` = número do game atual; `completedSets` = games encerrados;
+ *  - `sets`, `advantage`, `tiebreakPoints`, `isTiebreak*` ficam nos zeros/false
+ *    (não se aplicam ao squash).
+ */
+export type SquashRules = {
+  /** Pontos para vencer um game: 11 (PARS moderno, padrão) ou 15 (formato antigo). */
+  target: number
+  /** Diferença mínima para fechar o game (padrão 2). */
+  winBy: number
+  /** Melhor de 3 ou de 5 games — padrão 5 (primeiro a 3 games). */
+  bestOf: 3 | 5
+}
