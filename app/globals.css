@@ -142,16 +142,44 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* Palco: a DIREÇÃO dos dois blocos depende da ORIENTAÇÃO, não da largura.
+   (Um breakpoint de largura falha no celular em paisagem: largura estreita
+   mantém a coluna, mas sem altura os números colidem no centro.)
+   - Retrato:  blocos empilhados (A em cima, B embaixo), metade da ALTURA cada.
+   - Paisagem: blocos lado a lado (A à esquerda, B à direita), metade da LARGURA. */
+@media (orientation: portrait) {
+  .palco-main {
+    flex-direction: column;
+  }
+}
+@media (orientation: landscape) {
+  .palco-main {
+    flex-direction: row;
+  }
+}
+
 /* Número gigante do ponto: ocupa a maior parte do bloco, legível de longe.
-   min(vw, vh) garante que caiba tanto lado-a-lado quanto empilhado. */
+   O tamanho é escalado por ORIENTAÇÃO para caber dentro do próprio bloco
+   (metade da tela) sem estourar nem sobrepor o outro lado:
+   - Retrato:  cada bloco é largo e tem ~metade da altura → limita por altura.
+   - Paisagem: cada bloco tem ~metade da largura e altura cheia → limita por largura. */
 .giant-number {
   font-family: "Geist Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo,
     Consolas, "Liberation Mono", monospace;
   font-variant-numeric: tabular-nums;
   font-weight: 700;
-  font-size: min(42vw, 46vh);
   line-height: 0.78;
   letter-spacing: -0.04em;
+}
+@media (orientation: portrait) {
+  .giant-number {
+    font-size: min(44vw, 38vh);
+  }
+}
+@media (orientation: landscape) {
+  .giant-number {
+    font-size: min(38vw, 62vh);
+  }
 }
 
 /* Piscar do bloco vencedor em P&B (sem cor): flash neutro de borda interna. */

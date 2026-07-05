@@ -447,9 +447,10 @@ export default function JogoPage() {
         <span className="tabular-nums opacity-80 shrink-0">{elapsedTime}</span>
       </header>
 
-      {/* Palco: dois blocos ocupando a tela. Lado a lado em tela larga; empilhados em portrait. */}
+      {/* Palco: dois blocos ocupando a tela. A direção segue a ORIENTAÇÃO (não a
+          largura): empilhados em retrato, lado a lado em paisagem — ver .palco-main. */}
       <main
-        className="flex-1 flex flex-col md:flex-row min-h-0"
+        className="palco-main flex-1 flex min-h-0"
         style={{ gap: "1px", backgroundColor: "var(--palco-divisor)" }}
       >
         {renderBlock("blue")}
