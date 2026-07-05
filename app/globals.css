@@ -1,0 +1,120 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+@import url("./fonts.css");
+
+@layer base {
+  :root {
+    --background: 0 0% 22%;
+    --foreground: 60 100% 94%;
+    --card: 0 0% 41%;
+    --card-foreground: 60 100% 94%;
+    --popover: 0 0% 41%;
+    --popover-foreground: 60 100% 94%;
+    --primary: 60 100% 94%;
+    --primary-foreground: 0 0% 22%;
+    --secondary: 0 0% 57%;
+    --secondary-foreground: 60 100% 94%;
+    --muted: 0 0% 57%;
+    --muted-foreground: 0 0% 57%;
+    --accent: 60 100% 94%;
+    --accent-foreground: 0 0% 22%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 60 100% 94%;
+    --border: 0 0% 57%;
+    --input: 0 0% 57%;
+    --ring: 60 100% 94%;
+    --radius: 0.5rem;
+  }
+
+  .dark {
+    --background: 0 0% 22%;
+    --foreground: 60 100% 94%;
+    --card: 0 0% 41%;
+    --card-foreground: 60 100% 94%;
+    --popover: 0 0% 41%;
+    --popover-foreground: 60 100% 94%;
+    --primary: 60 100% 94%;
+    --primary-foreground: 0 0% 22%;
+    --secondary: 0 0% 57%;
+    --secondary-foreground: 60 100% 94%;
+    --muted: 0 0% 57%;
+    --muted-foreground: 0 0% 57%;
+    --accent: 60 100% 94%;
+    --accent-foreground: 0 0% 22%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 60 100% 94%;
+    --border: 0 0% 57%;
+    --input: 0 0% 57%;
+    --ring: 60 100% 94%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+.score-number {
+  font-family: "Teko", sans-serif;
+  font-weight: normal;
+  transition: transform 0.2s ease-in-out;
+}
+
+.score-number:active {
+  transform: scale(1.1);
+}
+
+.player-name {
+  font-family: "Helvetica", sans-serif;
+}
+
+.digital-clock {
+  font-family: "DS-Digital", monospace;
+}
+
+.serving-indicator {
+  transition: background-color 0.3s ease;
+}
+
+.set-block {
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+.game-block {
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+@keyframes scoreAnimation {
+  0% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.2);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.score-animation {
+  animation: scoreAnimation 0.3s ease-in-out;
+}
+
+@keyframes blinkYellow {
+  0%,
+  100% {
+    background-color: #696969;
+  }
+  50% {
+    background-color: #fee100;
+  }
+}
+
+.blink-animation {
+  animation: blinkYellow 0.5s ease-in-out 3;
+}
