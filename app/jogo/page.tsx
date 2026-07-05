@@ -1,12 +1,18 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Menu } from "lucide-react"
 import { GameMenu } from "@/components/game-menu"
 import { ThirdSetModal } from "@/components/third-set-modal"
+
+// >>> Fase 0: a tela agora consome o motor de scoring (lib/scoring) em vez da
+// lógica de pontuação embutida. Apenas TÊNIS nesta etapa.
+import { ScoringEngine } from "@/lib/scoring/engine"
+import { tennisModule, pointLabel } from "@/lib/scoring/sports/tennis"
+import type { GameState, Side, TennisRules } from "@/lib/scoring/types"
 
 type GameConfig = {
   quadra: string
@@ -22,40 +28,12 @@ type GameConfig = {
   maxSets?: number
 }
 
-type Score = {
-  blue: {
-    points: number
-    games: number
-    sets: number
-    advantage: boolean
-    tiebreakPoints: number
-  }
-  red: {
-    points: number
-    games: number
-    sets: number
-    advantage: boolean
-    tiebreakPoints: number
-  }
-  currentSet: number
-  isTiebreak: boolean
-  finalSetTiebreak: boolean
-  blueServing: boolean
-  history: Array<{
-    set: number
-    blue: number
-    red: number
-    tiebreak?: boolean
-  }>
-  initialServingSet: boolean
-  lastAction?: {
-    type: string
-    team?: "blue" | "red"
-    data?: any
-  }
-  gameFinished?: boolean
-  winner?: "blue" | "red"
-}
+// Ação registrada para persistência: o estado do motor é reconstruído por
+// replay (o engine não expõe setter de estado — ver lib/scoring/engine.ts).
+type Action = { kind: "point" | "game"; side: Side }
+
+// Mapa de lados: a tela usa blue/red; o motor usa A/B.
+const sideOf = (team: "blue" | "red"): Side => (team === "blue" ? "A" : "B")
 
 export default function JogoPage() {
   const router = useRouter()
@@ -63,16 +41,16 @@ export default function JogoPage() {
   const quadra = searchParams.get("quadra") || "1"
 
   const [gameConfig, setGameConfig] = useState<GameConfig | null>(null)
-  const [score, setScore] = useState<Score>({
-    blue: { points: 0, games: 0, sets: 0, advantage: false, tiebreakPoints: 0 },
-    red: { points: 0, games: 0, sets: 0, advantage: false, tiebreakPoints: 0 },
-    currentSet: 1,
-    isTiebreak: false,
-    finalSetTiebreak: false,
-    blueServing: true,
-    history: [],
-    initialServingSet: true,
-  })
+
+  // Motor de scoring: o engine é a fonte de verdade; espelhamos o GameState em
+  // estado do React para disparar re-render. actions/rules/firstServer guardam
+  // o necessário para persistir e reconstruir por replay.
+  const engineRef = useRef<ScoringEngine<TennisRules> | null>(null)
+  const actionsRef = useRef<Action[]>([])
+  const rulesRef = useRef<TennisRules>(tennisModule.defaultRules())
+  const firstServerRef = useRef<Side>("A")
+  const [gameState, setGameState] = useState<GameState | null>(null)
+
   const [elapsedTime, setElapsedTime] = useState("00:00:00")
   const [startTime, setStartTime] = useState<Date | null>(null)
   const [editingBluePlayer, setEditingBluePlayer] = useState(false)
@@ -93,6 +71,34 @@ export default function JogoPage() {
     window.open(placarUrl, "_blank")
   }
 
+  // Deriva as regras de tênis a partir da config da partida (Fase 0: só bestOf).
+  const rulesFromConfig = (config: GameConfig): TennisRules => ({
+    ...tennisModule.defaultRules(),
+    bestOf: (config.maxSets || 3) === 5 ? 5 : 3,
+  })
+
+  // (Re)constrói o engine aplicando as ações por replay e reflete no estado.
+  const rebuildEngine = (rules: TennisRules, firstServer: Side, actions: Action[]) => {
+    const engine = new ScoringEngine(tennisModule, rules, firstServer)
+    for (const a of actions) {
+      if (a.kind === "game") engine.awardGameFor(a.side)
+      else engine.pointFor(a.side)
+    }
+    engineRef.current = engine
+    actionsRef.current = [...actions]
+    rulesRef.current = rules
+    firstServerRef.current = firstServer
+    setGameState(engine.getState())
+  }
+
+  // Persiste o suficiente para reconstruir o motor por quadra.
+  const persist = () => {
+    localStorage.setItem(
+      `tennis_engine_${quadra}`,
+      JSON.stringify({ rules: rulesRef.current, firstServer: firstServerRef.current, actions: actionsRef.current }),
+    )
+  }
+
   useEffect(() => {
     // Load game configuration from localStorage
     const storedConfig = localStorage.getItem(`tennis_match_${quadra}`)
@@ -108,26 +114,27 @@ export default function JogoPage() {
       )
       setMaxSets(config.maxSets || 3)
 
-      // Load score if exists
-      const storedScore = localStorage.getItem(`tennis_score_${quadra}`)
-      if (storedScore) {
-        const parsedScore = JSON.parse(storedScore)
-        // Add properties if they don't exist
-        if (parsedScore.blueServing === undefined) {
-          parsedScore.blueServing = true
+      // Reconstrói o estado do motor a partir do que foi persistido (replay).
+      let rules = rulesFromConfig(config)
+      let firstServer: Side = "A"
+      let actions: Action[] = []
+      const stored = localStorage.getItem(`tennis_engine_${quadra}`)
+      if (stored) {
+        try {
+          const parsed = JSON.parse(stored)
+          if (parsed.rules) rules = parsed.rules
+          if (parsed.firstServer === "A" || parsed.firstServer === "B") firstServer = parsed.firstServer
+          if (Array.isArray(parsed.actions)) actions = parsed.actions
+        } catch {
+          // estado corrompido: começa limpo
         }
-        if (parsedScore.finalSetTiebreak === undefined) {
-          parsedScore.finalSetTiebreak = false
-        }
-        if (parsedScore.initialServingSet === undefined) {
-          parsedScore.initialServingSet = true
-        }
-        setScore(parsedScore)
       }
+      rebuildEngine(rules, firstServer, actions)
     } else {
       // Redirect to configuration if no game is set up
       router.push(`/`)
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [quadra, router])
 
   useEffect(() => {
@@ -150,44 +157,25 @@ export default function JogoPage() {
     }
   }, [startTime])
 
-  useEffect(() => {
-    // Save score to localStorage whenever it changes
-    if (gameConfig) {
-      localStorage.setItem(`tennis_score_${quadra}`, JSON.stringify(score))
-    }
-  }, [score, quadra, gameConfig])
-
-  const getPointsDisplay = (points: number, hasAdvantage: boolean, tiebreakPoints: number, isTiebreak: boolean) => {
-    if (gameConfig?.scoreType === "games") {
-      return "-"
-    }
-
-    if (isTiebreak) {
-      return tiebreakPoints.toString()
-    }
-
-    switch (points) {
-      case 0:
-        return "0"
-      case 1:
-        return "15"
-      case 2:
-        return "30"
-      case 3:
-        return hasAdvantage ? "AD" : "40"
-      default:
-        return hasAdvantage ? "AD" : "40"
-    }
-  }
-
   const handleScoreClick = (team: "blue" | "red") => {
-    // Se o jogo já terminou, não faz nada
-    if (score.gameFinished) {
+    const engine = engineRef.current
+    if (!engine || engine.getState().finished) {
       return
     }
 
-    // Adicionar ponto
-    addPoint(team)
+    const side = sideOf(team)
+
+    // Granularidade: modo "games" concede o game inteiro; senão, marca 1 ponto.
+    if (gameConfig?.scoreType === "games") {
+      engine.awardGameFor(side)
+      actionsRef.current.push({ kind: "game", side })
+    } else {
+      engine.pointFor(side)
+      actionsRef.current.push({ kind: "point", side })
+    }
+
+    setGameState(engine.getState())
+    persist()
 
     // Animate the score
     if (team === "blue") {
@@ -197,15 +185,33 @@ export default function JogoPage() {
       setAnimatingRed(true)
       setTimeout(() => setAnimatingRed(false), 300)
     }
+
+    // Piscar o card do vencedor quando um game/set/partida é fechado.
+    const won = engine.getLastEvents().find((e) => e.type === "GAME" || e.type === "SET" || e.type === "MATCH")
+    if (won?.side === "A") {
+      setBlueCardBlinking(true)
+      setTimeout(() => setBlueCardBlinking(false), 1500)
+    } else if (won?.side === "B") {
+      setRedCardBlinking(true)
+      setTimeout(() => setRedCardBlinking(false), 1500)
+    }
+  }
+
+  const undoLastPoint = () => {
+    const engine = engineRef.current
+    if (!engine || !engine.canUndo()) return
+    engine.undo()
+    actionsRef.current.pop()
+    setGameState(engine.getState())
+    persist()
   }
 
   const toggleServing = () => {
-    // Só permite alteração do saque no início da partida
-    if (score.initialServingSet) {
-      setScore((prev) => ({
-        ...prev,
-        blueServing: !prev.blueServing,
-      }))
+    // Só permite alterar o sacador antes do primeiro ponto (nenhuma ação ainda).
+    if (actionsRef.current.length === 0) {
+      const newFirstServer: Side = firstServerRef.current === "A" ? "B" : "A"
+      rebuildEngine(rulesRef.current, newFirstServer, [])
+      persist()
     }
   }
 
@@ -219,336 +225,10 @@ export default function JogoPage() {
     localStorage.setItem(`tennis_match_${quadra}`, JSON.stringify(newConfig))
   }
 
-  const handleThirdSetChoice = (playTiebreak: boolean) => {
-    setScore((prev) => ({
-      ...prev,
-      finalSetTiebreak: playTiebreak,
-      isTiebreak: playTiebreak, // Se escolher tiebreak, já inicia o tiebreak imediatamente
-    }))
+  const handleThirdSetChoice = (_playTiebreak: boolean) => {
+    // Fase 0: a escolha de tiebreak/super tiebreak do set decisivo ainda não é
+    // exposta ao motor (refinamento futuro). Apenas fecha o modal.
     setShowThirdSetModal(false)
-  }
-
-  const undoLastPoint = () => {
-    setScore((prevScore) => {
-      // Se não houver ação anterior, não faz nada
-      if (!prevScore.lastAction) return prevScore
-
-      const newScore = { ...prevScore }
-
-      // Se o jogo estava finalizado, remove o status de finalizado
-      if (newScore.gameFinished) {
-        newScore.gameFinished = false
-        newScore.winner = undefined
-      }
-
-      // Dependendo do tipo de ação, desfaz a ação
-      if (newScore.lastAction.type === "point" && newScore.lastAction.team) {
-        const team = newScore.lastAction.team
-        const oppositeTeam = team === "blue" ? "red" : "blue"
-
-        // Se estiver em tiebreak
-        if (newScore.isTiebreak) {
-          if (newScore[team].tiebreakPoints > 0) {
-            newScore[team].tiebreakPoints -= 1
-          }
-        }
-        // Se estiver em modo de pontos
-        else if (gameConfig?.scoreType === "pontos") {
-          // Se tiver vantagem, remove a vantagem
-          if (newScore[team].advantage) {
-            newScore[team].advantage = false
-          }
-          // Se o oponente tiver vantagem e o ponto foi para o time atual, restaura a vantagem do oponente
-          else if (newScore.lastAction.data?.oppositeAdvantage) {
-            newScore[oppositeTeam].advantage = true
-          }
-          // Caso contrário, reduz os pontos
-          else if (newScore[team].points > 0) {
-            newScore[team].points -= 1
-          }
-        }
-        // Se estiver em modo de games
-        else {
-          // Se foi um game completo, reduz o game
-          if (newScore.lastAction.data?.completedGame) {
-            newScore[team].games -= 1
-
-            // Se foi um set completo, reduz o set e restaura os games
-            if (newScore.lastAction.data?.completedSet) {
-              newScore[team].sets -= 1
-              newScore.currentSet -= 1
-
-              // Restaurar os games do set anterior
-              const lastSetHistory = newScore.history.pop()
-              if (lastSetHistory) {
-                newScore.blue.games = lastSetHistory.blue
-                newScore.red.games = lastSetHistory.red
-
-                // Se o set anterior era tiebreak, restaurar o modo tiebreak
-                if (lastSetHistory.tiebreak) {
-                  newScore.isTiebreak = true
-                }
-              }
-            }
-
-            // Restaurar os pontos se necessário
-            if (newScore.lastAction.data?.bluePoints !== undefined) {
-              newScore.blue.points = newScore.lastAction.data.bluePoints
-              newScore.blue.advantage = newScore.lastAction.data.blueAdvantage || false
-            }
-
-            if (newScore.lastAction.data?.redPoints !== undefined) {
-              newScore.red.points = newScore.lastAction.data.redPoints
-              newScore.red.advantage = newScore.lastAction.data.redAdvantage || false
-            }
-
-            // Restaurar o sacador
-            if (newScore.lastAction.data?.blueServing !== undefined) {
-              newScore.blueServing = newScore.lastAction.data.blueServing
-            }
-          }
-        }
-      }
-
-      // Limpar a última ação
-      newScore.lastAction = undefined
-
-      return newScore
-    })
-  }
-
-  const addPoint = (team: "blue" | "red") => {
-    setScore((prevScore) => {
-      const newScore = { ...prevScore }
-      const oppositeTeam = team === "blue" ? "red" : "blue"
-
-      // Salvar o estado atual para possível desfazer
-      const lastAction = {
-        type: "point",
-        team,
-        data: {
-          bluePoints: newScore.blue.points,
-          redPoints: newScore.red.points,
-          blueAdvantage: newScore.blue.advantage,
-          redAdvantage: newScore.red.advantage,
-          blueServing: newScore.blueServing,
-          oppositeAdvantage: newScore[oppositeTeam].advantage,
-        },
-      }
-
-      // Marcar que o jogo já começou (não pode mais mudar o saque inicial)
-      if (newScore.initialServingSet) {
-        newScore.initialServingSet = false
-      }
-
-      // Caso esteja em tiebreak
-      if (newScore.isTiebreak) {
-        // Incrementa os pontos de tiebreak
-        newScore[team].tiebreakPoints += 1
-
-        // Verifica se o tiebreak foi ganho (primeiro a chegar a 7 com diferença de 2)
-        if (
-          newScore[team].tiebreakPoints >= 7 &&
-          newScore[team].tiebreakPoints - newScore[oppositeTeam].tiebreakPoints >= 2
-        ) {
-          // Tiebreak ganho, incrementa o game
-          newScore[team].games += 1
-
-          // Registra o histórico do set
-          newScore.history.push({
-            set: newScore.currentSet,
-            blue: newScore.blue.games,
-            red: newScore.red.games,
-            tiebreak: true,
-          })
-
-          // Atualizar lastAction com informações adicionais
-          lastAction.data.completedGame = true
-          lastAction.data.completedSet = true
-
-          // Incrementa o set e reseta para o próximo set
-          newScore[team].sets += 1
-          newScore.blue.games = 0
-          newScore.red.games = 0
-          newScore.blue.tiebreakPoints = 0
-          newScore.red.tiebreakPoints = 0
-          newScore.currentSet += 1
-          newScore.isTiebreak = false
-
-          // Alterna o sacador
-          newScore.blueServing = !newScore.blueServing
-
-          // Ativar animação de piscar para o time vencedor
-          if (team === "blue") {
-            setBlueCardBlinking(true)
-            setTimeout(() => setBlueCardBlinking(false), 1500) // 3 piscadas de 0.5s = 1.5s
-          } else {
-            setRedCardBlinking(true)
-            setTimeout(() => setRedCardBlinking(false), 1500)
-          }
-
-          // Verificar se o jogo terminou
-          checkGameFinished(newScore, team)
-        }
-
-        newScore.lastAction = lastAction
-        return newScore
-      }
-
-      // Lógica normal de pontuação
-      if (gameConfig?.scoreType === "pontos") {
-        // Caso de vantagem
-        if (newScore[team].advantage) {
-          // Ganhou o game após ter vantagem
-          lastAction.data.completedGame = true
-
-          newScore[team].points = 0
-          newScore[oppositeTeam].points = 0
-          newScore[team].advantage = false
-          newScore[oppositeTeam].advantage = false
-          newScore[team].games += 1
-
-          // Alterna o sacador
-          lastAction.data.blueServing = newScore.blueServing
-          newScore.blueServing = !newScore.blueServing
-
-          // Verifica se precisa iniciar tiebreak ou se ganhou o set
-          checkSetStatus(newScore, team, oppositeTeam, lastAction)
-
-          newScore.lastAction = lastAction
-          return newScore
-        }
-
-        // Caso o oponente tenha vantagem
-        if (newScore[oppositeTeam].advantage) {
-          // Volta para deuce
-          lastAction.data.oppositeAdvantage = true
-          newScore[oppositeTeam].advantage = false
-
-          newScore.lastAction = lastAction
-          return newScore
-        }
-
-        // Caso de deuce (40-40)
-        if (newScore[team].points === 3 && newScore[oppositeTeam].points === 3) {
-          // Ganha vantagem
-          newScore[team].advantage = true
-
-          newScore.lastAction = lastAction
-          return newScore
-        }
-
-        // Caso normal de pontuação
-        if (newScore[team].points < 3) {
-          // Incrementa pontos normalmente (0->15->30->40)
-          newScore[team].points += 1
-
-          newScore.lastAction = lastAction
-          return newScore
-        }
-
-        // Caso tenha 40 (3 pontos) e o oponente tenha menos que 40
-        if (newScore[team].points === 3 && newScore[oppositeTeam].points < 3) {
-          // Ganha o game diretamente
-          lastAction.data.completedGame = true
-
-          newScore[team].points = 0
-          newScore[oppositeTeam].points = 0
-          newScore[team].games += 1
-
-          // Alterna o sacador
-          lastAction.data.blueServing = newScore.blueServing
-          newScore.blueServing = !newScore.blueServing
-
-          // Verifica se precisa iniciar tiebreak ou se ganhou o set
-          checkSetStatus(newScore, team, oppositeTeam, lastAction)
-
-          newScore.lastAction = lastAction
-          return newScore
-        }
-      } else {
-        // Modo de contagem por games
-        lastAction.data.completedGame = true
-        newScore[team].games += 1
-
-        // Alterna o sacador
-        lastAction.data.blueServing = newScore.blueServing
-        newScore.blueServing = !newScore.blueServing
-
-        // Verifica se precisa iniciar tiebreak ou se ganhou o set
-        checkSetStatus(newScore, team, oppositeTeam, lastAction)
-      }
-
-      newScore.lastAction = lastAction
-      return newScore
-    })
-  }
-
-  // Função para verificar se o jogo terminou
-  const checkGameFinished = (newScore: Score, winner: "blue" | "red") => {
-    const setsToWin = Math.ceil(maxSets / 2)
-
-    if (newScore[winner].sets >= setsToWin) {
-      newScore.gameFinished = true
-      newScore.winner = winner
-    }
-  }
-
-  // Função auxiliar para verificar o status do set após um game
-  const checkSetStatus = (newScore: Score, team: "blue" | "red", oppositeTeam: "blue" | "red", lastAction: any) => {
-    // Verifica se chegou a 6-6 (tiebreak)
-    if (newScore[team].games === 6 && newScore[oppositeTeam].games === 6) {
-      // Se for o último set e finalSetTiebreak for false, não inicia tiebreak
-      if (newScore.currentSet === maxSets && !newScore.finalSetTiebreak) {
-        return
-      }
-
-      console.log("Iniciando tiebreak!")
-      newScore.isTiebreak = true
-      return
-    }
-
-    // Verifica se ganhou o set (6 games com 2 de diferença ou 7-5)
-    if (
-      (newScore[team].games >= 6 && newScore[team].games - newScore[oppositeTeam].games >= 2) ||
-      (newScore[team].games === 7 && newScore[oppositeTeam].games === 5)
-    ) {
-      // Registra o histórico do set
-      newScore.history.push({
-        set: newScore.currentSet,
-        blue: newScore.blue.games,
-        red: newScore.red.games,
-      })
-
-      // Atualizar lastAction com informações adicionais
-      lastAction.completedSet = true
-
-      // Incrementa o set e reseta para o próximo set
-      newScore[team].sets += 1
-      newScore.blue.games = 0
-      newScore.red.games = 0
-      newScore.currentSet += 1
-      newScore.isTiebreak = false
-
-      // Ativar animação de piscar para o time vencedor
-      if (team === "blue") {
-        setBlueCardBlinking(true)
-        setTimeout(() => setBlueCardBlinking(false), 1500) // 3 piscadas de 0.5s = 1.5s
-      } else {
-        setRedCardBlinking(true)
-        setTimeout(() => setRedCardBlinking(false), 1500)
-      }
-
-      // Verificar se o jogo terminou
-      checkGameFinished(newScore, team)
-
-      // Verifica se precisa mostrar o modal de escolha do terceiro set
-      if (newScore.currentSet === 3 && newScore.blue.sets === 1 && newScore.red.sets === 1) {
-        setTimeout(() => {
-          setShowThirdSetModal(true)
-        }, 500)
-      }
-    }
   }
 
   const updatePlayerName = (team: "blue" | "red", name: string) => {
@@ -582,17 +262,9 @@ export default function JogoPage() {
 
   const resetGame = () => {
     if (confirm("Tem certeza que deseja reiniciar o jogo? Todos os dados serão perdidos.")) {
-      localStorage.removeItem(`tennis_score_${quadra}`)
-      setScore({
-        blue: { points: 0, games: 0, sets: 0, advantage: false, tiebreakPoints: 0 },
-        red: { points: 0, games: 0, sets: 0, advantage: false, tiebreakPoints: 0 },
-        currentSet: 1,
-        isTiebreak: false,
-        finalSetTiebreak: false,
-        blueServing: true,
-        history: [],
-        initialServingSet: true,
-      })
+      localStorage.removeItem(`tennis_engine_${quadra}`)
+      rebuildEngine(rulesRef.current, "A", [])
+      persist()
     }
   }
 
@@ -616,36 +288,74 @@ export default function JogoPage() {
       setGameConfig(newConfig)
       localStorage.setItem(`tennis_match_${quadra}`, JSON.stringify(newConfig))
     }
+    // Reflete no motor (bestOf) reconstruindo com as ações já jogadas.
+    const newRules: TennisRules = { ...rulesRef.current, bestOf: newMaxSets === 5 ? 5 : 3 }
+    rebuildEngine(newRules, firstServerRef.current, actionsRef.current)
+    persist()
   }
 
-  if (!gameConfig) {
+  if (!gameConfig || !gameState) {
     return <div className="flex items-center justify-center min-h-screen">Carregando...</div>
   }
 
-  // Renderiza os blocos de sets
+  // --- Derivações de exibição a partir do GameState do motor (blue=A, red=B) ---
+  const gs = gameState
+  const finished = gs.finished
+  const blueWinner = gs.winner === "A"
+  const redWinner = gs.winner === "B"
+  const blueServing = gs.server === "A"
+  const isTiebreak = gs.isTiebreak
+  // "início da partida" = nenhum ponto/game/set jogado ainda.
+  const started =
+    gs.A.points > 0 ||
+    gs.B.points > 0 ||
+    gs.A.games > 0 ||
+    gs.B.games > 0 ||
+    gs.A.sets > 0 ||
+    gs.B.sets > 0 ||
+    gs.completedSets.length > 0
+  const initialServingSet = !started
+
+  // Número grande de cada card: pontos do game (0/15/30/40/AD), ou tiebreak,
+  // ou o total de games no modo "games".
+  const bigNumber = (side: Side): string => {
+    if (isTiebreak) return gs[side].tiebreakPoints.toString()
+    if (gameConfig.scoreType === "games") return gs[side].games.toString()
+    return pointLabel(gs[side]) // "0" | "15" | "30" | "40" | "AD"
+  }
+
+  // Renderiza os blocos de sets (a partir de completedSets + set atual do motor)
   const renderSetBlocks = () => {
     return Array.from({ length: maxSets }).map((_, index) => {
-      const setData = score.history.find((s) => s.set === index + 1)
+      const setNum = index + 1
+      const setData = gs.completedSets.find((s) => s.set === setNum)
       const isCompleted = setData !== undefined
-      const blueWon = isCompleted && setData.blue > setData.red
-      const redWon = isCompleted && setData.red > setData.blue
+      const blueWon = isCompleted && setData.A > setData.B
+      const redWon = isCompleted && setData.B > setData.A
+
+      const blueVal = isCompleted
+        ? setData.A
+        : setNum < gs.currentSet
+          ? 0
+          : setNum === gs.currentSet
+            ? gs.A.games
+            : "-"
+      const redVal = isCompleted
+        ? setData.B
+        : setNum < gs.currentSet
+          ? 0
+          : setNum === gs.currentSet
+            ? gs.B.games
+            : "-"
 
       return (
-        <div key={`set-${index + 1}`} className="flex flex-col items-center">
+        <div key={`set-${setNum}`} className="flex flex-col items-center">
           {/* Blue score */}
           <div
             className={`${maxSets === 3 ? "w-[80px]" : "w-[60px]"} h-12 flex items-center justify-center rounded-md set-block
             ${blueWon ? "bg-[#FEE100]" : "bg-[#696969] border border-[#929292]"}`}
           >
-            <span className={`text-lg font-bold ${blueWon ? "text-[#383838]" : "text-[#FEE100]"}`}>
-              {isCompleted
-                ? setData.blue
-                : index < score.currentSet - 1
-                  ? "0"
-                  : index + 1 === score.currentSet
-                    ? score.blue.games
-                    : "-"}
-            </span>
+            <span className={`text-lg font-bold ${blueWon ? "text-[#383838]" : "text-[#FEE100]"}`}>{blueVal}</span>
           </div>
 
           {/* Red score */}
@@ -653,15 +363,7 @@ export default function JogoPage() {
             className={`${maxSets === 3 ? "w-[80px]" : "w-[60px]"} h-12 flex items-center justify-center rounded-md set-block
             ${redWon ? "bg-[#FEE100]" : "bg-[#696969] border border-[#929292]"}`}
           >
-            <span className={`text-lg font-bold ${redWon ? "text-[#383838]" : "text-[#FEE100]"}`}>
-              {isCompleted
-                ? setData.red
-                : index < score.currentSet - 1
-                  ? "0"
-                  : index + 1 === score.currentSet
-                    ? score.red.games
-                    : "-"}
-            </span>
+            <span className={`text-lg font-bold ${redWon ? "text-[#383838]" : "text-[#FEE100]"}`}>{redVal}</span>
           </div>
         </div>
       )
@@ -673,10 +375,8 @@ export default function JogoPage() {
       <div className="flex justify-between items-center mb-6">
         <div>
           <h1 className="text-2xl font-bold text-white">Quadra {gameConfig.quadra}</h1>
-          {score.gameFinished && (
-            <p className="text-[#FEE100] font-bold">
-              {score.winner === "blue" ? bluePlayerName : redPlayerName} venceu a partida!
-            </p>
+          {finished && (
+            <p className="text-[#FEE100] font-bold">{blueWinner ? bluePlayerName : redPlayerName} venceu a partida!</p>
           )}
         </div>
         <Button variant="ghost" size="icon" className="text-[#FEE100]" onClick={() => setMenuOpen(true)}>
@@ -687,15 +387,15 @@ export default function JogoPage() {
       <div className="flex-1 flex flex-col gap-6">
         {/* Blue Player Card */}
         <div
-          className={`relative bg-[#696969] rounded-lg p-4 shadow-lg mx-auto w-full max-w-[280px] h-48 
-            ${blueCardBlinking ? "blink-animation" : ""} 
-            ${score.gameFinished && score.winner === "blue" ? "bg-[#FEE100]" : ""}`}
+          className={`relative bg-[#696969] rounded-lg p-4 shadow-lg mx-auto w-full max-w-[280px] h-48
+            ${blueCardBlinking ? "blink-animation" : ""}
+            ${finished && blueWinner ? "bg-[#FEE100]" : ""}`}
         >
           <div className="absolute top-4 right-4 z-10" onClick={toggleServing}>
             <div
-              className={`w-6 h-6 rounded-full ${score.blueServing ? "bg-[#FEE100]" : "bg-[#929292]"} serving-indicator cursor-pointer ${!score.initialServingSet ? "opacity-50" : ""}`}
+              className={`w-6 h-6 rounded-full ${blueServing ? "bg-[#FEE100]" : "bg-[#929292]"} serving-indicator cursor-pointer ${!initialServingSet ? "opacity-50" : ""}`}
               title={
-                score.initialServingSet
+                initialServingSet
                   ? "Clique para alterar o sacador"
                   : "O sacador não pode ser alterado após o início da partida"
               }
@@ -723,7 +423,7 @@ export default function JogoPage() {
             </div>
           ) : (
             <h2
-              className={`text-2xl font-bold mb-4 player-name cursor-pointer ${score.gameFinished && score.winner === "blue" ? "text-[#383838]" : "text-white"}`}
+              className={`text-2xl font-bold mb-4 player-name cursor-pointer ${finished && blueWinner ? "text-[#383838]" : "text-white"}`}
               onClick={() => setEditingBluePlayer(true)}
             >
               {bluePlayerName}
@@ -731,26 +431,17 @@ export default function JogoPage() {
           )}
 
           <div
-            className={`text-center text-9xl score-number cursor-pointer 
-              ${animatingBlue ? "score-animation" : ""} 
-              ${score.gameFinished && score.winner === "blue" ? "text-[#383838]" : "text-[#FEE100]"}`}
+            className={`text-center text-9xl score-number cursor-pointer
+              ${animatingBlue ? "score-animation" : ""}
+              ${finished && blueWinner ? "text-[#383838]" : "text-[#FEE100]"}`}
             onClick={() => handleScoreClick("blue")}
           >
-            {score.isTiebreak
-              ? score.blue.tiebreakPoints.toString()
-              : gameConfig.scoreType === "games"
-                ? score.blue.games.toString()
-                : getPointsDisplay(
-                    score.blue.points,
-                    score.blue.advantage,
-                    score.blue.tiebreakPoints,
-                    score.isTiebreak,
-                  )}
+            {bigNumber("A")}
           </div>
 
-          {score.isTiebreak && (
+          {isTiebreak && (
             <div
-              className={`absolute bottom-2 left-0 right-0 text-center font-bold text-sm ${score.gameFinished && score.winner === "blue" ? "text-[#383838]" : "text-[#FEE100]"}`}
+              className={`absolute bottom-2 left-0 right-0 text-center font-bold text-sm ${finished && blueWinner ? "text-[#383838]" : "text-[#FEE100]"}`}
             >
               TIEBREAK
             </div>
@@ -762,15 +453,15 @@ export default function JogoPage() {
 
         {/* Red Player Card */}
         <div
-          className={`relative bg-[#696969] rounded-lg p-4 shadow-lg mx-auto w-full max-w-[280px] h-48 
-            ${redCardBlinking ? "blink-animation" : ""} 
-            ${score.gameFinished && score.winner === "red" ? "bg-[#FEE100]" : ""}`}
+          className={`relative bg-[#696969] rounded-lg p-4 shadow-lg mx-auto w-full max-w-[280px] h-48
+            ${redCardBlinking ? "blink-animation" : ""}
+            ${finished && redWinner ? "bg-[#FEE100]" : ""}`}
         >
           <div className="absolute top-4 right-4 z-10" onClick={toggleServing}>
             <div
-              className={`w-6 h-6 rounded-full ${!score.blueServing ? "bg-[#FEE100]" : "bg-[#929292]"} serving-indicator cursor-pointer ${!score.initialServingSet ? "opacity-50" : ""}`}
+              className={`w-6 h-6 rounded-full ${!blueServing ? "bg-[#FEE100]" : "bg-[#929292]"} serving-indicator cursor-pointer ${!initialServingSet ? "opacity-50" : ""}`}
               title={
-                score.initialServingSet
+                initialServingSet
                   ? "Clique para alterar o sacador"
                   : "O sacador não pode ser alterado após o início da partida"
               }
@@ -798,7 +489,7 @@ export default function JogoPage() {
             </div>
           ) : (
             <h2
-              className={`text-2xl font-bold mb-4 player-name cursor-pointer ${score.gameFinished && score.winner === "red" ? "text-[#383838]" : "text-white"}`}
+              className={`text-2xl font-bold mb-4 player-name cursor-pointer ${finished && redWinner ? "text-[#383838]" : "text-white"}`}
               onClick={() => setEditingRedPlayer(true)}
             >
               {redPlayerName}
@@ -806,21 +497,17 @@ export default function JogoPage() {
           )}
 
           <div
-            className={`text-center text-9xl score-number cursor-pointer 
-              ${animatingRed ? "score-animation" : ""} 
-              ${score.gameFinished && score.winner === "red" ? "text-[#383838]" : "text-[#FEE100]"}`}
+            className={`text-center text-9xl score-number cursor-pointer
+              ${animatingRed ? "score-animation" : ""}
+              ${finished && redWinner ? "text-[#383838]" : "text-[#FEE100]"}`}
             onClick={() => handleScoreClick("red")}
           >
-            {score.isTiebreak
-              ? score.red.tiebreakPoints.toString()
-              : gameConfig.scoreType === "games"
-                ? score.red.games.toString()
-                : getPointsDisplay(score.red.points, score.red.advantage, score.red.tiebreakPoints, score.isTiebreak)}
+            {bigNumber("B")}
           </div>
 
-          {score.isTiebreak && (
+          {isTiebreak && (
             <div
-              className={`absolute bottom-2 left-0 right-0 text-center font-bold text-sm ${score.gameFinished && score.winner === "red" ? "text-[#383838]" : "text-[#FEE100]"}`}
+              className={`absolute bottom-2 left-0 right-0 text-center font-bold text-sm ${finished && redWinner ? "text-[#383838]" : "text-[#FEE100]"}`}
             >
               TIEBREAK
             </div>
@@ -834,7 +521,7 @@ export default function JogoPage() {
         </div>
       </div>
 
-      {score.gameFinished && (
+      {finished && (
         <div className="mt-4 flex justify-center">
           <Button className="bg-[#FEE100] text-[#383838] hover:bg-[#e6cb00]" onClick={() => setMenuOpen(true)}>
             Reiniciar Partida
