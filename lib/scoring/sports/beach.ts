@@ -113,6 +113,26 @@ export const beachModule: SportModule<BeachRules> = {
     scoreGamePoint(state, side, rules, events)
     return { state, events }
   },
+
+  awardGame(prev: GameState, side: Side, rules: BeachRules): ScoreResult {
+    const state = structuredClone(prev)
+    const events: ScoringEvent[] = []
+
+    if (state.finished) {
+      return { state, events }
+    }
+
+    // Em tiebreak, conceder o game = conceder o tiebreak/set.
+    if (state.isTiebreak) {
+      concludeTiebreak(state, side, rules, events)
+      return { state, events }
+    }
+
+    // Fora do tiebreak: conceder um game é o desfecho de um game vencido —
+    // zera pontos em curso, incrementa o game e dispara set/partida.
+    winGame(state, side, rules, events)
+    return { state, events }
+  },
 }
 
 /** Marca um ponto de game normal (fora de tiebreak). */
@@ -213,12 +233,20 @@ function scoreTiebreakPoint(state: GameState, side: Side, rules: BeachRules, eve
   const cfg = state.isSuperTiebreak ? rules.superTiebreak : rules.tiebreak
 
   if (tiebreakWon(me.tiebreakPoints, opp.tiebreakPoints, cfg.target, cfg.mode)) {
-    // O tiebreak conta como um game (ex.: 7-6, ou 1-0 no super tiebreak).
-    me.games += 1
-    events.push({ type: "GAME", side, detail: `${state.A.games}-${state.B.games}` })
-    state.server = other(state.server)
-    completeSet(state, side, rules, events, true)
+    concludeTiebreak(state, side, rules, events)
   }
+}
+
+/**
+ * Desfecho de um tiebreak vencido por `side`: conta como um game (ex.: 7-6, ou
+ * 1-0 no super tiebreak) e fecha o set. Reusado por scorePoint (vitória no
+ * tiebreak) e por awardGame (conceder o game durante o tiebreak).
+ */
+function concludeTiebreak(state: GameState, side: Side, rules: BeachRules, events: ScoringEvent[]): void {
+  state[side].games += 1
+  events.push({ type: "GAME", side, detail: `${state.A.games}-${state.B.games}` })
+  state.server = other(state.server)
+  completeSet(state, side, rules, events, true)
 }
 
 /** Fecha o set para `side`: registra histórico, incrementa set, prepara o próximo. */

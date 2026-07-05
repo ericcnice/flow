@@ -109,6 +109,27 @@ export const tennisModule: SportModule<TennisRules> = {
     scoreGamePoint(state, side, rules, events)
     return { state, events }
   },
+
+  awardGame(prev: GameState, side: Side, rules: TennisRules): ScoreResult {
+    const state = structuredClone(prev)
+    const events: ScoringEvent[] = []
+
+    if (state.finished) {
+      return { state, events }
+    }
+
+    // Em tiebreak, conceder o game = conceder o tiebreak/set: reusa o mesmo
+    // desfecho de quem vence o tiebreak (fecha set/partida, eventos corretos).
+    if (state.isTiebreak) {
+      concludeTiebreak(state, side, rules, events)
+      return { state, events }
+    }
+
+    // Fora do tiebreak: conceder um game é exatamente o desfecho de um game
+    // vencido — zera pontos em curso, incrementa o game e dispara set/partida.
+    winGame(state, side, rules, events)
+    return { state, events }
+  },
 }
 
 /** Marca um ponto de game normal (fora de tiebreak). */
@@ -208,12 +229,20 @@ function scoreTiebreakPoint(state: GameState, side: Side, rules: TennisRules, ev
   const cfg = state.isSuperTiebreak ? rules.superTiebreak : rules.tiebreak
 
   if (tiebreakWon(me.tiebreakPoints, opp.tiebreakPoints, cfg.target, cfg.mode)) {
-    // O tiebreak conta como um game (7-6, ou 1-0 no super tiebreak decisivo).
-    me.games += 1
-    events.push({ type: "GAME", side, detail: `${state.A.games}-${state.B.games}` })
-    state.server = other(state.server)
-    completeSet(state, side, rules, events, true)
+    concludeTiebreak(state, side, rules, events)
   }
+}
+
+/**
+ * Desfecho de um tiebreak vencido por `side`: conta como um game (7-6, ou 1-0
+ * no super tiebreak decisivo) e fecha o set. Reusado por scorePoint (vitória
+ * no tiebreak) e por awardGame (conceder o game durante o tiebreak).
+ */
+function concludeTiebreak(state: GameState, side: Side, rules: TennisRules, events: ScoringEvent[]): void {
+  state[side].games += 1
+  events.push({ type: "GAME", side, detail: `${state.A.games}-${state.B.games}` })
+  state.server = other(state.server)
+  completeSet(state, side, rules, events, true)
 }
 
 /** Fecha o set para `side`: registra histórico, incrementa set, prepara o próximo. */

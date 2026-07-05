@@ -75,6 +75,26 @@ export class ScoringEngine<TRules> {
   }
 
   /**
+   * Concede um game inteiro ao lado informado (granularidade "por game"),
+   * pulando a contagem de pontos. Convive com pointFor: mesmo estado, mesmo
+   * histórico. É desfazível pelo undo exatamente como um ponto. Se a partida
+   * já acabou, é um no-op.
+   */
+  awardGameFor(side: Side): ScoringEvent[] {
+    if (this.state.finished) {
+      this.lastEvents = []
+      return this.lastEvents
+    }
+    // Mesmo mecanismo de undo que um ponto: snapshot antes de aplicar.
+    this.undoStack.push(cloneState(this.state))
+
+    const result = this.module.awardGame(this.state, side, this.rules)
+    this.state = result.state
+    this.lastEvents = result.events
+    return this.lastEvents
+  }
+
+  /**
    * Desfaz o último ponto, retrocedendo o estado. Retorna false se não havia
    * nada para desfazer. Também reverte o fim de partida, se o último ponto o
    * havia encerrado.

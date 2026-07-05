@@ -112,6 +112,14 @@ export type SportModule<TRules = unknown> = {
    * retorna um novo estado e a lista de eventos ocorridos.
    */
   scorePoint(state: GameState, side: Side, rules: TRules): ScoreResult
+  /**
+   * Concede um game inteiro a `side`, pulando a contagem de pontos — a
+   * granularidade "por game". Aplica toda a lógica subsequente de um game
+   * comum (fechar set, fechar partida) e emite os eventos correspondentes
+   * (GAME e, quando aplicável, SET/MATCH). Em tiebreak, conceder o game
+   * significa conceder o tiebreak/set. NÃO deve mutar `state`.
+   */
+  awardGame(state: GameState, side: Side, rules: TRules): ScoreResult
 }
 
 /** Regras configuráveis do tênis. */
