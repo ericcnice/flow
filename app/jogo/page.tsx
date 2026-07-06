@@ -3,9 +3,15 @@
 import { useState, useEffect, useRef } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { Input } from "@/components/ui/input"
-import { Settings } from "lucide-react"
+import { Settings, Volume2, VolumeX } from "lucide-react"
 import { GameMenu } from "@/components/game-menu"
 import { ThirdSetModal } from "@/components/third-set-modal"
+
+// >>> Voz "placeholder" (preto e branco): reage aos eventos do motor e fala o
+// placar com a voz nativa do navegador. announce() = lógica evento→texto;
+// createSpeechSynthesisSpeaker() = camada de som trocável. Ver lib/voice/*.
+import { announce } from "@/lib/voice/announcer"
+import { createSpeechSynthesisSpeaker, type Speaker } from "@/lib/voice/speaker"
 
 // >>> Fase 0: a tela agora consome o motor de scoring (lib/scoring) em vez da
 // lógica de pontuação embutida. Apenas TÊNIS nesta etapa.
@@ -61,6 +67,11 @@ export default function JogoPage() {
   const [menuOpen, setMenuOpen] = useState(false)
   const [showOverview, setShowOverview] = useState(false)
   const overviewTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // Voz: liga/desliga o anúncio (persistido). Default DESLIGADO — ver toggleVoice.
+  // O speaker é a camada de som trocável (hoje: speechSynthesis).
+  const [voiceEnabled, setVoiceEnabled] = useState(false)
+  const speakerRef = useRef<Speaker | null>(null)
   const [showThirdSetModal, setShowThirdSetModal] = useState(false)
   const [blueCardBlinking, setBlueCardBlinking] = useState(false)
   const [redCardBlinking, setRedCardBlinking] = useState(false)
@@ -176,6 +187,23 @@ export default function JogoPage() {
     }
   }, [])
 
+  // Voz (client-only): instancia o speaker e restaura a preferência salva.
+  // Default DESLIGADO (não surpreender o usuário com som — precisa optar).
+  useEffect(() => {
+    speakerRef.current = createSpeechSynthesisSpeaker()
+    if (localStorage.getItem("voice_enabled") === "1") setVoiceEnabled(true)
+    return () => speakerRef.current?.cancel()
+  }, [])
+
+  const toggleVoice = () => {
+    setVoiceEnabled((prev) => {
+      const next = !prev
+      localStorage.setItem("voice_enabled", next ? "1" : "0")
+      if (!next) speakerRef.current?.cancel() // ao mutar, corta a fala em curso
+      return next
+    })
+  }
+
   const handleScoreClick = (team: "blue" | "red") => {
     const engine = engineRef.current
     if (!engine || engine.getState().finished) {
@@ -206,7 +234,8 @@ export default function JogoPage() {
     }
 
     // Piscar o card do vencedor quando um game/set/partida é fechado.
-    const won = engine.getLastEvents().find((e) => e.type === "GAME" || e.type === "SET" || e.type === "MATCH")
+    const events = engine.getLastEvents()
+    const won = events.find((e) => e.type === "GAME" || e.type === "SET" || e.type === "MATCH")
     if (won?.side === "A") {
       setBlueCardBlinking(true)
       setTimeout(() => setBlueCardBlinking(false), 1500)
@@ -214,11 +243,27 @@ export default function JogoPage() {
       setRedCardBlinking(true)
       setTimeout(() => setRedCardBlinking(false), 1500)
     }
+
+    // Voz (NÃO-BLOQUEANTE): reage aos eventos que o motor acabou de emitir.
+    // A marcação e o re-render já foram disparados acima (setGameState/persist);
+    // só então calculamos o texto e falamos. speechSynthesis.speak() não bloqueia
+    // e o próprio speaker cancela a fala anterior (sem fila). Usamos queueMicrotask
+    // para desacoplar do handler sem sair da mesma "tarefa" — preserva o gesto do
+    // usuário (alguns navegadores exigem a fala dentro do gesto) e não atrasa o
+    // ponto. A voz é apenas o "preto e branco": trocável depois sem mexer nisto.
+    if (voiceEnabled) {
+      const speech = announce(events, engine.getState(), { lang: "pt-BR", sport: tennisModule.id })
+      if (speech) {
+        const speaker = speakerRef.current
+        queueMicrotask(() => speaker?.speak(speech.text, { lang: "pt-BR" }))
+      }
+    }
   }
 
   const undoLastPoint = () => {
     const engine = engineRef.current
     if (!engine || !engine.canUndo()) return
+    speakerRef.current?.cancel() // corta um anúncio em curso ao voltar o ponto
     engine.undo()
     actionsRef.current.pop()
     setGameState(engine.getState())
@@ -515,6 +560,22 @@ export default function JogoPage() {
           </span>
         </span>
         {isTiebreak && <span className="opacity-90 font-bold tracking-widest text-xs">TB</span>}
+      </button>
+
+      {/* Botão de VOZ: liga/desliga o anúncio (mute/unmute). Ícone reflete o
+          estado. Também é exceção à zona de "tocar marca ponto" (stopPropagation). */}
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation()
+          toggleVoice()
+        }}
+        aria-label={voiceEnabled ? "Desligar voz" : "Ligar voz"}
+        aria-pressed={voiceEnabled}
+        title={voiceEnabled ? "Voz ligada" : "Voz desligada"}
+        className="glass absolute bottom-4 left-4 z-20 rounded-full p-3 active:scale-95 transition-transform"
+      >
+        {voiceEnabled ? <Volume2 className="h-5 w-5" /> : <VolumeX className="h-5 w-5 opacity-70" />}
       </button>
 
       {/* Botão de CONFIGURAÇÃO: único botão glass flutuante, canto inferior.
