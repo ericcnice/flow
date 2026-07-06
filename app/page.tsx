@@ -44,31 +44,13 @@ export default function Home() {
 
     if (existingMatch) {
       // Se já existe uma partida, redirecionar diretamente para a página do jogo
+      // (continuar). A configuração de esporte/regras já foi feita no setup.
       router.push(`/jogo?quadra=${court}`)
     } else {
-      // Se não existe, criar uma nova partida com configurações padrão
-      const newGameConfig = {
-        quadra: court,
-        gameType: "simples",
-        scoreType: "pontos",
-        players: {
-          blue1: "Jogador 1",
-          blue2: "Jogador 2",
-          red1: "Jogador 3",
-          red2: "Jogador 4",
-        },
-        startTime: new Date().toISOString(),
-        maxSets: maxSets,
-      }
-
-      // Salvar a configuração no localStorage
-      localStorage.setItem(`tennis_match_${court}`, JSON.stringify(newGameConfig))
-
-      // Limpar qualquer pontuação existente
-      localStorage.removeItem(`tennis_score_${court}`)
-
-      // Redirecionar para a página do jogo
-      router.push(`/jogo?quadra=${court}`)
+      // Partida NOVA: passa pela tela de SETUP integrada, onde o usuário escolhe
+      // o ESPORTE e ajusta as REGRAS antes de iniciar. É o setup que grava a
+      // config da partida e a semente do motor (ver app/setup/page.tsx).
+      router.push(`/setup?quadra=${court}`)
     }
   }
 

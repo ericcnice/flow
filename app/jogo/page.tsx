@@ -13,14 +13,19 @@ import { ThirdSetModal } from "@/components/third-set-modal"
 import { announce } from "@/lib/voice/announcer"
 import { createSpeechSynthesisSpeaker, type Speaker } from "@/lib/voice/speaker"
 
-// >>> Fase 0: a tela agora consome o motor de scoring (lib/scoring) em vez da
-// lógica de pontuação embutida. Apenas TÊNIS nesta etapa.
+// >>> A tela consome o motor de scoring (lib/scoring) e agora é MULTI-ESPORTE:
+// o esporte escolhido na tela de setup determina o MÓDULO do motor e como o
+// ponto é formatado (15/30/40 do tênis vs. contagem corrida do squash/ping
+// pong/pickleball). O "catálogo" (lib/sports-catalog) é a cola entre a UI e os
+// módulos — ele NÃO altera lib/scoring, só o consome.
 import { ScoringEngine } from "@/lib/scoring/engine"
-import { tennisModule, pointLabel } from "@/lib/scoring/sports/tennis"
-import type { GameState, Side, TennisRules } from "@/lib/scoring/types"
+import { sportById, familyOf, formatPoint, defaultRulesFor, type SportId } from "@/lib/sports-catalog"
+import type { GameState, Side } from "@/lib/scoring/types"
 
 type GameConfig = {
   quadra: string
+  /** Esporte escolhido na tela de setup (define o módulo do motor). */
+  sport?: SportId
   gameType: string
   scoreType: string
   players: {
@@ -47,12 +52,19 @@ export default function JogoPage() {
 
   const [gameConfig, setGameConfig] = useState<GameConfig | null>(null)
 
+  // Esporte da partida (do setup). Fica em estado (para o render decidir família
+  // de placar) e em ref (para acesso estável dentro de rebuildEngine, sem closure
+  // velha). Default tênis para partidas antigas sem `sport`.
+  const [sport, setSport] = useState<SportId>("tennis")
+  const sportRef = useRef<SportId>("tennis")
+
   // Motor de scoring: o engine é a fonte de verdade; espelhamos o GameState em
   // estado do React para disparar re-render. actions/rules/firstServer guardam
-  // o necessário para persistir e reconstruir por replay.
-  const engineRef = useRef<ScoringEngine<TennisRules> | null>(null)
+  // o necessário para persistir e reconstruir por replay. As regras são opacas
+  // aqui (`any`): cada esporte tem seu próprio formato — o motor as consome.
+  const engineRef = useRef<ScoringEngine<any> | null>(null)
   const actionsRef = useRef<Action[]>([])
-  const rulesRef = useRef<TennisRules>(tennisModule.defaultRules())
+  const rulesRef = useRef<any>(defaultRulesFor("tennis"))
   const firstServerRef = useRef<Side>("A")
   const [gameState, setGameState] = useState<GameState | null>(null)
 
@@ -83,15 +95,24 @@ export default function JogoPage() {
     window.open(placarUrl, "_blank")
   }
 
-  // Deriva as regras de tênis a partir da config da partida (Fase 0: só bestOf).
-  const rulesFromConfig = (config: GameConfig): TennisRules => ({
-    ...tennisModule.defaultRules(),
-    bestOf: (config.maxSets || 3) === 5 ? 5 : 3,
-  })
+  // Deriva regras padrão a partir da config quando não há semente do motor
+  // salva (ex.: partidas antigas). Para a família tênis, respeita o maxSets do
+  // config (compat com o controle de "melhor de" da tela de jogo). Para os
+  // demais esportes, usa os padrões do próprio esporte.
+  const rulesFromConfig = (config: GameConfig): any => {
+    const base = defaultRulesFor(config.sport)
+    if (familyOf(config.sport) === "tennis") {
+      return { ...base, bestOf: (config.maxSets || 3) === 5 ? 5 : 3 }
+    }
+    return base
+  }
 
   // (Re)constrói o engine aplicando as ações por replay e reflete no estado.
-  const rebuildEngine = (rules: TennisRules, firstServer: Side, actions: Action[]) => {
-    const engine = new ScoringEngine(tennisModule, rules, firstServer)
+  // Usa o MÓDULO do esporte atual (sportRef) — é aqui que "vira" squash, padel,
+  // etc. em vez de tênis fixo.
+  const rebuildEngine = (rules: any, firstServer: Side, actions: Action[]) => {
+    const module = sportById(sportRef.current).module
+    const engine = new ScoringEngine(module, rules, firstServer)
     for (const a of actions) {
       if (a.kind === "game") engine.awardGameFor(a.side)
       else engine.pointFor(a.side)
@@ -117,6 +138,13 @@ export default function JogoPage() {
     if (storedConfig) {
       const config = JSON.parse(storedConfig)
       setGameConfig(config)
+
+      // Resolve o esporte ANTES de (re)construir o motor: config tem prioridade
+      // (persiste), com a query como dica e tênis como fallback (partidas antigas).
+      const resolvedSport = (config.sport || searchParams.get("sport") || "tennis") as SportId
+      sportRef.current = resolvedSport
+      setSport(resolvedSport)
+
       setStartTime(new Date(config.startTime))
       setBluePlayerName(
         config.gameType === "simples" ? config.players.blue1 : `${config.players.blue1}/${config.players.blue2}`,
@@ -252,7 +280,7 @@ export default function JogoPage() {
     // usuário (alguns navegadores exigem a fala dentro do gesto) e não atrasa o
     // ponto. A voz é apenas o "preto e branco": trocável depois sem mexer nisto.
     if (voiceEnabled) {
-      const speech = announce(events, engine.getState(), { lang: "pt-BR", sport: tennisModule.id })
+      const speech = announce(events, engine.getState(), { lang: "pt-BR", sport })
       if (speech) {
         const speaker = speakerRef.current
         queueMicrotask(() => speaker?.speak(speech.text, { lang: "pt-BR" }))
@@ -353,7 +381,7 @@ export default function JogoPage() {
       localStorage.setItem(`tennis_match_${quadra}`, JSON.stringify(newConfig))
     }
     // Reflete no motor (bestOf) reconstruindo com as ações já jogadas.
-    const newRules: TennisRules = { ...rulesRef.current, bestOf: newMaxSets === 5 ? 5 : 3 }
+    const newRules: any = { ...rulesRef.current, bestOf: newMaxSets === 5 ? 5 : 3 }
     rebuildEngine(newRules, firstServerRef.current, actionsRef.current)
     persist()
   }
@@ -380,21 +408,32 @@ export default function JogoPage() {
     gs.completedSets.length > 0
   const initialServingSet = !started
 
-  // Formato da partida: total de sets possíveis (bestOf).
-  const bestOf = maxSets === 5 ? 5 : 3
+  // Família de placar do esporte: "tennis" (15/30/40, games, sets, tiebreak) ou
+  // "rally"/"sideout" (contagem corrida por game). Decide como exibir o placar.
+  const family = familyOf(sport)
+  const isTennisFamily = family === "tennis"
+  // Rótulo da "unidade" de cada coluna do placar: SET no tênis, GAME nos demais.
+  const unitLabel = isTennisFamily ? "Set" : "Game"
 
-  // Placar broadcast: uma coluna POR SET POSSÍVEL (bestOf colunas fixas).
-  //  - set já encerrado  → games daquele set (com marca de tiebreak);
-  //  - set em andamento  → games atuais, destacado (é a "coluna do game");
-  //  - set por vir       → played:false → renderizado como dash (–).
-  // Assim o placar set-a-set e o que falta aparecem de uma vez, alinhados.
-  const broadcastCols = Array.from({ length: bestOf }, (_, i) => {
+  // Total de colunas do placar broadcast = formato da partida:
+  //  - tênis: sets possíveis (bestOf);   - rally/sideout: games possíveis (bestOf).
+  // Vem das regras EM VIGOR no motor (rulesRef), não do maxSets (que é tênis).
+  const totalUnits = (rulesRef.current?.bestOf as number) || (maxSets === 5 ? 5 : 3)
+
+  // Placar broadcast: uma coluna POR UNIDADE POSSÍVEL (totalUnits colunas fixas).
+  //  - unidade encerrada  → placar daquela unidade (games no set, ou pontos no game);
+  //  - unidade em andamento → valor atual, destacado (a "coluna corrente");
+  //  - unidade por vir      → played:false → renderizado como dash (–).
+  // O valor da coluna corrente muda por família: games (tênis) vs. pontos corridos.
+  const broadcastCols = Array.from({ length: totalUnits }, (_, i) => {
     const done = gs.completedSets[i]
     if (done) {
       return { setNum: i + 1, played: true, current: false, a: done.A, b: done.B, tb: !!done.tiebreak }
     }
     if (!finished && i === gs.completedSets.length) {
-      return { setNum: i + 1, played: true, current: true, a: gs.A.games, b: gs.B.games, tb: isTiebreak }
+      const a = isTennisFamily ? gs.A.games : gs.A.points
+      const b = isTennisFamily ? gs.B.games : gs.B.points
+      return { setNum: i + 1, played: true, current: true, a, b, tb: isTiebreak }
     }
     return { setNum: i + 1, played: false, current: false, a: null as number | null, b: null as number | null, tb: false }
   })
@@ -403,16 +442,18 @@ export default function JogoPage() {
   // Em tiebreak são os pontos do tiebreak; com a partida encerrada fica vazio.
   const pointOf = (side: Side): string => {
     if (finished) return ""
-    if (isTiebreak) return gs[side].tiebreakPoints.toString()
-    return pointLabel(gs[side])
+    // formatPoint resolve por família: 15/30/40 (ou tiebreak) no tênis; contagem
+    // corrida (points) no squash/ping pong/pickleball.
+    return formatPoint(sport, gs[side], isTiebreak)
   }
 
-  // Número grande de cada card: pontos do game (0/15/30/40/AD), ou tiebreak,
-  // ou o total de games no modo "games".
+  // Número grande de cada card: ponto do game formatado por esporte
+  // (0/15/30/40/AD ou tiebreak no tênis; contagem corrida nos demais), ou o
+  // total de games no modo "games".
   const bigNumber = (side: Side): string => {
     if (isTiebreak) return gs[side].tiebreakPoints.toString()
     if (gameConfig.scoreType === "games") return gs[side].games.toString()
-    return pointLabel(gs[side]) // "0" | "15" | "30" | "40" | "AD"
+    return formatPoint(sport, gs[side], false)
   }
 
   // --- Bloco de um lado (ScoreBot): número gigante + nome/sacador no canto ---
@@ -546,51 +587,62 @@ export default function JogoPage() {
           rounded-full px-4 py-2 flex items-center gap-3 text-sm md:text-base font-semibold tracking-wide
           active:scale-95 transition-transform"
       >
+        {/* Resumo do placar central, por família:
+            - tênis: SETS + GAMES (ou pontos do tiebreak);
+            - rally/sideout: GAMES ganhos + PONTOS corridos do game atual. */}
         <span className="flex items-baseline gap-1">
-          <span className="opacity-60 text-[10px] md:text-xs uppercase">sets</span>
+          <span className="opacity-60 text-[10px] md:text-xs uppercase">{isTennisFamily ? "sets" : "games"}</span>
           <span className="tabular-nums">
-            {gs.A.sets}-{gs.B.sets}
+            {isTennisFamily ? `${gs.A.sets}-${gs.B.sets}` : `${gs.A.games}-${gs.B.games}`}
           </span>
         </span>
         <span className="opacity-30">·</span>
         <span className="flex items-baseline gap-1">
-          <span className="opacity-60 text-[10px] md:text-xs uppercase">games</span>
+          <span className="opacity-60 text-[10px] md:text-xs uppercase">{isTennisFamily ? "games" : "pts"}</span>
           <span className="tabular-nums">
-            {isTiebreak ? `${gs.A.tiebreakPoints}-${gs.B.tiebreakPoints}` : `${gs.A.games}-${gs.B.games}`}
+            {isTennisFamily
+              ? isTiebreak
+                ? `${gs.A.tiebreakPoints}-${gs.B.tiebreakPoints}`
+                : `${gs.A.games}-${gs.B.games}`
+              : `${gs.A.points}-${gs.B.points}`}
           </span>
         </span>
         {isTiebreak && <span className="opacity-90 font-bold tracking-widest text-xs">TB</span>}
       </button>
 
-      {/* Botão de VOZ: liga/desliga o anúncio (mute/unmute). Ícone reflete o
-          estado. Também é exceção à zona de "tocar marca ponto" (stopPropagation). */}
-      <button
-        type="button"
-        onClick={(e) => {
-          e.stopPropagation()
-          toggleVoice()
-        }}
-        aria-label={voiceEnabled ? "Desligar voz" : "Ligar voz"}
-        aria-pressed={voiceEnabled}
-        title={voiceEnabled ? "Voz ligada" : "Voz desligada"}
-        className="glass absolute bottom-4 left-4 z-20 rounded-full p-3 active:scale-95 transition-transform"
-      >
-        {voiceEnabled ? <Volume2 className="h-5 w-5" /> : <VolumeX className="h-5 w-5 opacity-70" />}
-      </button>
+      {/* Controles flutuantes agrupados no canto inferior DIREITO (VOZ + CONFIG),
+          lado a lado. Ficam à direita de propósito: o badge de desenvolvimento
+          do Next.js mora no canto inferior ESQUERDO e cobria a voz ali.
+          Ambos param a propagação para não marcarem ponto (stopPropagation). */}
+      <div className="absolute bottom-4 right-4 z-20 flex items-center gap-3">
+        {/* Botão de VOZ: liga/desliga o anúncio (mute/unmute); o ícone reflete o estado. */}
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation()
+            toggleVoice()
+          }}
+          aria-label={voiceEnabled ? "Desligar voz" : "Ligar voz"}
+          aria-pressed={voiceEnabled}
+          title={voiceEnabled ? "Voz ligada" : "Voz desligada"}
+          className="glass rounded-full p-3 active:scale-95 transition-transform"
+        >
+          {voiceEnabled ? <Volume2 className="h-5 w-5" /> : <VolumeX className="h-5 w-5 opacity-70" />}
+        </button>
 
-      {/* Botão de CONFIGURAÇÃO: único botão glass flutuante, canto inferior.
-          Também é exceção à zona de "tocar marca ponto" (stopPropagation). */}
-      <button
-        type="button"
-        onClick={(e) => {
-          e.stopPropagation()
-          setMenuOpen(true)
-        }}
-        aria-label="Configurações"
-        className="glass absolute bottom-4 right-4 z-20 rounded-full p-3 active:scale-95 transition-transform"
-      >
-        <Settings className="h-5 w-5" />
-      </button>
+        {/* Botão de CONFIGURAÇÃO: abre o menu existente. */}
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation()
+            setMenuOpen(true)
+          }}
+          aria-label="Configurações"
+          className="glass rounded-full p-3 active:scale-95 transition-transform"
+        >
+          <Settings className="h-5 w-5" />
+        </button>
+      </div>
 
       {/* Placar geral expandido: overlay glass de tela cheia, estilo BROADCAST
           (Grand Slam). Aparece ao tocar no placar central, some sozinho após
@@ -624,7 +676,7 @@ export default function JogoPage() {
                     <th className="text-left font-normal">Jogador</th>
                     {broadcastCols.map((c) => (
                       <th key={c.setNum} className="font-normal">
-                        {c.current ? "Game" : `Set ${c.setNum}`}
+                        {c.current ? (isTennisFamily ? "Game" : "Pts") : `${unitLabel} ${c.setNum}`}
                       </th>
                     ))}
                     <th className="font-normal">Ponto</th>

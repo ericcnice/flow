@@ -357,3 +357,161 @@
 .win-blink {
   animation: stageWinBlink 0.5s ease-in-out 3;
 }
+
+/* --- Tela de SETUP: quadras (SVG) + carrossel + painel de regras ----------
+   Cores base das quadras em variáveis (temas/palcos futuros trocam só aqui).
+   Preto-e-branco não se aplica às quadras: são coloridas por esporte de
+   propósito (reconhecimento imediato). O restante da tela segue o tema P&B. */
+:root {
+  --quadra-linha: #ffffff;
+  --quadra-rede: #f2f2f2;
+
+  /* Tênis (saibro padrão) */
+  --quadra-tenis-fundo: #7a3b2e;
+  --quadra-tenis-piso: #b5533b;
+
+  /* Beach (areia) */
+  --quadra-beach-areia: #dcb56a;
+  --quadra-beach-pontos: #b8894a;
+
+  /* Padel (azul + vidro) */
+  --quadra-padel-fundo: #0f3d2e;
+  --quadra-padel-piso: #16688f;
+  --quadra-padel-vidro: #bfe9ff;
+
+  /* Squash (parede clara + linhas vermelhas) */
+  --quadra-squash-parede: #e9e4d8;
+  --quadra-squash-linha: #c62828;
+
+  /* Ping pong (mesa azul) */
+  --quadra-pingpong-fundo: #10243a;
+  --quadra-pingpong-mesa: #1e5aa8;
+
+  /* Pickleball (verde/azul + kitchen) */
+  --quadra-pickle-fundo: #123a2a;
+  --quadra-pickle-piso: #1f7a5a;
+  --quadra-pickle-kitchen: #2f9e77;
+
+  /* Painel de setup (vidro escuro sobre a quadra) */
+  --setup-painel-bg: rgba(10, 10, 10, 0.82);
+  --setup-chip-bg: rgba(255, 255, 255, 0.08);
+  --setup-chip-ativo-bg: #f5f5f5;
+  --setup-chip-ativo-texto: #0a0a0a;
+  --setup-texto: #f5f5f5;
+  --setup-borda: rgba(255, 255, 255, 0.22);
+}
+
+/* Fundo de quadra: ocupa a tela inteira, atrás de tudo. */
+.court-bg {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+}
+.court-svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+/* Carrossel de esportes: rola na horizontal, sem barra visível. */
+.sport-carousel {
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  scroll-snap-type: x proximity;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  padding: 4px 2px;
+}
+.sport-carousel::-webkit-scrollbar {
+  display: none;
+}
+.sport-chip {
+  scroll-snap-align: center;
+  flex: 0 0 auto;
+  padding: 10px 18px;
+  border-radius: 9999px;
+  font-weight: 700;
+  font-size: 0.95rem;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  background: var(--setup-chip-bg);
+  color: var(--setup-texto);
+  border: 2px solid var(--setup-borda);
+  transition: transform 0.12s ease, background-color 0.15s ease, color 0.15s ease;
+}
+.sport-chip:active {
+  transform: scale(0.96);
+}
+.sport-chip.on {
+  background: var(--setup-chip-ativo-bg);
+  color: var(--setup-chip-ativo-texto);
+  border-color: var(--setup-chip-ativo-bg);
+}
+
+/* Painel de regras: SOBE cobrindo ~metade da tela, quadra visível ao fundo. */
+.setup-panel {
+  background: var(--setup-painel-bg);
+  color: var(--setup-texto);
+  border-top-left-radius: 22px;
+  border-top-right-radius: 22px;
+  box-shadow: 0 -12px 40px rgba(0, 0, 0, 0.5);
+  transform: translateY(100%);
+  transition: transform 0.32s cubic-bezier(0.16, 1, 0.3, 1);
+  will-change: transform;
+}
+@supports ((backdrop-filter: blur(2px)) or (-webkit-backdrop-filter: blur(2px))) {
+  .setup-panel {
+    background: rgba(10, 10, 10, 0.62);
+    -webkit-backdrop-filter: blur(18px) saturate(1.3);
+    backdrop-filter: blur(18px) saturate(1.3);
+  }
+}
+.setup-panel.open {
+  transform: translateY(0);
+}
+
+/* Toggle de regra (segmented): opção ativa preenchida, inativa contorno.
+   Alto contraste e alvos grandes — legível "sob o sol". */
+.rule-group {
+  display: flex;
+  gap: 8px;
+}
+.rule-option {
+  flex: 1 1 0;
+  padding: 12px 8px;
+  border-radius: 12px;
+  font-weight: 800;
+  font-size: 1rem;
+  text-align: center;
+  background: transparent;
+  color: var(--setup-texto);
+  border: 2px solid var(--setup-borda);
+  transition: transform 0.1s ease, background-color 0.15s ease, color 0.15s ease;
+}
+.rule-option:active {
+  transform: scale(0.97);
+}
+.rule-option.on {
+  background: var(--setup-chip-ativo-bg);
+  color: var(--setup-chip-ativo-texto);
+  border-color: var(--setup-chip-ativo-bg);
+}
+
+/* Botão JOGO!: grande, alto contraste. */
+.play-button {
+  width: 100%;
+  padding: 18px;
+  border-radius: 16px;
+  font-weight: 900;
+  font-size: 1.4rem;
+  letter-spacing: 0.06em;
+  background: var(--setup-chip-ativo-bg);
+  color: var(--setup-chip-ativo-texto);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
+  transition: transform 0.12s ease;
+}
+.play-button:active {
+  transform: scale(0.98);
+}
