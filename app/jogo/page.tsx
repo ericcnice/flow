@@ -3,9 +3,12 @@
 import { useState, useEffect, useRef } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { Input } from "@/components/ui/input"
-import { Settings, Volume2, VolumeX } from "lucide-react"
-import { GameMenu } from "@/components/game-menu"
+import { Settings, Volume2, VolumeX, Undo2, BarChart2, RotateCcw, LogOut } from "lucide-react"
 import { ThirdSetModal } from "@/components/third-set-modal"
+// Superfície de configuração ÚNICA: a MESMA tela de setup (esporte + regras),
+// aberta agora também DE DENTRO do jogo pelo botão de config (aposenta o GameMenu
+// antigo neste fluxo).
+import { SportSetup } from "@/components/sport-setup"
 
 // >>> Voz "placeholder" (preto e branco): reage aos eventos do motor e fala o
 // placar com a voz nativa do navegador. announce() = lógica evento→texto;
@@ -76,7 +79,8 @@ export default function JogoPage() {
   const [redPlayerName, setRedPlayerName] = useState("")
   const [animatingBlue, setAnimatingBlue] = useState(false)
   const [animatingRed, setAnimatingRed] = useState(false)
-  const [menuOpen, setMenuOpen] = useState(false)
+  // Overlay de configuração (a mesma tela de setup, aberta dentro do jogo).
+  const [setupOpen, setSetupOpen] = useState(false)
   const [showOverview, setShowOverview] = useState(false)
   const overviewTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -360,30 +364,70 @@ export default function JogoPage() {
     }
   }
 
-  const updateGameConfig = (config: GameConfig) => {
-    setGameConfig(config)
-    setBluePlayerName(
-      config.gameType === "simples" ? config.players.blue1 : `${config.players.blue1}/${config.players.blue2}`,
-    )
-    setRedPlayerName(
-      config.gameType === "simples" ? config.players.red1 : `${config.players.red1}/${config.players.red2}`,
-    )
-    if (config.maxSets) {
-      setMaxSets(config.maxSets)
+  // Encerrar a partida: descarta o jogo desta quadra e volta pra home.
+  // (Ação herdada do antigo GameMenu — ver rodapé do overlay de config.)
+  const endMatch = () => {
+    if (confirm("Tem certeza que deseja encerrar o jogo? Você será redirecionado para a tela inicial.")) {
+      localStorage.removeItem(`tennis_match_${quadra}`)
+      localStorage.removeItem(`tennis_engine_${quadra}`)
+      localStorage.removeItem(`tennis_score_${quadra}`)
+      router.push("/")
     }
   }
 
-  const changeMaxSets = (newMaxSets: number) => {
-    setMaxSets(newMaxSets)
+  // Inicia uma NOVA partida NESTA quadra com outro esporte/regras (troca de
+  // esporte no meio). Zera o placar (novo esporte = partida nova) e reconstrói o
+  // motor com o MÓDULO do novo esporte. sportRef precisa estar setado ANTES do
+  // rebuildEngine (ele lê o módulo por sportRef.current).
+  const startNewMatch = (nextSport: SportId, nextRules: any) => {
+    sportRef.current = nextSport
+    setSport(nextSport)
+
+    const now = new Date()
+    setStartTime(now)
+    setMaxSets(nextRules.bestOf ?? 3)
+
     if (gameConfig) {
-      const newConfig = { ...gameConfig, maxSets: newMaxSets }
+      const newConfig: GameConfig = {
+        ...gameConfig,
+        sport: nextSport,
+        startTime: now.toISOString(),
+        maxSets: nextRules.bestOf ?? 3,
+      }
       setGameConfig(newConfig)
       localStorage.setItem(`tennis_match_${quadra}`, JSON.stringify(newConfig))
     }
-    // Reflete no motor (bestOf) reconstruindo com as ações já jogadas.
-    const newRules: any = { ...rulesRef.current, bestOf: newMaxSets === 5 ? 5 : 3 }
-    rebuildEngine(newRules, firstServerRef.current, actionsRef.current)
+    localStorage.removeItem(`tennis_score_${quadra}`)
+
+    // rebuildEngine cuida de rules/actions/firstServer refs + estado. Ações
+    // vazias = placar zerado.
+    rebuildEngine(nextRules, "A", [])
     persist()
+  }
+
+  // Decisão do overlay de config (a tela de setup dentro do jogo):
+  //  - MESMO esporte  → CASO 1: aplica a regra nova MANTENDO o placar. O motor é
+  //    reconstruído com as novas regras e RE-HIDRATADO pelo replay das ações já
+  //    feitas (mesmo mecanismo usado na persistência), então pontos/games/sets
+  //    são preservados e a regra vale daqui pra frente. NÃO recomeça a partida.
+  //  - OUTRO esporte  → CASO 2: confirma e inicia uma partida nova (startNewMatch).
+  const onSetupConfirm = (nextSport: SportId, nextRules: any, sportChanged: boolean) => {
+    if (!sportChanged) {
+      rebuildEngine(nextRules, firstServerRef.current, actionsRef.current)
+      if (gameConfig) {
+        const newConfig: GameConfig = { ...gameConfig, maxSets: nextRules.bestOf ?? gameConfig.maxSets }
+        setGameConfig(newConfig)
+        localStorage.setItem(`tennis_match_${quadra}`, JSON.stringify(newConfig))
+      }
+      setMaxSets(nextRules.bestOf ?? maxSets)
+      persist()
+      setSetupOpen(false)
+      return
+    }
+    if (confirm("Trocar de esporte vai iniciar uma nova partida. Continuar?")) {
+      startNewMatch(nextSport, nextRules)
+      setSetupOpen(false)
+    }
   }
 
   if (!gameConfig || !gameState) {
@@ -635,7 +679,7 @@ export default function JogoPage() {
           type="button"
           onClick={(e) => {
             e.stopPropagation()
-            setMenuOpen(true)
+            setSetupOpen(true)
           }}
           aria-label="Configurações"
           className="glass rounded-full p-3 active:scale-95 transition-transform"
@@ -730,21 +774,77 @@ export default function JogoPage() {
         </div>
       )}
 
-      {/* Menu Modal */}
-      <GameMenu
-        isOpen={menuOpen}
-        onClose={() => setMenuOpen(false)}
-        onResetGame={resetGame}
-        onToggleScoreType={toggleScoreType}
-        onUndoLastPoint={undoLastPoint}
-        scoreType={gameConfig.scoreType}
-        quadra={quadra}
-        gameConfig={gameConfig}
-        updateGameConfig={updateGameConfig}
-        openScoreboard={openScoreboard}
-        maxSets={maxSets}
-        onChangeMaxSets={changeMaxSets}
-      />
+      {/* Overlay de CONFIGURAÇÃO = a MESMA tela de setup, aberta dentro do jogo,
+          JÁ no contexto atual: pré-selecionada no esporte vigente e com os
+          toggles refletindo as regras atuais (rulesRef). O painel de regras já
+          abre (startPanelOpen). O rodapé reúne as ações da partida herdadas do
+          antigo GameMenu (desfazer / placar / marcação / reiniciar / encerrar). */}
+      {setupOpen && (
+        <div className="fixed inset-0 z-50">
+          <SportSetup
+            initialSport={sport}
+            initialRules={rulesRef.current}
+            context="ingame"
+            startPanelOpen
+            onClose={() => setSetupOpen(false)}
+            onConfirm={onSetupConfirm}
+            footer={
+              <div className="pt-2 border-t border-white/15">
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    className="setup-action"
+                    onClick={() => {
+                      undoLastPoint()
+                      setSetupOpen(false)
+                    }}
+                  >
+                    <Undo2 className="h-4 w-4" />
+                    Desfazer ponto
+                  </button>
+                  <button
+                    type="button"
+                    className="setup-action"
+                    onClick={() => {
+                      toggleScoreType()
+                      setSetupOpen(false)
+                    }}
+                  >
+                    <BarChart2 className="h-4 w-4" />
+                    {gameConfig.scoreType === "pontos" ? "Contar por games" : "Contar por pontos"}
+                  </button>
+                  <button
+                    type="button"
+                    className="setup-action"
+                    onClick={() => {
+                      openScoreboard()
+                      setSetupOpen(false)
+                    }}
+                  >
+                    <BarChart2 className="h-4 w-4" />
+                    Abrir placar
+                  </button>
+                  <button
+                    type="button"
+                    className="setup-action"
+                    onClick={() => {
+                      resetGame()
+                      setSetupOpen(false)
+                    }}
+                  >
+                    <RotateCcw className="h-4 w-4" />
+                    Reiniciar
+                  </button>
+                  <button type="button" className="setup-action setup-action-danger col-span-2" onClick={endMatch}>
+                    <LogOut className="h-4 w-4" />
+                    Encerrar partida
+                  </button>
+                </div>
+              </div>
+            }
+          />
+        </div>
+      )}
 
       {/* Third Set Choice Modal */}
       <ThirdSetModal isOpen={showThirdSetModal} onClose={handleThirdSetChoice} />

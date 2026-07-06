@@ -515,3 +515,28 @@
 .play-button:active {
   transform: scale(0.98);
 }
+
+/* Ações da partida no rodapé do overlay de config (herdadas do antigo GameMenu):
+   botões discretos, mesma linguagem do painel de setup. */
+.setup-action {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 11px 8px;
+  border-radius: 12px;
+  font-weight: 700;
+  font-size: 0.9rem;
+  text-align: center;
+  background: var(--setup-chip-bg);
+  color: var(--setup-texto);
+  border: 2px solid var(--setup-borda);
+  transition: transform 0.1s ease, background-color 0.15s ease;
+}
+.setup-action:active {
+  transform: scale(0.97);
+}
+.setup-action-danger {
+  border-color: rgba(255, 120, 120, 0.5);
+  color: #ffb4b4;
+}
