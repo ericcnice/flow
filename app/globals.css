@@ -182,6 +182,70 @@
   }
 }
 
+/* --- Glassmorphism (CSS puro, sem biblioteca) -------------------------
+   O placar central e o botão de config flutuam SOBRE os dois blocos — um
+   claro (#f5f5f5) e outro escuro (#0a0a0a). Para ficar legível sobre AMBOS,
+   usamos um "vidro fumê" escuro com texto claro: sobre o bloco claro ele
+   escurece o fundo; sobre o escuro ele permanece escuro — o texto branco
+   contrasta nos dois casos.
+
+   Fallback: sem backdrop-filter (ex. alguns Safari), o fundo semitransparente
+   é mais opaco (0.62) para continuar legível sem o desfoque. O @supports
+   deixa o fundo mais leve só quando o blur existe. */
+.glass {
+  background: rgba(18, 18, 18, 0.62);
+  color: #f5f5f5;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.16),
+    0 6px 24px rgba(0, 0, 0, 0.45);
+}
+@supports ((backdrop-filter: blur(2px)) or (-webkit-backdrop-filter: blur(2px))) {
+  .glass {
+    background: rgba(18, 18, 18, 0.4);
+    -webkit-backdrop-filter: blur(16px) saturate(1.4);
+    backdrop-filter: blur(16px) saturate(1.4);
+  }
+}
+
+/* Overlay de tela cheia (placar geral expandido): vidro fumê mais denso,
+   cobrindo os dois blocos por inteiro. */
+.glass-overlay {
+  background: rgba(8, 8, 8, 0.9);
+  color: #f5f5f5;
+}
+@supports ((backdrop-filter: blur(2px)) or (-webkit-backdrop-filter: blur(2px))) {
+  .glass-overlay {
+    background: rgba(8, 8, 8, 0.72);
+    -webkit-backdrop-filter: blur(22px) saturate(1.3);
+    backdrop-filter: blur(22px) saturate(1.3);
+  }
+}
+
+/* Entradas/saídas suaves. */
+@keyframes glassFadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes glassPop {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.94);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+}
+.glass-overlay-anim {
+  animation: glassFadeIn 0.2s ease-out;
+}
+.glass-panel-anim {
+  animation: glassPop 0.24s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
 /* Piscar do bloco vencedor em P&B (sem cor): flash neutro de borda interna. */
 @keyframes stageWinBlink {
   0%,

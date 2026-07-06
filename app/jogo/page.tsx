@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { Input } from "@/components/ui/input"
-import { Menu, Undo2, Volume2 } from "lucide-react"
+import { Settings } from "lucide-react"
 import { GameMenu } from "@/components/game-menu"
 import { ThirdSetModal } from "@/components/third-set-modal"
 
@@ -59,6 +59,8 @@ export default function JogoPage() {
   const [animatingBlue, setAnimatingBlue] = useState(false)
   const [animatingRed, setAnimatingRed] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
+  const [showOverview, setShowOverview] = useState(false)
+  const overviewTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [showThirdSetModal, setShowThirdSetModal] = useState(false)
   const [blueCardBlinking, setBlueCardBlinking] = useState(false)
   const [redCardBlinking, setRedCardBlinking] = useState(false)
@@ -155,6 +157,24 @@ export default function JogoPage() {
       return () => clearInterval(timer)
     }
   }, [startTime])
+
+  // Placar geral expandido: abre por toque no placar central e some sozinho
+  // após ~5s (ou ao tocar fora). O timer é guardado em ref para poder ser
+  // cancelado se o usuário fechar antes.
+  const openOverview = () => {
+    setShowOverview(true)
+    if (overviewTimerRef.current) clearTimeout(overviewTimerRef.current)
+    overviewTimerRef.current = setTimeout(() => setShowOverview(false), 5000)
+  }
+  const closeOverview = () => {
+    if (overviewTimerRef.current) clearTimeout(overviewTimerRef.current)
+    setShowOverview(false)
+  }
+  useEffect(() => {
+    return () => {
+      if (overviewTimerRef.current) clearTimeout(overviewTimerRef.current)
+    }
+  }, [])
 
   const handleScoreClick = (team: "blue" | "red") => {
     const engine = engineRef.current
@@ -315,6 +335,18 @@ export default function JogoPage() {
     gs.completedSets.length > 0
   const initialServingSet = !started
 
+  // Formato da partida: total de sets possíveis (bestOf) e quantos faltam.
+  // Usado no placar geral expandido para desenhar "● ● – – –".
+  const bestOf = maxSets === 5 ? 5 : 3
+  // Colunas set-a-set: sets já encerrados + o set em andamento (se não acabou).
+  const setColumns = [
+    ...gs.completedSets.map((s) => ({ label: s.set, a: s.A, b: s.B, tb: s.tiebreak, current: false })),
+    ...(finished ? [] : [{ label: gs.currentSet, a: gs.A.games, b: gs.B.games, tb: isTiebreak, current: true }]),
+  ]
+  // Bolinhas de sets ganhos vs. possíveis (por lado), até bestOf.
+  const setDots = (side: Side) =>
+    Array.from({ length: bestOf }, (_, i) => (i < gs[side].sets ? "●" : "–")).join(" ")
+
   // Número grande de cada card: pontos do game (0/15/30/40/AD), ou tiebreak,
   // ou o total de games no modo "games".
   const bigNumber = (side: Side): string => {
@@ -424,31 +456,12 @@ export default function JogoPage() {
 
   return (
     <div
-      className="flex flex-col h-[100dvh] overflow-hidden mono-tabular"
+      className="relative flex flex-col h-[100dvh] overflow-hidden mono-tabular"
       style={{ backgroundColor: "var(--palco-fundo)", color: "var(--palco-discreto)" }}
     >
-      {/* Topo discreto: placar de sets/games + cronômetro. Não compete com o número. */}
-      <header
-        className="flex items-center justify-between gap-3 px-4 py-2 text-xs md:text-sm"
-        style={{ borderBottom: "1px solid var(--palco-divisor)" }}
-      >
-        <div className="flex items-center gap-4 tracking-wide whitespace-nowrap overflow-hidden">
-          <span className="uppercase opacity-70">Quadra {gameConfig.quadra}</span>
-          <span>
-            <span className="opacity-60">sets </span>
-            {gs.A.sets}-{gs.B.sets}
-          </span>
-          <span>
-            <span className="opacity-60">games </span>
-            {gs.A.games}-{gs.B.games}
-          </span>
-          {isTiebreak && <span className="opacity-90 font-bold tracking-widest">TB</span>}
-        </div>
-        <span className="tabular-nums opacity-80 shrink-0">{elapsedTime}</span>
-      </header>
-
-      {/* Palco: dois blocos ocupando a tela. A direção segue a ORIENTAÇÃO (não a
-          largura): empilhados em retrato, lado a lado em paisagem — ver .palco-main. */}
+      {/* Palco: dois blocos ocupando a tela INTEIRA (sem barras). A direção segue
+          a ORIENTAÇÃO (não a largura): empilhados em retrato, lado a lado em
+          paisagem — ver .palco-main. */}
       <main
         className="palco-main flex-1 flex min-h-0"
         style={{ gap: "1px", backgroundColor: "var(--palco-divisor)" }}
@@ -457,43 +470,137 @@ export default function JogoPage() {
         {renderBlock("red")}
       </main>
 
-      {/* Controles discretos embaixo, fora do caminho do número. */}
-      <footer
-        className="flex items-center justify-center gap-8 px-4 py-2"
-        style={{ borderTop: "1px solid var(--palco-divisor)" }}
+      {/* Placar central na ZONA SEGURA: fica no CENTRO exato da tela, sobre a
+          linha divisória entre os dois blocos (em retrato a divisa é horizontal,
+          em paisagem é vertical — o centro cai na linha nos dois casos). É a
+          região onde ninguém toca pra marcar ponto. stopPropagation garante que
+          tocar aqui NÃO marca ponto — apenas abre o placar geral. */}
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation()
+          openOverview()
+        }}
+        aria-label="Ver placar geral"
+        className="glass absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-20
+          rounded-full px-4 py-2 flex items-center gap-3 text-sm md:text-base font-semibold tracking-wide
+          active:scale-95 transition-transform"
       >
-        <button
-          type="button"
-          onClick={undoLastPoint}
-          className="flex flex-col items-center gap-0.5 text-[10px] uppercase tracking-wide opacity-80 hover:opacity-100 disabled:opacity-30"
-          aria-label="Voltar ponto"
-        >
-          <Undo2 className="h-6 w-6" />
-          <span>voltar</span>
-        </button>
+        <span className="flex items-baseline gap-1">
+          <span className="opacity-60 text-[10px] md:text-xs uppercase">sets</span>
+          <span className="tabular-nums">
+            {gs.A.sets}-{gs.B.sets}
+          </span>
+        </span>
+        <span className="opacity-30">·</span>
+        <span className="flex items-baseline gap-1">
+          <span className="opacity-60 text-[10px] md:text-xs uppercase">games</span>
+          <span className="tabular-nums">
+            {isTiebreak ? `${gs.A.tiebreakPoints}-${gs.B.tiebreakPoints}` : `${gs.A.games}-${gs.B.games}`}
+          </span>
+        </span>
+        {isTiebreak && <span className="opacity-90 font-bold tracking-widest text-xs">TB</span>}
+      </button>
 
-        {/* Placeholder de voz (etapa futura — sem funcionalidade). */}
-        <button
-          type="button"
-          disabled
-          aria-label="Voz do árbitro (em breve)"
-          title="Voz do árbitro (em breve)"
-          className="flex flex-col items-center gap-0.5 text-[10px] uppercase tracking-wide opacity-30 cursor-not-allowed"
-        >
-          <Volume2 className="h-6 w-6" />
-          <span>voz</span>
-        </button>
+      {/* Botão de CONFIGURAÇÃO: único botão glass flutuante, canto inferior.
+          Também é exceção à zona de "tocar marca ponto" (stopPropagation). */}
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation()
+          setMenuOpen(true)
+        }}
+        aria-label="Configurações"
+        className="glass absolute bottom-4 right-4 z-20 rounded-full p-3 active:scale-95 transition-transform"
+      >
+        <Settings className="h-5 w-5" />
+      </button>
 
-        <button
-          type="button"
-          onClick={() => setMenuOpen(true)}
-          className="flex flex-col items-center gap-0.5 text-[10px] uppercase tracking-wide opacity-80 hover:opacity-100"
-          aria-label="Menu"
+      {/* Placar geral expandido: overlay glass de tela cheia. Aparece ao tocar no
+          placar central, some sozinho após ~5s ou ao tocar fora do painel. */}
+      {showOverview && (
+        <div
+          className="glass-overlay glass-overlay-anim absolute inset-0 z-30 flex items-center justify-center p-6"
+          onClick={closeOverview}
+          role="dialog"
+          aria-label="Placar geral"
         >
-          <Menu className="h-6 w-6" />
-          <span>menu</span>
-        </button>
-      </footer>
+          <div
+            className="glass-panel-anim w-full max-w-md flex flex-col items-center gap-6"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Cabeçalho: quadra + cronômetro */}
+            <div className="w-full flex items-center justify-between text-xs uppercase tracking-widest opacity-70">
+              <span>Quadra {gameConfig.quadra}</span>
+              <span className="tabular-nums">{elapsedTime}</span>
+            </div>
+
+            {/* Sets ganhos vs. possíveis, conforme o formato (melhor de {bestOf}) */}
+            <div className="w-full flex flex-col gap-3">
+              {(["A", "B"] as Side[]).map((side) => {
+                const name = side === "A" ? bluePlayerName : redPlayerName
+                return (
+                  <div key={side} className="flex items-center justify-between gap-4">
+                    <span className="truncate font-semibold uppercase tracking-wide text-sm md:text-base max-w-[55%]">
+                      {name}
+                    </span>
+                    <span className="tabular-nums tracking-[0.35em] text-lg md:text-xl">{setDots(side)}</span>
+                  </div>
+                )
+              })}
+            </div>
+
+            {/* Placar set-a-set (games por set). Set em andamento marcado com "·". */}
+            <div className="w-full overflow-x-auto">
+              <table className="w-full text-center tabular-nums border-separate border-spacing-y-1">
+                <thead>
+                  <tr className="text-[10px] uppercase tracking-widest opacity-50">
+                    <th className="text-left font-normal">Set</th>
+                    {setColumns.map((c, i) => (
+                      <th key={i} className="font-normal px-1">
+                        {c.label}
+                        {c.current ? "·" : ""}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="text-base md:text-lg font-semibold">
+                  <tr>
+                    <td className="text-left text-xs uppercase tracking-wide opacity-70 truncate max-w-[6rem]">
+                      {bluePlayerName}
+                    </td>
+                    {setColumns.map((c, i) => (
+                      <td key={i} className="px-1">
+                        {c.a}
+                        {c.tb && !c.current ? <sup className="text-[9px] opacity-60">tb</sup> : null}
+                      </td>
+                    ))}
+                  </tr>
+                  <tr>
+                    <td className="text-left text-xs uppercase tracking-wide opacity-70 truncate max-w-[6rem]">
+                      {redPlayerName}
+                    </td>
+                    {setColumns.map((c, i) => (
+                      <td key={i} className="px-1">
+                        {c.b}
+                        {c.tb && !c.current ? <sup className="text-[9px] opacity-60">tb</sup> : null}
+                      </td>
+                    ))}
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            {finished && (
+              <div className="text-sm font-bold uppercase tracking-[0.2em] opacity-90">
+                Vencedor: {blueWinner ? bluePlayerName : redPlayerName}
+              </div>
+            )}
+
+            <span className="text-[10px] uppercase tracking-widest opacity-40">toque fora para fechar</span>
+          </div>
+        </div>
+      )}
 
       {/* Menu Modal */}
       <GameMenu
