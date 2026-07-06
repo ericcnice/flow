@@ -335,17 +335,32 @@ export default function JogoPage() {
     gs.completedSets.length > 0
   const initialServingSet = !started
 
-  // Formato da partida: total de sets possíveis (bestOf) e quantos faltam.
-  // Usado no placar geral expandido para desenhar "● ● – – –".
+  // Formato da partida: total de sets possíveis (bestOf).
   const bestOf = maxSets === 5 ? 5 : 3
-  // Colunas set-a-set: sets já encerrados + o set em andamento (se não acabou).
-  const setColumns = [
-    ...gs.completedSets.map((s) => ({ label: s.set, a: s.A, b: s.B, tb: s.tiebreak, current: false })),
-    ...(finished ? [] : [{ label: gs.currentSet, a: gs.A.games, b: gs.B.games, tb: isTiebreak, current: true }]),
-  ]
-  // Bolinhas de sets ganhos vs. possíveis (por lado), até bestOf.
-  const setDots = (side: Side) =>
-    Array.from({ length: bestOf }, (_, i) => (i < gs[side].sets ? "●" : "–")).join(" ")
+
+  // Placar broadcast: uma coluna POR SET POSSÍVEL (bestOf colunas fixas).
+  //  - set já encerrado  → games daquele set (com marca de tiebreak);
+  //  - set em andamento  → games atuais, destacado (é a "coluna do game");
+  //  - set por vir       → played:false → renderizado como dash (–).
+  // Assim o placar set-a-set e o que falta aparecem de uma vez, alinhados.
+  const broadcastCols = Array.from({ length: bestOf }, (_, i) => {
+    const done = gs.completedSets[i]
+    if (done) {
+      return { setNum: i + 1, played: true, current: false, a: done.A, b: done.B, tb: !!done.tiebreak }
+    }
+    if (!finished && i === gs.completedSets.length) {
+      return { setNum: i + 1, played: true, current: true, a: gs.A.games, b: gs.B.games, tb: isTiebreak }
+    }
+    return { setNum: i + 1, played: false, current: false, a: null as number | null, b: null as number | null, tb: false }
+  })
+
+  // Ponto do game atual de um lado (coluna destacada na ponta direita).
+  // Em tiebreak são os pontos do tiebreak; com a partida encerrada fica vazio.
+  const pointOf = (side: Side): string => {
+    if (finished) return ""
+    if (isTiebreak) return gs[side].tiebreakPoints.toString()
+    return pointLabel(gs[side])
+  }
 
   // Número grande de cada card: pontos do game (0/15/30/40/AD), ou tiebreak,
   // ou o total de games no modo "games".
@@ -516,88 +531,88 @@ export default function JogoPage() {
         <Settings className="h-5 w-5" />
       </button>
 
-      {/* Placar geral expandido: overlay glass de tela cheia. Aparece ao tocar no
-          placar central, some sozinho após ~5s ou ao tocar fora do painel. */}
+      {/* Placar geral expandido: overlay glass de tela cheia, estilo BROADCAST
+          (Grand Slam). Aparece ao tocar no placar central, some sozinho após
+          ~5s ou ao tocar fora do painel. */}
       {showOverview && (
         <div
-          className="glass-overlay glass-overlay-anim absolute inset-0 z-30 flex items-center justify-center p-6"
+          className="glass-overlay glass-overlay-anim absolute inset-0 z-30 flex items-center justify-center p-4 md:p-8"
           onClick={closeOverview}
           role="dialog"
           aria-label="Placar geral"
         >
           <div
-            className="glass-panel-anim w-full max-w-md flex flex-col items-center gap-6"
+            className="glass-panel-anim w-full max-w-5xl flex flex-col gap-3 md:gap-5"
             onClick={(e) => e.stopPropagation()}
           >
-            {/* Cabeçalho: quadra + cronômetro */}
-            <div className="w-full flex items-center justify-between text-xs uppercase tracking-widest opacity-70">
+            {/* Topo discreto: quadra + cronômetro. */}
+            <div className="w-full flex items-center justify-between text-[11px] md:text-sm uppercase tracking-widest opacity-70">
               <span>Quadra {gameConfig.quadra}</span>
-              <span className="tabular-nums">{elapsedTime}</span>
+              <span className="tabular-nums">
+                {elapsedTime}
+                {isTiebreak ? " · TB" : ""}
+              </span>
             </div>
 
-            {/* Sets ganhos vs. possíveis, conforme o formato (melhor de {bestOf}) */}
-            <div className="w-full flex flex-col gap-3">
-              {(["A", "B"] as Side[]).map((side) => {
-                const name = side === "A" ? bluePlayerName : redPlayerName
-                return (
-                  <div key={side} className="flex items-center justify-between gap-4">
-                    <span className="truncate font-semibold uppercase tracking-wide text-sm md:text-base max-w-[55%]">
-                      {name}
-                    </span>
-                    <span className="tabular-nums tracking-[0.35em] text-lg md:text-xl">{setDots(side)}</span>
-                  </div>
-                )
-              })}
-            </div>
-
-            {/* Placar set-a-set (games por set). Set em andamento marcado com "·". */}
+            {/* Tabela broadcast: NOME → SETS (uma coluna por set possível) →
+                GAME (set corrente destacado) → PONTO (ponta direita, grande). */}
             <div className="w-full overflow-x-auto">
-              <table className="w-full text-center tabular-nums border-separate border-spacing-y-1">
+              <table className="scoreboard-broadcast">
                 <thead>
-                  <tr className="text-[10px] uppercase tracking-widest opacity-50">
-                    <th className="text-left font-normal">Set</th>
-                    {setColumns.map((c, i) => (
-                      <th key={i} className="font-normal px-1">
-                        {c.label}
-                        {c.current ? "·" : ""}
+                  <tr className="text-[9px] md:text-xs uppercase tracking-widest opacity-45">
+                    <th className="text-left font-normal">Jogador</th>
+                    {broadcastCols.map((c) => (
+                      <th key={c.setNum} className="font-normal">
+                        {c.current ? "Game" : `Set ${c.setNum}`}
                       </th>
                     ))}
+                    <th className="font-normal">Ponto</th>
                   </tr>
                 </thead>
-                <tbody className="text-base md:text-lg font-semibold">
-                  <tr>
-                    <td className="text-left text-xs uppercase tracking-wide opacity-70 truncate max-w-[6rem]">
-                      {bluePlayerName}
-                    </td>
-                    {setColumns.map((c, i) => (
-                      <td key={i} className="px-1">
-                        {c.a}
-                        {c.tb && !c.current ? <sup className="text-[9px] opacity-60">tb</sup> : null}
-                      </td>
-                    ))}
-                  </tr>
-                  <tr>
-                    <td className="text-left text-xs uppercase tracking-wide opacity-70 truncate max-w-[6rem]">
-                      {redPlayerName}
-                    </td>
-                    {setColumns.map((c, i) => (
-                      <td key={i} className="px-1">
-                        {c.b}
-                        {c.tb && !c.current ? <sup className="text-[9px] opacity-60">tb</sup> : null}
-                      </td>
-                    ))}
-                  </tr>
+                <tbody>
+                  {(["A", "B"] as Side[]).map((side) => {
+                    const name = side === "A" ? bluePlayerName : redPlayerName
+                    const isServing = gs.server === side
+                    const isWinner = gs.winner === side
+                    return (
+                      <tr key={side} className={isWinner ? "sb-winner" : ""}>
+                        <td className="sb-name">
+                          <span className={`sb-dot ${isServing ? "on" : ""}`} aria-hidden />
+                          <span>{name}</span>
+                        </td>
+                        {broadcastCols.map((c) => {
+                          const games = side === "A" ? c.a : c.b
+                          return (
+                            <td
+                              key={c.setNum}
+                              className={`sb-set ${c.current ? "sb-current" : ""} ${!c.played ? "sb-future" : ""}`}
+                            >
+                              {c.played ? games : "–"}
+                              {c.tb && !c.current ? <sup className="sb-tb">tb</sup> : null}
+                            </td>
+                          )
+                        })}
+                        <td className="sb-point">{pointOf(side)}</td>
+                      </tr>
+                    )
+                  })}
                 </tbody>
               </table>
             </div>
 
-            {finished && (
-              <div className="text-sm font-bold uppercase tracking-[0.2em] opacity-90">
-                Vencedor: {blueWinner ? bluePlayerName : redPlayerName}
-              </div>
-            )}
-
-            <span className="text-[10px] uppercase tracking-widest opacity-40">toque fora para fechar</span>
+            {/* Rodapé: vencedor (se encerrada) + dica de fechar. */}
+            <div className="w-full flex items-center justify-between gap-3">
+              {finished ? (
+                <span className="text-xs md:text-sm font-bold uppercase tracking-[0.2em] opacity-90">
+                  Vencedor: {blueWinner ? bluePlayerName : redWinner ? redPlayerName : ""}
+                </span>
+              ) : (
+                <span />
+              )}
+              <span className="text-[10px] uppercase tracking-widest opacity-40 whitespace-nowrap">
+                toque fora para fechar
+              </span>
+            </div>
           </div>
         </div>
       )}

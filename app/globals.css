@@ -246,6 +246,103 @@
   animation: glassPop 0.24s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
+/* --- Placar broadcast (overlay expandido, estilo transmissão Grand Slam) ----
+   Uma LINHA por jogador; colunas alinhadas: NOME → SETS (uma por set possível)
+   → GAME atual (set corrente, destacado) → PONTO (ponta direita, grande).
+   Tamanhos em clamp(vw) pra ter PRESENÇA (ler de longe) e ainda caber em
+   retrato sem quebrar a estrutura. Números em fonte mono/tabular pra alinhar. */
+.scoreboard-broadcast {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0 clamp(4px, 1vw, 10px);
+  font-variant-numeric: tabular-nums;
+}
+.scoreboard-broadcast th {
+  padding: 0 clamp(2px, 1vw, 12px);
+}
+.scoreboard-broadcast td {
+  padding: clamp(6px, 1.6vw, 16px) clamp(2px, 1vw, 12px);
+  background: rgba(255, 255, 255, 0.06);
+  text-align: center;
+  vertical-align: middle;
+}
+
+/* NOME: à esquerda, com a bolinha de saque antes do nome. */
+.sb-name {
+  text-align: left !important;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-size: clamp(0.85rem, 2.6vw, 1.6rem);
+  border-top-left-radius: 8px;
+  border-bottom-left-radius: 8px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 0; /* deixa o ellipsis funcionar dentro da tabela */
+  width: 40%;
+}
+.sb-name > span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Bolinha de saque: cheia (currentColor) no sacador, contorno vazio no outro. */
+.sb-dot {
+  display: inline-block;
+  width: clamp(0.55rem, 1.4vw, 0.9rem);
+  height: clamp(0.55rem, 1.4vw, 0.9rem);
+  margin-right: clamp(6px, 1.4vw, 12px);
+  border-radius: 9999px;
+  border: 2px solid currentColor;
+  background: transparent;
+  opacity: 0.35;
+  vertical-align: middle;
+  transition: background-color 0.3s ease, opacity 0.3s ease;
+}
+.sb-dot.on {
+  background: currentColor;
+  opacity: 1;
+}
+
+/* SETS: números dos games por set. */
+.sb-set {
+  font-weight: 600;
+  font-size: clamp(1rem, 3.4vw, 2.2rem);
+}
+/* Set por vir → dash discreto. */
+.sb-future {
+  opacity: 0.3;
+}
+/* GAME atual = set em andamento, destacado. */
+.sb-current {
+  background: rgba(255, 255, 255, 0.14) !important;
+}
+.sb-tb {
+  font-size: 0.5em;
+  opacity: 0.6;
+  margin-left: 1px;
+}
+
+/* PONTO: ponta direita, o maior/negrito, bloco destacado. */
+.sb-point {
+  font-weight: 800;
+  font-size: clamp(1.6rem, 6vw, 3.6rem);
+  line-height: 1;
+  background: rgba(255, 255, 255, 0.18) !important;
+  border-top-right-radius: 8px;
+  border-bottom-right-radius: 8px;
+  min-width: clamp(2.4rem, 9vw, 5rem);
+}
+
+/* Linha do vencedor: leve realce. */
+.sb-winner td {
+  background: rgba(255, 255, 255, 0.12);
+}
+.sb-winner .sb-point {
+  background: rgba(255, 255, 255, 0.24) !important;
+}
+
 /* Piscar do bloco vencedor em P&B (sem cor): flash neutro de borda interna. */
 @keyframes stageWinBlink {
   0%,
