@@ -20,7 +20,7 @@
  *  - Idioma é parâmetro (default "pt-BR"), para PT/EN configurável no futuro.
  */
 
-import type { GameState, ScoringEvent, ScoringEventType } from "@/lib/scoring/types"
+import type { GameState, ScoringEvent, ScoringEventType, Side, SideState } from "@/lib/scoring/types"
 
 export type VoiceLang = "pt-BR" | "en-US"
 
@@ -54,6 +54,8 @@ interface Vocab {
   tiebreak: string
   superTiebreak: string
   sideOut: string
+  /** Palavra curta de correção, falada ao desfazer um ponto (undo). */
+  corrected: string
   /** Números corridos para esportes de rally (0..N). */
   cardinal: (n: number) => string
 }
@@ -94,6 +96,7 @@ const VOCAB: Record<VoiceLang, Vocab> = {
     tiebreak: "tie-break",
     superTiebreak: "super tie-break",
     sideOut: "troca de saque",
+    corrected: "corrigido",
     cardinal: ptCardinal,
   },
   "en-US": {
@@ -107,8 +110,42 @@ const VOCAB: Record<VoiceLang, Vocab> = {
     tiebreak: "tiebreak",
     superTiebreak: "super tiebreak",
     sideOut: "side out",
+    corrected: "corrected",
     cardinal: enCardinal,
   },
+}
+
+/**
+ * Famílias de placar "por game" (15/30/40): tênis, beach e padel. Usada para
+ * saber como VERBALIZAR um token de placar (rótulo de tênis vs. número corrido)
+ * e para reconstruir o placar atual no anúncio de undo.
+ */
+const TENNIS_FAMILY = new Set(["tennis", "beach", "padel"])
+
+/** Rótulo de exibição de um lado no game de tênis: 0/15/30/40 (ou AD). */
+function tennisLabel(s: SideState): string {
+  if (s.advantage) return "AD"
+  return ["0", "15", "30", "40"][Math.min(s.points, 3)]
+}
+
+/** Verbaliza um token de placar. AD → "vantagem"; tênis → 0/15/30/40; senão,
+ *  número corrido (cardinal). Dígitos crus caem no fallback (o TTS os fala). */
+function scoreWord(token: string, tennis: boolean, vocab: Vocab): string {
+  if (token === "AD") return vocab.advantage
+  if (tennis) return vocab.tennisPoint[token] ?? token
+  const n = Number(token)
+  return Number.isFinite(n) ? vocab.cardinal(n) : token
+}
+
+/**
+ * Ordena o par (lado A, lado B) por QUEM SACA — convenção universal do anúncio:
+ * fala-se primeiro o placar do SACADOR (ex.: sacador 30, recebedor 15 →
+ * "trinta a quinze"). Vale para todas as famílias suportadas (tênis/beach/padel,
+ * squash/ping pong, pickleball). Lê o `server` do GameState (o mesmo campo da
+ * bolinha de saque) — NÃO altera o motor, só reordena o texto.
+ */
+function serverFirst<T>(a: T, b: T, server: Side): [T, T] {
+  return server === "B" ? [b, a] : [a, b]
 }
 
 /**
@@ -135,25 +172,56 @@ function pickPrimary(events: ScoringEvent[]): ScoringEvent | null {
   return null
 }
 
-/** Constrói o anúncio de um POINT (canta o placar do game). */
-function pointAnnouncement(ev: ScoringEvent, sport: string, vocab: Vocab): Announcement | null {
+/**
+ * Constrói o anúncio de um POINT (canta o placar do game), SEMPRE começando pelo
+ * lado que está SACANDO (server). O `detail` do motor vem em ordem fixa A-B; aqui
+ * reordenamos por `server`. O `cue` também reflete a ordem falada (chave estável
+ * para o áudio pré-gerado futuro), independente de qual lado saca.
+ */
+function pointAnnouncement(ev: ScoringEvent, sport: string, vocab: Vocab, server: Side): Announcement | null {
   const detail = ev.detail ?? ""
   const [a, b] = detail.split("-")
   if (a === undefined || b === undefined) return null
-  const cue = `point:${detail}`
 
-  if (sport === "tennis") {
-    const wa = vocab.tennisPoint[a] ?? a
-    const wb = vocab.tennisPoint[b] ?? b
-    return { cue, text: `${wa}${vocab.connector}${wb}` }
+  const tennis = TENNIS_FAMILY.has(sport)
+  const [ta, tb] = serverFirst(a, b, server) // tokens crus, sacador primeiro
+  const first = scoreWord(ta, tennis, vocab)
+  const second = scoreWord(tb, tennis, vocab)
+  return { cue: `point:${ta}-${tb}`, text: `${first}${vocab.connector}${second}` }
+}
+
+/**
+ * Anúncio ao DESFAZER um ponto (undo): palavra curta de correção + o placar
+ * atual corrigido (recantado), para o jogador ouvir onde o game voltou. O undo
+ * não emite evento do motor, então reconstruímos o placar a partir do estado —
+ * ordenado por quem saca, igual ao anúncio normal. Fala, ex.: "corrigido, trinta
+ * a quinze". Continua no vocabulário fechado, sem frases longas.
+ */
+export function announceUndo(state: GameState, ctx: AnnounceContext = {}): Announcement | null {
+  const lang = ctx.lang ?? "pt-BR"
+  const sport = ctx.sport ?? "tennis"
+  const vocab = VOCAB[lang] ?? VOCAB["pt-BR"]
+  const tennis = TENNIS_FAMILY.has(sport)
+
+  // Placar atual por família: tênis (15/30/40, ou tiebreak em números corridos)
+  // vs. rally/side-out (pontos corridos do game).
+  let aTok: string
+  let bTok: string
+  if (tennis && !state.isTiebreak) {
+    aTok = tennisLabel(state.A)
+    bTok = tennisLabel(state.B)
+  } else if (tennis && state.isTiebreak) {
+    aTok = String(state.A.tiebreakPoints)
+    bTok = String(state.B.tiebreakPoints)
+  } else {
+    aTok = String(state.A.points)
+    bTok = String(state.B.points)
   }
 
-  // Rally (squash / tênis de mesa / etc.): números corridos.
-  const na = Number(a)
-  const nb = Number(b)
-  const wa = Number.isFinite(na) ? vocab.cardinal(na) : a
-  const wb = Number.isFinite(nb) ? vocab.cardinal(nb) : b
-  return { cue, text: `${wa}${vocab.connector}${wb}` }
+  const [ta, tb] = serverFirst(aTok, bTok, state.server)
+  const first = scoreWord(ta, tennis, vocab)
+  const second = scoreWord(tb, tennis, vocab)
+  return { cue: "undo", text: `${vocab.corrected}, ${first}${vocab.connector}${second}` }
 }
 
 /**
@@ -163,7 +231,7 @@ function pointAnnouncement(ev: ScoringEvent, sport: string, vocab: Vocab): Annou
  */
 export function announce(
   events: ScoringEvent[],
-  _state: GameState,
+  state: GameState,
   ctx: AnnounceContext = {},
 ): Announcement | null {
   if (!events || events.length === 0) return null
@@ -195,7 +263,7 @@ export function announce(
     case "SIDE_OUT":
       return { cue: "sideout", text: vocab.sideOut }
     case "POINT":
-      return pointAnnouncement(ev, sport, vocab)
+      return pointAnnouncement(ev, sport, vocab, state.server)
     default:
       return null
   }

@@ -13,7 +13,7 @@ import { SportSetup } from "@/components/sport-setup"
 // >>> Voz "placeholder" (preto e branco): reage aos eventos do motor e fala o
 // placar com a voz nativa do navegador. announce() = lógica evento→texto;
 // createSpeechSynthesisSpeaker() = camada de som trocável. Ver lib/voice/*.
-import { announce } from "@/lib/voice/announcer"
+import { announce, announceUndo } from "@/lib/voice/announcer"
 import { createSpeechSynthesisSpeaker, type Speaker } from "@/lib/voice/speaker"
 
 // >>> A tela consome o motor de scoring (lib/scoring) e agora é MULTI-ESPORTE:
@@ -307,8 +307,20 @@ export default function JogoPage() {
     speakerRef.current?.cancel() // corta um anúncio em curso ao voltar o ponto
     engine.undo()
     actionsRef.current.pop()
-    setGameState(engine.getState())
+    const state = engine.getState()
+    setGameState(state)
     persist()
+
+    // Voz ao desfazer (se ligada): palavra curta de correção + placar corrigido
+    // recantado, pelo MESMO caminho isolado (announcer + speaker). Igual ao
+    // anúncio normal, é não-bloqueante e desacoplado por queueMicrotask.
+    if (voiceEnabled) {
+      const speech = announceUndo(state, { lang: "pt-BR", sport })
+      if (speech) {
+        const speaker = speakerRef.current
+        queueMicrotask(() => speaker?.speak(speech.text, { lang: "pt-BR" }))
+      }
+    }
   }
 
   const toggleServing = () => {
@@ -633,16 +645,26 @@ export default function JogoPage() {
       </main>
 
       {/* ZONA SEGURA central: fica sobre a linha divisória entre os dois blocos
-          (em retrato a divisa é horizontal, em paisagem é vertical — o centro
-          cai na linha nos dois casos). É a faixa onde NINGUÉM toca pra marcar
-          ponto. O wrapper é pointer-events-none e SÓ os controles recebem toque
-          (pointer-events-auto), então os vãos entre eles NÃO bloqueiam a
-          marcação nos blocos. stopPropagation reforça isso em cada controle.
-          Empilha: [placar central] → [voltar/undo] → [contagem por pontos/games]. */}
+          (em retrato a divisa é horizontal, em paisagem é vertical). É a faixa
+          onde NINGUÉM toca pra marcar ponto. O wrapper é pointer-events-none e
+          SÓ os controles recebem toque (pointer-events-auto), então os vãos
+          entre eles NÃO bloqueiam a marcação nos blocos; stopPropagation reforça.
+
+          Distribuição por ORIENTAÇÃO (para NÃO cobrir os números gigantes, que
+          ficam no centro vertical de CADA bloco):
+          - RETRATO: os números estão ACIMA e ABAIXO da divisa, então os controles
+            se ESPALHAM na faixa central (36%–64% da altura): [placar + voltar] no
+            ALTO da faixa, [toggle de contagem] na base. O vão entre eles é o
+            centro morto (ninguém marca ali) e deixa o toque passar.
+          - PAISAGEM: os números ficam à ESQUERDA e à DIREITA; o centro é livre,
+            então os três ficam num cluster centralizado sobre a divisa vertical. */}
       <div
-        className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-20
-          flex flex-col items-center gap-2.5 pointer-events-none"
+        className="pointer-events-none absolute left-1/2 -translate-x-1/2 z-20 flex flex-col items-center
+          top-[36%] bottom-[36%] justify-between
+          landscape:top-1/2 landscape:bottom-auto landscape:-translate-y-1/2 landscape:justify-center landscape:gap-3"
       >
+        {/* Grupo do ALTO da faixa: placar central + voltar, juntos. */}
+        <div className="pointer-events-none flex flex-col items-center gap-2.5 landscape:gap-3">
         {/* PLACAR CENTRAL: só o PANORAMA que os blocos NÃO mostram (o ponto atual
             já aparece GIGANTE). Tênis: SETS + GAMES. Rally/sideout (sem sets):
             GAMES ganhos. Nada de "pts" (redundante). Números grandes pra ler de
@@ -677,8 +699,9 @@ export default function JogoPage() {
           )}
         </button>
 
-        {/* VOLTAR (undo): complementa o duplo-toque. Desabilita quando não há o
-            que desfazer (nenhum ponto/game/set jogado). Liga no engine.undo. */}
+        {/* VOLTAR (undo): logo abaixo do placar. Desabilita quando não há o que
+            desfazer (nenhum ponto/game/set jogado). Liga no engine.undo — e a voz
+            (se ligada) dá o feedback de correção (ver undoLastPoint). */}
         <button
           type="button"
           onClick={(e) => {
@@ -693,8 +716,9 @@ export default function JogoPage() {
         >
           <Undo2 className="h-5 w-5" />
         </button>
+        </div>
 
-        {/* CONTAGEM: ponto-a-ponto vs por games — acessível NO JOGO (um juiz/amigo
+        {/* CONTAGEM (base da faixa): ponto-a-ponto vs por games — acessível NO JOGO (um juiz/amigo
             pode entrar no meio e decidir marcar ponto a ponto). Segmentado: o modo
             ATIVO fica destacado. Trocar não zera o placar (motor tem os dois modos). */}
         <div
