@@ -101,6 +101,10 @@ export default function JogoPage() {
   // O speaker é a camada de som trocável (hoje: speechSynthesis).
   const [voiceEnabled, setVoiceEnabled] = useState(false)
   const speakerRef = useRef<Speaker | null>(null)
+  // Timer do anúncio de UNDO (falado com um pequeno atraso após o cancel, para
+  // não ser engolido pela corrida cancel→speak do speechSynthesis). Guardado em
+  // ref para poder ser cancelado se uma ação mais nova chegar antes de falar.
+  const undoSpeakTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [showThirdSetModal, setShowThirdSetModal] = useState(false)
   const [blueCardBlinking, setBlueCardBlinking] = useState(false)
   const [redCardBlinking, setRedCardBlinking] = useState(false)
@@ -242,7 +246,10 @@ export default function JogoPage() {
   useEffect(() => {
     speakerRef.current = createSpeechSynthesisSpeaker()
     if (localStorage.getItem("voice_enabled") === "1") setVoiceEnabled(true)
-    return () => speakerRef.current?.cancel()
+    return () => {
+      if (undoSpeakTimerRef.current) clearTimeout(undoSpeakTimerRef.current)
+      speakerRef.current?.cancel()
+    }
   }, [])
 
   const toggleVoice = () => {
@@ -320,6 +327,12 @@ export default function JogoPage() {
     // usuário (alguns navegadores exigem a fala dentro do gesto) e não atrasa o
     // ponto. A voz é apenas o "preto e branco": trocável depois sem mexer nisto.
     if (voiceEnabled) {
+      // Um ponto novo é mais recente que qualquer undo agendado: descarta o timer
+      // pendente para "corrigido" não falar por cima do ponto que acabou de sair.
+      if (undoSpeakTimerRef.current) {
+        clearTimeout(undoSpeakTimerRef.current)
+        undoSpeakTimerRef.current = null
+      }
       const speech = announce(events, engine.getState(), { lang: "pt-BR", sport })
       if (speech) {
         const speaker = speakerRef.current
@@ -352,13 +365,26 @@ export default function JogoPage() {
     persist()
 
     // Voz ao desfazer (se ligada): palavra curta de correção + placar corrigido
-    // recantado, pelo MESMO caminho isolado (announcer + speaker). Igual ao
-    // anúncio normal, é não-bloqueante e desacoplado por queueMicrotask.
+    // recantado, pelo MESMO caminho isolado (announcer + speaker).
+    //
+    // No DUPLO-TOQUE o 1º toque acabou de anunciar o PONTO — essa fala ainda pode
+    // estar em curso quando o gesto desfaz. O speakerRef.current?.cancel() no topo
+    // desta função corta essa fala, mas interromper uma locução e emitir OUTRA no
+    // MESMO instante faz o speechSynthesis (Chrome) engolir a nova (corrida
+    // cancel→speak) — era por isso que o botão VOLTAR falava (nada em curso) e o
+    // duplo-toque não. Solução: agendar a fala do undo num pequeno atraso, dando
+    // tempo do cancel assentar; assim "corrigido" é a ÚLTIMA fala e não é cortada.
+    // Isso atrasa só a VOZ do undo (~200ms, imperceptível), nunca a marcação. O
+    // timer é guardado/descartável para um ponto novo (ou outro undo) substituí-lo.
     if (voiceEnabled) {
       const speech = announceUndo(state, { lang: "pt-BR", sport })
       if (speech) {
         const speaker = speakerRef.current
-        queueMicrotask(() => speaker?.speak(speech.text, { lang: "pt-BR" }))
+        if (undoSpeakTimerRef.current) clearTimeout(undoSpeakTimerRef.current)
+        undoSpeakTimerRef.current = setTimeout(() => {
+          undoSpeakTimerRef.current = null
+          speaker?.speak(speech.text, { lang: "pt-BR" })
+        }, 200)
       }
     }
   }
