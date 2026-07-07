@@ -16,9 +16,8 @@ export const metadata = {
     "Placar para tênis, beach tennis, padel, squash, ping pong e pickleball. Funciona offline, com voz de árbitro no estilo Grand Slam.",
 }
 
-// NÚMERO DE CONTATO: placeholder — troque pelo número real (formato só dígitos,
-// com DDI+DDD, ex.: 5511999999999).
-const WHATSAPP_NUMBER = "5511999999999"
+// NÚMERO DE CONTATO (só dígitos, DDI 55 + DDD 11 + número).
+const WHATSAPP_NUMBER = "5511950507175"
 const WHATSAPP_MSG = encodeURIComponent("Olá! Quero saber mais sobre o Flow no meu clube.")
 const WHATSAPP_URL = `https://wa.me/${WHATSAPP_NUMBER}?text=${WHATSAPP_MSG}`
 
