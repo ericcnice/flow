@@ -260,6 +260,16 @@
   }
 }
 
+/* Fade suave das telas de ABERTURA do contexto de clube (ver components/club-opening). */
+@keyframes clubFadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
 /* Overlay de tela cheia (placar geral/broadcast): fundo SÓLIDO do tema ativo
    (sem vidro/translúcido) — prioriza a LEITURA sob sol. As linhas dos dois
    jogadores usam as cores sólidas de cada lado (ver .scoreboard-broadcast),

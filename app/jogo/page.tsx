@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
+import Image from "next/image"
 import { Input } from "@/components/ui/input"
 import { Settings, Volume2, VolumeX, Undo2, BarChart2, RotateCcw, LogOut } from "lucide-react"
 import { ThirdSetModal } from "@/components/third-set-modal"
@@ -24,6 +25,7 @@ import { createSpeechSynthesisSpeaker, type Speaker } from "@/lib/voice/speaker"
 import { ScoringEngine } from "@/lib/scoring/engine"
 import { sportById, familyOf, formatPoint, defaultRulesFor, type SportId } from "@/lib/sports-catalog"
 import { themeClassName, type ThemeId } from "@/lib/themes"
+import { clubBySlug } from "@/lib/clubs-config"
 import type { GameState, Side } from "@/lib/scoring/types"
 
 type GameConfig = {
@@ -32,6 +34,9 @@ type GameConfig = {
   sport?: SportId
   /** Tema de cor do placar (default Neutro). Personalização por partida. */
   theme?: ThemeId
+  /** Clube de contexto (quando a partida veio da jornada /[clube]/...). Ausente
+   *  = jogo genérico iniciado pela home; sem assinatura de clube no placar. */
+  clube?: string
   gameType: string
   scoreType: string
   players: {
@@ -73,6 +78,10 @@ export default function JogoPage() {
   // o placar (contagem + broadcast) consome as variáveis CSS do tema. Persiste
   // na config da partida. Default Neutro (partidas antigas sem `theme`).
   const [theme, setTheme] = useState<ThemeId>("neutro")
+
+  // Clube de contexto (quando a partida veio de /[clube]/...). Só para a
+  // assinatura discreta do logo no topo do placar. Ausente = jogo genérico.
+  const [clube, setClube] = useState<string | null>(null)
 
   // Motor de scoring: o engine é a fonte de verdade; espelhamos o GameState em
   // estado do React para disparar re-render. actions/rules/firstServer guardam
@@ -170,6 +179,7 @@ export default function JogoPage() {
       sportRef.current = resolvedSport
       setSport(resolvedSport)
       setTheme((config.theme as ThemeId) || "neutro")
+      setClube(typeof config.clube === "string" ? config.clube : null)
 
       setStartTime(new Date(config.startTime))
       setBluePlayerName(
@@ -730,38 +740,57 @@ export default function JogoPage() {
           borda são pointer-events-none, então seus vãos deixam o toque passar e o
           resto da tela (os blocos) continua sendo a área de marcar ponto. */}
 
-      {/* PLACAR GERAL no TOPO: só o PANORAMA que os blocos NÃO mostram (o ponto
-          atual já é GIGANTE). Tênis: SETS + GAMES; rally/sideout (sem sets): só
-          GAMES ganhos. Tiebreak vira o selo TB. Toca pra abrir o placar geral. */}
-      <button
-        type="button"
-        onClick={(e) => {
-          e.stopPropagation()
-          openOverview()
-        }}
-        aria-label="Ver placar geral"
-        className="glass pointer-events-auto absolute top-3 left-1/2 -translate-x-1/2 z-20
-          rounded-2xl px-4 py-1.5 flex items-end gap-3.5 active:scale-95 transition-transform"
-      >
-        {isTennisFamily && (
+      {/* TOPO-CENTRO: assinatura do CLUBE (quando a partida veio da jornada de
+          contexto) + PLACAR GERAL. O logo do clube fica ACIMA da chip, pequeno e
+          discreto (estilo Wimbledon/US Open); a chip desceu um pouco para caber.
+          Sem clube, mostra só a chip (jogo genérico). O container é
+          pointer-events-none e só a chip recebe toque. */}
+      <div className="pointer-events-none absolute top-2 left-1/2 -translate-x-1/2 z-20 flex flex-col items-center gap-1.5">
+        {clube && clubBySlug(clube)?.logo && (
+          <div className="relative h-6 w-24 opacity-90">
+            <Image
+              src={clubBySlug(clube)!.logo}
+              alt={clubBySlug(clube)!.nome}
+              fill
+              sizes="120px"
+              className="object-contain"
+            />
+          </div>
+        )}
+
+        {/* PLACAR GERAL: só o PANORAMA que os blocos NÃO mostram (o ponto atual já
+            é GIGANTE). Tênis: SETS + GAMES; rally/sideout (sem sets): só GAMES.
+            Tiebreak vira o selo TB. Toca pra abrir o placar geral. */}
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation()
+            openOverview()
+          }}
+          aria-label="Ver placar geral"
+          className="glass pointer-events-auto rounded-2xl px-4 py-1.5 flex items-end gap-3.5
+            active:scale-95 transition-transform"
+        >
+          {isTennisFamily && (
+            <span className="flex flex-col items-center leading-none">
+              <span className="opacity-60 text-[9px] md:text-[10px] uppercase tracking-wider mb-0.5">sets</span>
+              <span className="tabular-nums font-bold text-2xl md:text-3xl leading-none">
+                {gs.A.sets}-{gs.B.sets}
+              </span>
+            </span>
+          )}
+          {isTennisFamily && <span className="opacity-25 text-xl md:text-2xl leading-none pb-0.5">·</span>}
           <span className="flex flex-col items-center leading-none">
-            <span className="opacity-60 text-[9px] md:text-[10px] uppercase tracking-wider mb-0.5">sets</span>
+            <span className="opacity-60 text-[9px] md:text-[10px] uppercase tracking-wider mb-0.5">games</span>
             <span className="tabular-nums font-bold text-2xl md:text-3xl leading-none">
-              {gs.A.sets}-{gs.B.sets}
+              {gs.A.games}-{gs.B.games}
             </span>
           </span>
-        )}
-        {isTennisFamily && <span className="opacity-25 text-xl md:text-2xl leading-none pb-0.5">·</span>}
-        <span className="flex flex-col items-center leading-none">
-          <span className="opacity-60 text-[9px] md:text-[10px] uppercase tracking-wider mb-0.5">games</span>
-          <span className="tabular-nums font-bold text-2xl md:text-3xl leading-none">
-            {gs.A.games}-{gs.B.games}
-          </span>
-        </span>
-        {isTiebreak && (
-          <span className="self-center font-bold tracking-widest text-[10px] md:text-xs opacity-90">TB</span>
-        )}
-      </button>
+          {isTiebreak && (
+            <span className="self-center font-bold tracking-widest text-[10px] md:text-xs opacity-90">TB</span>
+          )}
+        </button>
+      </div>
 
       {/* BARRA DE CONTROLES no RODAPÉ: três posições (grid-cols-3) que nunca se
           sobrepõem — ESQUERDA: voltar · CENTRO: contagem · DIREITA: voz + config.
