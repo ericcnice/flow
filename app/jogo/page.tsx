@@ -51,6 +51,11 @@ type Action = { kind: "point" | "game"; side: Side }
 // Mapa de lados: a tela usa blue/red; o motor usa A/B.
 const sideOf = (team: "blue" | "red"): Side => (team === "blue" ? "A" : "B")
 
+// Janela do DUPLO-TOQUE (desfazer por gesto). Curta o bastante para não colidir
+// com dois pontos legítimos consecutivos no mesmo lado (que, na marcação real,
+// nunca acontecem em <300ms).
+const DOUBLE_TAP_MS = 300
+
 export default function JogoPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -100,6 +105,10 @@ export default function JogoPage() {
   const [blueCardBlinking, setBlueCardBlinking] = useState(false)
   const [redCardBlinking, setRedCardBlinking] = useState(false)
   const [maxSets, setMaxSets] = useState(3)
+
+  // Último toque de marcação (lado + instante), para reconhecer o DUPLO-TOQUE
+  // que desfaz. Não dispara re-render (é só detecção de gesto) → fica em ref.
+  const lastTapRef = useRef<{ team: "blue" | "red"; time: number } | null>(null)
 
   const openScoreboard = () => {
     // Garantir que a URL tenha o parâmetro quadra corretamente
@@ -247,9 +256,23 @@ export default function JogoPage() {
 
   const handleScoreClick = (team: "blue" | "red") => {
     const engine = engineRef.current
-    if (!engine || engine.getState().finished) {
+    if (!engine) return
+
+    // DUPLO-TOQUE (2 toques rápidos no MESMO lado, ≤300ms) = DESFAZER. Como
+    // marcar é INSTANTÂNEO (o toque simples nunca espera), o 1º toque do gesto já
+    // marcou um ponto; este 2º toque NÃO marca e desfaz DOIS (o ponto que o 1º
+    // toque acabou de marcar + o último ponto real) — efeito líquido idêntico a
+    // apertar VOLTAR uma vez, e dispara a MESMA voz de undo (announceUndo). A
+    // detecção acontece ANTES de marcar, então o toque simples não ganha atraso.
+    const now = Date.now()
+    const last = lastTapRef.current
+    if (last && last.team === team && now - last.time <= DOUBLE_TAP_MS) {
+      lastTapRef.current = null
+      undoPoints(2)
       return
     }
+
+    if (engine.getState().finished) return
 
     const side = sideOf(team)
 
@@ -264,6 +287,10 @@ export default function JogoPage() {
 
     setGameState(engine.getState())
     persist()
+
+    // Arma o duplo-toque: registra este toque (que REALMENTE marcou) para que um
+    // 2º toque rápido no mesmo lado seja reconhecido como "desfazer".
+    lastTapRef.current = { team, time: now }
 
     // Animate the score
     if (team === "blue") {
@@ -301,12 +328,25 @@ export default function JogoPage() {
     }
   }
 
-  const undoLastPoint = () => {
+  // Desfaz até `times` marcações do motor e anuncia UMA vez o placar corrigido.
+  //  - times=1: botão VOLTAR / ação do setup — desfaz o último ponto real.
+  //  - times=2: duplo-toque — como o 1º toque do gesto já marcou (instantâneo),
+  //    desfazer 2 tem o MESMO efeito líquido de VOLTAR uma vez (remove o último
+  //    ponto real e cancela o ponto que o gesto acabou de marcar).
+  // Só anuncia se algo foi de fato desfeito (respeita canUndo).
+  const undoPoints = (times: number) => {
     const engine = engineRef.current
-    if (!engine || !engine.canUndo()) return
+    if (!engine) return
     speakerRef.current?.cancel() // corta um anúncio em curso ao voltar o ponto
-    engine.undo()
-    actionsRef.current.pop()
+    let undone = 0
+    for (let i = 0; i < times; i++) {
+      if (!engine.canUndo()) break
+      engine.undo()
+      actionsRef.current.pop()
+      undone++
+    }
+    if (undone === 0) return
+    lastTapRef.current = null // qualquer undo encerra a "janela" de duplo-toque
     const state = engine.getState()
     setGameState(state)
     persist()
@@ -322,6 +362,9 @@ export default function JogoPage() {
       }
     }
   }
+
+  // Caminho confiável de undo (botão VOLTAR + ação do setup): desfaz 1 ponto.
+  const undoLastPoint = () => undoPoints(1)
 
   const toggleServing = () => {
     // Só permite alterar o sacador antes do primeiro ponto (nenhuma ação ainda).
@@ -557,8 +600,16 @@ export default function JogoPage() {
           ${blinking ? "win-blink" : ""}`}
         style={{ backgroundColor: `var(${bgVar})`, color: `var(${txtVar})` }}
       >
-        {/* Canto: nome do jogador (pequeno) + indicador de saque */}
-        <div className="absolute top-0 left-0 right-0 z-10 flex items-start justify-between gap-2 px-4 pt-3 md:px-5 md:pt-4">
+        {/* Canto: nome do jogador (pequeno) + indicador de saque.
+            RETRATO (blocos empilhados): nome à esquerda, saque à direita
+            (justify-between) — inalterado. PAISAGEM (blocos lado a lado): o
+            grupo nome+saque foge do CENTRO (onde fica o placar geral no topo) e
+            huga a borda EXTERNA de cada bloco — lado A à esquerda, lado B à
+            direita — para o placar central não cobrir o nome do lado direito. */}
+        <div
+          className={`absolute top-0 left-0 right-0 z-10 flex items-start justify-between gap-2 px-4 pt-3 md:px-5 md:pt-4
+            ${isA ? "landscape:justify-start" : "landscape:justify-end"}`}
+        >
           {editing ? (
             <Input
               value={name}
@@ -692,7 +743,10 @@ export default function JogoPage() {
           pointer-events-auto. Config/voz saíram do canto p/ esta barra, sem
           sobrepor o toggle. Rótulos do toggle curtos p/ caber em telas estreitas. */}
       <div className="pointer-events-none absolute inset-x-3 bottom-4 z-20 grid grid-cols-3 items-center">
-        {/* ESQUERDA: VOLTAR (undo). Desabilita quando não há o que desfazer. */}
+        {/* ESQUERDA: VOLTAR (undo). SEMPRE renderizado/visível: quando não há o
+            que desfazer, fica DESABILITADO (esmaecido + não-clicável), nunca some
+            — o jogador vê que a função existe. (O sumiço reportado era o badge de
+            DEV do Next no canto inferior-esquerdo; movido em next.config.) */}
         <button
           type="button"
           onClick={(e) => {
@@ -701,9 +755,9 @@ export default function JogoPage() {
           }}
           disabled={!started}
           aria-label="Desfazer último ponto"
-          title="Desfazer último ponto"
+          title={started ? "Desfazer último ponto" : "Nada para desfazer"}
           className="glass pointer-events-auto justify-self-start rounded-full p-2.5
-            active:scale-95 transition-transform disabled:opacity-35 disabled:pointer-events-none"
+            active:scale-95 transition-transform disabled:opacity-40 disabled:pointer-events-none"
         >
           <Undo2 className="h-5 w-5" />
         </button>
