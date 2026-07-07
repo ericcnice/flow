@@ -774,72 +774,70 @@ export default function JogoPage() {
         </div>
       )}
 
-      {/* Overlay de CONFIGURAÇÃO = a MESMA tela de setup, aberta dentro do jogo,
-          JÁ no contexto atual: pré-selecionada no esporte vigente e com os
-          toggles refletindo as regras atuais (rulesRef). O painel de regras já
-          abre (startPanelOpen). O rodapé reúne as ações da partida herdadas do
-          antigo GameMenu (desfazer / placar / marcação / reiniciar / encerrar). */}
+      {/* Overlay de CONFIGURAÇÃO = a MESMA tela de setup (card claro), aberta
+          dentro do jogo, JÁ no contexto atual: pré-selecionada no esporte vigente
+          e com os toggles refletindo as regras atuais (rulesRef). O rodapé reúne
+          as ações SECUNDÁRIAS herdadas do antigo GameMenu (desfazer / marcação /
+          placar / reiniciar / encerrar), compactas e discretas — no miolo
+          rolável, sem competir com o CTA JOGAR fixo. */}
       {setupOpen && (
         <div className="fixed inset-0 z-50">
           <SportSetup
             initialSport={sport}
             initialRules={rulesRef.current}
             context="ingame"
-            startPanelOpen
             onClose={() => setSetupOpen(false)}
             onConfirm={onSetupConfirm}
             footer={
-              <div className="pt-2 border-t border-white/15">
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    className="setup-action"
-                    onClick={() => {
-                      undoLastPoint()
-                      setSetupOpen(false)
-                    }}
-                  >
-                    <Undo2 className="h-4 w-4" />
-                    Desfazer ponto
-                  </button>
-                  <button
-                    type="button"
-                    className="setup-action"
-                    onClick={() => {
-                      toggleScoreType()
-                      setSetupOpen(false)
-                    }}
-                  >
-                    <BarChart2 className="h-4 w-4" />
-                    {gameConfig.scoreType === "pontos" ? "Contar por games" : "Contar por pontos"}
-                  </button>
-                  <button
-                    type="button"
-                    className="setup-action"
-                    onClick={() => {
-                      openScoreboard()
-                      setSetupOpen(false)
-                    }}
-                  >
-                    <BarChart2 className="h-4 w-4" />
-                    Abrir placar
-                  </button>
-                  <button
-                    type="button"
-                    className="setup-action"
-                    onClick={() => {
-                      resetGame()
-                      setSetupOpen(false)
-                    }}
-                  >
-                    <RotateCcw className="h-4 w-4" />
-                    Reiniciar
-                  </button>
-                  <button type="button" className="setup-action setup-action-danger col-span-2" onClick={endMatch}>
-                    <LogOut className="h-4 w-4" />
-                    Encerrar partida
-                  </button>
-                </div>
+              <div className="pt-3 mt-1 border-t flex flex-wrap gap-2" style={{ borderColor: "var(--setup-card-borda)" }}>
+                <button
+                  type="button"
+                  className="setup-action"
+                  onClick={() => {
+                    undoLastPoint()
+                    setSetupOpen(false)
+                  }}
+                >
+                  <Undo2 className="h-3.5 w-3.5" />
+                  Desfazer ponto
+                </button>
+                <button
+                  type="button"
+                  className="setup-action"
+                  onClick={() => {
+                    toggleScoreType()
+                    setSetupOpen(false)
+                  }}
+                >
+                  <BarChart2 className="h-3.5 w-3.5" />
+                  {gameConfig.scoreType === "pontos" ? "Contar por games" : "Contar por pontos"}
+                </button>
+                <button
+                  type="button"
+                  className="setup-action"
+                  onClick={() => {
+                    openScoreboard()
+                    setSetupOpen(false)
+                  }}
+                >
+                  <BarChart2 className="h-3.5 w-3.5" />
+                  Abrir placar
+                </button>
+                <button
+                  type="button"
+                  className="setup-action"
+                  onClick={() => {
+                    resetGame()
+                    setSetupOpen(false)
+                  }}
+                >
+                  <RotateCcw className="h-3.5 w-3.5" />
+                  Reiniciar
+                </button>
+                <button type="button" className="setup-action setup-action-danger" onClick={endMatch}>
+                  <LogOut className="h-3.5 w-3.5" />
+                  Encerrar partida
+                </button>
               </div>
             }
           />

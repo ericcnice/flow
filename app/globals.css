@@ -379,8 +379,9 @@
   --quadra-padel-piso: #16688f;
   --quadra-padel-vidro: #bfe9ff;
 
-  /* Squash (parede clara + linhas vermelhas) */
-  --quadra-squash-parede: #e9e4d8;
+  /* Squash (parede de madeira clara + linhas vermelhas) */
+  --quadra-squash-parede: #e7d3a6;
+  --quadra-squash-grao: rgba(150, 115, 60, 0.22);
   --quadra-squash-linha: #c62828;
 
   /* Ping pong (mesa azul) */
@@ -392,13 +393,19 @@
   --quadra-pickle-piso: #1f7a5a;
   --quadra-pickle-kitchen: #2f9e77;
 
-  /* Painel de setup (vidro escuro sobre a quadra) */
-  --setup-painel-bg: rgba(10, 10, 10, 0.82);
-  --setup-chip-bg: rgba(255, 255, 255, 0.08);
-  --setup-chip-ativo-bg: #f5f5f5;
-  --setup-chip-ativo-texto: #0a0a0a;
-  --setup-texto: #f5f5f5;
-  --setup-borda: rgba(255, 255, 255, 0.22);
+  /* Card de setup — CLARO e sólido (sem glass). A quadra (SVG) fica visível
+     ACIMA do card; o card em si é um "papel" claro com botões cinza. */
+  --setup-card-bg: #f4f1ea; /* off-white */
+  --setup-card-texto: #1a1a1a; /* texto escuro legível */
+  --setup-card-cinza: #8a8a8a; /* rótulos/nome discretos */
+  --setup-card-borda: rgba(0, 0, 0, 0.12);
+  --setup-opcao-bg: #e4e0d7; /* cinza claro (opção inativa) */
+  --setup-opcao-texto: #2a2a2a;
+  --setup-opcao-ativa-bg: #1a1a1a; /* preenchido escuro (opção ativa) */
+  --setup-opcao-ativa-texto: #f5f5f5;
+  --setup-cta-bg: #141414; /* CTA JOGAR */
+  --setup-cta-texto: #ffffff;
+  --setup-glyph-borda-ativa: #141414; /* realce do esporte selecionado */
 }
 
 /* Fundo de quadra: ocupa a tela inteira, atrás de tudo. */
@@ -414,66 +421,70 @@
   display: block;
 }
 
-/* Carrossel de esportes: rola na horizontal, sem barra visível. */
-.sport-carousel {
+/* --- Card de setup (claro): seletor no topo → regras no meio → CTA embaixo -- */
+.setup-card {
+  background: var(--setup-card-bg);
+  color: var(--setup-card-texto);
+  border-top-left-radius: 22px;
+  border-top-right-radius: 22px;
+  box-shadow: 0 -10px 34px rgba(0, 0, 0, 0.35);
+}
+
+/* Seletor de esportes (topo do card): mini-quadras roláveis na horizontal. */
+.setup-selector {
   display: flex;
-  gap: 10px;
+  gap: 12px;
   overflow-x: auto;
   scroll-snap-type: x proximity;
   -webkit-overflow-scrolling: touch;
   scrollbar-width: none;
-  padding: 4px 2px;
+  padding: 2px 2px 6px;
 }
-.sport-carousel::-webkit-scrollbar {
+.setup-selector::-webkit-scrollbar {
   display: none;
 }
-.sport-chip {
-  scroll-snap-align: center;
+.court-option {
   flex: 0 0 auto;
-  padding: 10px 18px;
-  border-radius: 9999px;
-  font-weight: 700;
-  font-size: 0.95rem;
-  letter-spacing: 0.01em;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  background: transparent;
+  border: none;
+  padding: 2px;
+  scroll-snap-align: center;
+  transition: transform 0.12s ease;
+}
+.court-option:active {
+  transform: scale(0.95);
+}
+/* Caixa do mini-ícone: 2:3 (= viewBox das quadras) → sem corte. */
+.court-glyph {
+  width: 42px;
+  height: 63px;
+  border-radius: 9px;
+  overflow: hidden;
+  display: block;
+  background: #000;
+  border: 2px solid var(--setup-card-borda);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.court-option-name {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--setup-card-cinza);
   white-space: nowrap;
-  background: var(--setup-chip-bg);
-  color: var(--setup-texto);
-  border: 2px solid var(--setup-borda);
-  transition: transform 0.12s ease, background-color 0.15s ease, color 0.15s ease;
 }
-.sport-chip:active {
-  transform: scale(0.96);
+.court-option.on .court-glyph {
+  border-color: var(--setup-glyph-borda-ativa);
+  box-shadow: 0 0 0 2px var(--setup-glyph-borda-ativa);
 }
-.sport-chip.on {
-  background: var(--setup-chip-ativo-bg);
-  color: var(--setup-chip-ativo-texto);
-  border-color: var(--setup-chip-ativo-bg);
+.court-option.on .court-option-name {
+  color: var(--setup-card-texto);
+  font-weight: 700;
 }
 
-/* Painel de regras: SOBE cobrindo ~metade da tela, quadra visível ao fundo. */
-.setup-panel {
-  background: var(--setup-painel-bg);
-  color: var(--setup-texto);
-  border-top-left-radius: 22px;
-  border-top-right-radius: 22px;
-  box-shadow: 0 -12px 40px rgba(0, 0, 0, 0.5);
-  transform: translateY(100%);
-  transition: transform 0.32s cubic-bezier(0.16, 1, 0.3, 1);
-  will-change: transform;
-}
-@supports ((backdrop-filter: blur(2px)) or (-webkit-backdrop-filter: blur(2px))) {
-  .setup-panel {
-    background: rgba(10, 10, 10, 0.62);
-    -webkit-backdrop-filter: blur(18px) saturate(1.3);
-    backdrop-filter: blur(18px) saturate(1.3);
-  }
-}
-.setup-panel.open {
-  transform: translateY(0);
-}
-
-/* Toggle de regra (segmented): opção ativa preenchida, inativa contorno.
-   Alto contraste e alvos grandes — legível "sob o sol". */
+/* Toggle de regra (segmented): inativo cinza claro, ativo preenchido escuro. */
 .rule-group {
   display: flex;
   gap: 8px;
@@ -485,58 +496,59 @@
   font-weight: 800;
   font-size: 1rem;
   text-align: center;
-  background: transparent;
-  color: var(--setup-texto);
-  border: 2px solid var(--setup-borda);
+  background: var(--setup-opcao-bg);
+  color: var(--setup-opcao-texto);
+  border: 2px solid transparent;
   transition: transform 0.1s ease, background-color 0.15s ease, color 0.15s ease;
 }
 .rule-option:active {
   transform: scale(0.97);
 }
 .rule-option.on {
-  background: var(--setup-chip-ativo-bg);
-  color: var(--setup-chip-ativo-texto);
-  border-color: var(--setup-chip-ativo-bg);
+  background: var(--setup-opcao-ativa-bg);
+  color: var(--setup-opcao-ativa-texto);
+  border-color: var(--setup-opcao-ativa-bg);
 }
 
-/* Botão JOGO!: grande, alto contraste. */
+/* CTA JOGAR: fixo na base do card, sempre visível, forte sobre o card claro. */
 .play-button {
   width: 100%;
-  padding: 18px;
-  border-radius: 16px;
+  padding: 16px;
+  border-radius: 14px;
   font-weight: 900;
-  font-size: 1.4rem;
+  font-size: 1.3rem;
   letter-spacing: 0.06em;
-  background: var(--setup-chip-ativo-bg);
-  color: var(--setup-chip-ativo-texto);
-  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
+  background: var(--setup-cta-bg);
+  color: var(--setup-cta-texto);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.28);
   transition: transform 0.12s ease;
 }
 .play-button:active {
   transform: scale(0.98);
 }
 
-/* Ações da partida no rodapé do overlay de config (herdadas do antigo GameMenu):
-   botões discretos, mesma linguagem do painel de setup. */
+/* Ações secundárias (herdadas do antigo GameMenu): pequenas e discretas, no
+   miolo rolável — não competem com o CTA. */
 .setup-action {
-  display: flex;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  padding: 11px 8px;
-  border-radius: 12px;
-  font-weight: 700;
-  font-size: 0.9rem;
+  gap: 6px;
+  padding: 7px 10px;
+  border-radius: 9px;
+  font-weight: 600;
+  font-size: 0.78rem;
   text-align: center;
-  background: var(--setup-chip-bg);
-  color: var(--setup-texto);
-  border: 2px solid var(--setup-borda);
+  color: var(--setup-card-texto);
+  background: var(--setup-opcao-bg);
+  border: 1px solid var(--setup-card-borda);
   transition: transform 0.1s ease, background-color 0.15s ease;
 }
 .setup-action:active {
   transform: scale(0.97);
 }
 .setup-action-danger {
-  border-color: rgba(255, 120, 120, 0.5);
-  color: #ffb4b4;
+  color: #b02020;
+  border-color: rgba(176, 32, 32, 0.35);
+  background: rgba(176, 32, 32, 0.06);
 }

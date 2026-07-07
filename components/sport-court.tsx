@@ -93,21 +93,24 @@ function PadelCourt() {
   )
 }
 
-/** Squash: parede branca frontal com as linhas vermelhas (saque + tin). */
+/** Squash: parede frontal de MADEIRA CLARA (bege/creme) com as linhas
+ * vermelhas características (out line, linha de saque, tin) e as caixas de saque. */
 function SquashCourt() {
   return (
     <svg viewBox="0 0 100 150" className="court-svg" preserveAspectRatio="xMidYMid slice" aria-hidden>
       <rect x="0" y="0" width="100" height="150" fill="var(--quadra-squash-parede)" />
-      {/* Linha de fora (out line) — em V descendo pelas laterais */}
-      <polyline
-        points="10,26 90,26"
-        fill="none"
-        stroke="var(--quadra-squash-linha)"
-        strokeWidth={STROKE * 1.6}
-      />
+      {/* Veios da madeira (tábuas verticais) — bem sutis, só para dar a textura. */}
+      <g stroke="var(--quadra-squash-grao)" strokeWidth="1">
+        <line x1="20" y1="0" x2="20" y2="150" />
+        <line x1="40" y1="0" x2="40" y2="150" />
+        <line x1="60" y1="0" x2="60" y2="150" />
+        <line x1="80" y1="0" x2="80" y2="150" />
+      </g>
+      {/* Out line (linha de fora, no alto) */}
+      <line x1="10" y1="26" x2="90" y2="26" stroke="var(--quadra-squash-linha)" strokeWidth={STROKE * 1.6} />
       {/* Linha de saque (service line) */}
       <line x1="10" y1="70" x2="90" y2="70" stroke="var(--quadra-squash-linha)" strokeWidth={STROKE * 1.6} />
-      {/* Tin (linha baixa) */}
+      {/* Tin (linha baixa, mais grossa) */}
       <line x1="10" y1="122" x2="90" y2="122" stroke="var(--quadra-squash-linha)" strokeWidth={STROKE * 2.4} />
       {/* Linha central vertical entre saque e tin */}
       <line x1="50" y1="70" x2="50" y2="122" stroke="var(--quadra-squash-linha)" strokeWidth={STROKE * 1.6} />
@@ -179,4 +182,14 @@ export function SportCourt({ sport }: { sport: SportId }) {
       <Court />
     </div>
   )
+}
+
+/**
+ * Mini-ícone da quadra (o MESMO SVG, sem o wrapper de fundo) para o seletor de
+ * esportes: renderizado dentro de um container pequeno (.court-glyph). O viewBox
+ * é 2:3, então num box 2:3 a quadra aparece inteira, sem corte.
+ */
+export function SportCourtGlyph({ sport }: { sport: SportId }) {
+  const Court = COURTS[sport] ?? TennisCourt
+  return <Court />
 }
