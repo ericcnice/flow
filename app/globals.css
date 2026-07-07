@@ -269,6 +269,14 @@
   color: var(--palco-texto);
 }
 
+/* Segmentado de contagem (pontos/games) na zona central: mora sobre o glass
+   fumê (neutro por tema). O modo ATIVO vira uma pílula clara de alto contraste;
+   o inativo fica só com o texto claro esmaecido. */
+.central-seg-on {
+  background: rgba(245, 245, 245, 0.92);
+  color: #0a0a0a;
+}
+
 /* Entradas/saídas suaves. */
 @keyframes glassFadeIn {
   from {

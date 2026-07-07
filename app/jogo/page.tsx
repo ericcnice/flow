@@ -632,44 +632,98 @@ export default function JogoPage() {
         {renderBlock("red")}
       </main>
 
-      {/* Placar central na ZONA SEGURA: fica no CENTRO exato da tela, sobre a
-          linha divisória entre os dois blocos (em retrato a divisa é horizontal,
-          em paisagem é vertical — o centro cai na linha nos dois casos). É a
-          região onde ninguém toca pra marcar ponto. stopPropagation garante que
-          tocar aqui NÃO marca ponto — apenas abre o placar geral. */}
-      <button
-        type="button"
-        onClick={(e) => {
-          e.stopPropagation()
-          openOverview()
-        }}
-        aria-label="Ver placar geral"
-        className="glass absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-20
-          rounded-full px-4 py-2 flex items-center gap-3 text-sm md:text-base font-semibold tracking-wide
-          active:scale-95 transition-transform"
+      {/* ZONA SEGURA central: fica sobre a linha divisória entre os dois blocos
+          (em retrato a divisa é horizontal, em paisagem é vertical — o centro
+          cai na linha nos dois casos). É a faixa onde NINGUÉM toca pra marcar
+          ponto. O wrapper é pointer-events-none e SÓ os controles recebem toque
+          (pointer-events-auto), então os vãos entre eles NÃO bloqueiam a
+          marcação nos blocos. stopPropagation reforça isso em cada controle.
+          Empilha: [placar central] → [voltar/undo] → [contagem por pontos/games]. */}
+      <div
+        className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-20
+          flex flex-col items-center gap-2.5 pointer-events-none"
       >
-        {/* Resumo do placar central, por família:
-            - tênis: SETS + GAMES (ou pontos do tiebreak);
-            - rally/sideout: GAMES ganhos + PONTOS corridos do game atual. */}
-        <span className="flex items-baseline gap-1">
-          <span className="opacity-60 text-[10px] md:text-xs uppercase">{isTennisFamily ? "sets" : "games"}</span>
-          <span className="tabular-nums">
-            {isTennisFamily ? `${gs.A.sets}-${gs.B.sets}` : `${gs.A.games}-${gs.B.games}`}
+        {/* PLACAR CENTRAL: só o PANORAMA que os blocos NÃO mostram (o ponto atual
+            já aparece GIGANTE). Tênis: SETS + GAMES. Rally/sideout (sem sets):
+            GAMES ganhos. Nada de "pts" (redundante). Números grandes pra ler de
+            longe; o tiebreak vira só um selo TB (o número do TB já é gigante). */}
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation()
+            openOverview()
+          }}
+          aria-label="Ver placar geral"
+          className="glass pointer-events-auto rounded-2xl px-5 py-2.5 flex items-end gap-4
+            active:scale-95 transition-transform"
+        >
+          {isTennisFamily && (
+            <span className="flex flex-col items-center leading-none">
+              <span className="opacity-60 text-[9px] md:text-[11px] uppercase tracking-wider mb-1">sets</span>
+              <span className="tabular-nums font-bold text-3xl md:text-4xl leading-none">
+                {gs.A.sets}-{gs.B.sets}
+              </span>
+            </span>
+          )}
+          {isTennisFamily && <span className="opacity-25 text-2xl md:text-3xl leading-none pb-0.5">·</span>}
+          <span className="flex flex-col items-center leading-none">
+            <span className="opacity-60 text-[9px] md:text-[11px] uppercase tracking-wider mb-1">games</span>
+            <span className="tabular-nums font-bold text-3xl md:text-4xl leading-none">
+              {gs.A.games}-{gs.B.games}
+            </span>
           </span>
-        </span>
-        <span className="opacity-30">·</span>
-        <span className="flex items-baseline gap-1">
-          <span className="opacity-60 text-[10px] md:text-xs uppercase">{isTennisFamily ? "games" : "pts"}</span>
-          <span className="tabular-nums">
-            {isTennisFamily
-              ? isTiebreak
-                ? `${gs.A.tiebreakPoints}-${gs.B.tiebreakPoints}`
-                : `${gs.A.games}-${gs.B.games}`
-              : `${gs.A.points}-${gs.B.points}`}
-          </span>
-        </span>
-        {isTiebreak && <span className="opacity-90 font-bold tracking-widest text-xs">TB</span>}
-      </button>
+          {isTiebreak && (
+            <span className="self-center font-bold tracking-widest text-[11px] md:text-sm opacity-90">TB</span>
+          )}
+        </button>
+
+        {/* VOLTAR (undo): complementa o duplo-toque. Desabilita quando não há o
+            que desfazer (nenhum ponto/game/set jogado). Liga no engine.undo. */}
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation()
+            undoLastPoint()
+          }}
+          disabled={!started}
+          aria-label="Desfazer último ponto"
+          title="Desfazer último ponto"
+          className="glass pointer-events-auto rounded-full p-2.5 active:scale-95 transition-transform
+            disabled:opacity-35 disabled:pointer-events-none"
+        >
+          <Undo2 className="h-5 w-5" />
+        </button>
+
+        {/* CONTAGEM: ponto-a-ponto vs por games — acessível NO JOGO (um juiz/amigo
+            pode entrar no meio e decidir marcar ponto a ponto). Segmentado: o modo
+            ATIVO fica destacado. Trocar não zera o placar (motor tem os dois modos). */}
+        <div
+          className="glass pointer-events-auto rounded-full p-1 flex items-center gap-1"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {([
+            ["pontos", "Ponto a ponto"],
+            ["games", "Por games"],
+          ] as const).map(([mode, label]) => {
+            const on = gameConfig.scoreType === mode
+            return (
+              <button
+                key={mode}
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  if (!on) toggleScoreType()
+                }}
+                aria-pressed={on}
+                className={`px-2.5 py-1 rounded-full text-[10px] md:text-xs font-bold uppercase tracking-wide
+                  transition-colors ${on ? "central-seg-on" : "opacity-60"}`}
+              >
+                {label}
+              </button>
+            )
+          })}
+        </div>
+      </div>
 
       {/* Controles flutuantes agrupados no canto inferior DIREITO (VOZ + CONFIG),
           lado a lado. Ficam à direita de propósito: o badge de desenvolvimento
