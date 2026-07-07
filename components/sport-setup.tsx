@@ -22,6 +22,7 @@ import { useMemo, useState, type ReactNode } from "react"
 import { X } from "lucide-react"
 import { SportCourt, SportCourtGlyph } from "@/components/sport-court"
 import { SPORTS, ruleControlsFor, defaultRulesFor, type RuleControl, type SportId } from "@/lib/sports-catalog"
+import { THEMES, DEFAULT_THEME, themeClassName, type ThemeId } from "@/lib/themes"
 
 export type SportSetupContext = "new" | "ingame"
 
@@ -38,6 +39,7 @@ const SHORT_NAME: Record<SportId, string> = {
 export function SportSetup({
   initialSport,
   initialRules,
+  initialTheme,
   context,
   onConfirm,
   onClose,
@@ -47,9 +49,11 @@ export function SportSetup({
   initialSport: SportId
   /** Regras iniciais dos toggles (no jogo: as regras vigentes da partida). */
   initialRules: any
+  /** Tema de cor pré-selecionado (default Neutro). Parte da config da partida. */
+  initialTheme?: ThemeId
   context: SportSetupContext
-  /** Chamado no CTA. sportChanged=true quando o esporte mudou. */
-  onConfirm: (sport: SportId, rules: any, sportChanged: boolean) => void
+  /** Chamado no CTA. sportChanged=true quando o esporte mudou; theme = tema escolhido. */
+  onConfirm: (sport: SportId, rules: any, sportChanged: boolean, theme: ThemeId) => void
   /** Fechar sem confirmar (ingame: volta ao jogo). Ausente = sem "X". */
   onClose?: () => void
   /** Conteúdo extra no miolo (ingame: ações secundárias da partida). */
@@ -57,6 +61,7 @@ export function SportSetup({
 }) {
   const [sport, setSport] = useState<SportId>(initialSport)
   const [rules, setRules] = useState<any>(initialRules)
+  const [theme, setTheme] = useState<ThemeId>(initialTheme ?? DEFAULT_THEME)
 
   const controls = useMemo<RuleControl[]>(() => ruleControlsFor(sport), [sport])
   const sportChanged = sport !== initialSport
@@ -70,7 +75,7 @@ export function SportSetup({
 
   return (
     <div
-      className="relative flex flex-col h-full overflow-hidden"
+      className={`relative flex flex-col h-full overflow-hidden ${themeClassName(theme)}`}
       style={{ backgroundColor: "var(--palco-fundo)" }}
     >
       {/* Fundo: a QUADRA do esporte selecionado (SVG), visível ACIMA do card. */}
@@ -144,12 +149,38 @@ export function SportSetup({
             )
           })}
 
+          {/* CORES (tema/palco) — no FIM das opções: personalização, não config
+              de rotina. Amostras tocáveis; a ativa fica destacada. Aplica o
+              tema por partida (persiste na config junto de esporte + regras). */}
+          <div>
+            <div className="text-sm font-semibold mb-2">Cores</div>
+            <div className="theme-swatches">
+              {THEMES.map((t) => (
+                <button
+                  key={t.id}
+                  type="button"
+                  onClick={() => setTheme(t.id)}
+                  className={`theme-swatch ${t.id === theme ? "on" : ""}`}
+                  aria-pressed={t.id === theme}
+                  aria-label={`Tema ${t.label}`}
+                  title={t.label}
+                >
+                  <span className="theme-swatch-chip">
+                    <span style={{ backgroundColor: t.aBg, color: t.aText }}>15</span>
+                    <span style={{ backgroundColor: t.bBg, color: t.bText }}>30</span>
+                  </span>
+                  <span className="theme-swatch-name">{t.label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
           {footer}
         </div>
 
         {/* BASE do card: CTA JOGAR FIXO (fora do scroll), sempre visível. */}
         <div className="px-4 pt-3 pb-5 border-t" style={{ borderColor: "var(--setup-card-borda)" }}>
-          <button type="button" className="play-button" onClick={() => onConfirm(sport, rules, sportChanged)}>
+          <button type="button" className="play-button" onClick={() => onConfirm(sport, rules, sportChanged, theme)}>
             JOGAR
           </button>
         </div>

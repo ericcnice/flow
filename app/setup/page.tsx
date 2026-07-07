@@ -17,6 +17,7 @@ import { Suspense } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { SportSetup } from "@/components/sport-setup"
 import { defaultRulesFor, type SportId } from "@/lib/sports-catalog"
+import { DEFAULT_THEME, type ThemeId } from "@/lib/themes"
 
 // useSearchParams() exige uma fronteira de Suspense na geração estática do Next
 // (CSR bailout). O conteúdo real fica em SetupScreen.
@@ -33,12 +34,13 @@ function SetupScreen() {
   const searchParams = useSearchParams()
   const quadra = searchParams.get("quadra") || "1"
 
-  const startGame = (sport: SportId, rules: any) => {
+  const startGame = (sport: SportId, rules: any, theme: ThemeId) => {
     // Config da partida (mantém as MESMAS chaves do fluxo atual — placar/QR leem
-    // `tennis_match_${quadra}` — apenas acrescenta o campo `sport`).
+    // `tennis_match_${quadra}` — apenas acrescenta os campos `sport` e `theme`).
     const config = {
       quadra,
       sport,
+      theme,
       gameType: "simples",
       scoreType: "pontos",
       players: {
@@ -69,8 +71,9 @@ function SetupScreen() {
       <SportSetup
         initialSport="tennis"
         initialRules={defaultRulesFor("tennis")}
+        initialTheme={DEFAULT_THEME}
         context="new"
-        onConfirm={(sport, rules) => startGame(sport, rules)}
+        onConfirm={(sport, rules, _sportChanged, theme) => startGame(sport, rules, theme)}
       />
     </div>
   )

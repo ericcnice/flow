@@ -23,12 +23,15 @@ import { createSpeechSynthesisSpeaker, type Speaker } from "@/lib/voice/speaker"
 // módulos — ele NÃO altera lib/scoring, só o consome.
 import { ScoringEngine } from "@/lib/scoring/engine"
 import { sportById, familyOf, formatPoint, defaultRulesFor, type SportId } from "@/lib/sports-catalog"
+import { themeClassName, type ThemeId } from "@/lib/themes"
 import type { GameState, Side } from "@/lib/scoring/types"
 
 type GameConfig = {
   quadra: string
   /** Esporte escolhido na tela de setup (define o módulo do motor). */
   sport?: SportId
+  /** Tema de cor do placar (default Neutro). Personalização por partida. */
+  theme?: ThemeId
   gameType: string
   scoreType: string
   players: {
@@ -60,6 +63,11 @@ export default function JogoPage() {
   // velha). Default tênis para partidas antigas sem `sport`.
   const [sport, setSport] = useState<SportId>("tennis")
   const sportRef = useRef<SportId>("tennis")
+
+  // Tema de cor do placar (do setup). Aplicado como classe no container raiz —
+  // o placar (contagem + broadcast) consome as variáveis CSS do tema. Persiste
+  // na config da partida. Default Neutro (partidas antigas sem `theme`).
+  const [theme, setTheme] = useState<ThemeId>("neutro")
 
   // Motor de scoring: o engine é a fonte de verdade; espelhamos o GameState em
   // estado do React para disparar re-render. actions/rules/firstServer guardam
@@ -148,6 +156,7 @@ export default function JogoPage() {
       const resolvedSport = (config.sport || searchParams.get("sport") || "tennis") as SportId
       sportRef.current = resolvedSport
       setSport(resolvedSport)
+      setTheme((config.theme as ThemeId) || "neutro")
 
       setStartTime(new Date(config.startTime))
       setBluePlayerName(
@@ -379,9 +388,10 @@ export default function JogoPage() {
   // esporte no meio). Zera o placar (novo esporte = partida nova) e reconstrói o
   // motor com o MÓDULO do novo esporte. sportRef precisa estar setado ANTES do
   // rebuildEngine (ele lê o módulo por sportRef.current).
-  const startNewMatch = (nextSport: SportId, nextRules: any) => {
+  const startNewMatch = (nextSport: SportId, nextRules: any, nextTheme: ThemeId) => {
     sportRef.current = nextSport
     setSport(nextSport)
+    setTheme(nextTheme)
 
     const now = new Date()
     setStartTime(now)
@@ -391,6 +401,7 @@ export default function JogoPage() {
       const newConfig: GameConfig = {
         ...gameConfig,
         sport: nextSport,
+        theme: nextTheme,
         startTime: now.toISOString(),
         maxSets: nextRules.bestOf ?? 3,
       }
@@ -411,11 +422,17 @@ export default function JogoPage() {
   //    feitas (mesmo mecanismo usado na persistência), então pontos/games/sets
   //    são preservados e a regra vale daqui pra frente. NÃO recomeça a partida.
   //  - OUTRO esporte  → CASO 2: confirma e inicia uma partida nova (startNewMatch).
-  const onSetupConfirm = (nextSport: SportId, nextRules: any, sportChanged: boolean) => {
+  const onSetupConfirm = (nextSport: SportId, nextRules: any, sportChanged: boolean, nextTheme: ThemeId) => {
     if (!sportChanged) {
+      // O tema é personalização: aplica SEM recomeçar a partida (só recolore).
       rebuildEngine(nextRules, firstServerRef.current, actionsRef.current)
+      setTheme(nextTheme)
       if (gameConfig) {
-        const newConfig: GameConfig = { ...gameConfig, maxSets: nextRules.bestOf ?? gameConfig.maxSets }
+        const newConfig: GameConfig = {
+          ...gameConfig,
+          theme: nextTheme,
+          maxSets: nextRules.bestOf ?? gameConfig.maxSets,
+        }
         setGameConfig(newConfig)
         localStorage.setItem(`tennis_match_${quadra}`, JSON.stringify(newConfig))
       }
@@ -425,7 +442,7 @@ export default function JogoPage() {
       return
     }
     if (confirm("Trocar de esporte vai iniciar uma nova partida. Continuar?")) {
-      startNewMatch(nextSport, nextRules)
+      startNewMatch(nextSport, nextRules, nextTheme)
       setSetupOpen(false)
     }
   }
@@ -601,7 +618,7 @@ export default function JogoPage() {
 
   return (
     <div
-      className="relative flex flex-col h-[100dvh] overflow-hidden mono-tabular"
+      className={`relative flex flex-col h-[100dvh] overflow-hidden mono-tabular ${themeClassName(theme)}`}
       style={{ backgroundColor: "var(--palco-fundo)", color: "var(--palco-discreto)" }}
     >
       {/* Palco: dois blocos ocupando a tela INTEIRA (sem barras). A direção segue
@@ -693,7 +710,7 @@ export default function JogoPage() {
           ~5s ou ao tocar fora do painel. */}
       {showOverview && (
         <div
-          className="glass-overlay glass-overlay-anim absolute inset-0 z-30 flex items-center justify-center p-4 md:p-8"
+          className="stage-overlay glass-overlay-anim absolute inset-0 z-30 flex items-center justify-center p-4 md:p-8"
           onClick={closeOverview}
           role="dialog"
           aria-label="Placar geral"
@@ -732,7 +749,7 @@ export default function JogoPage() {
                     const isServing = gs.server === side
                     const isWinner = gs.winner === side
                     return (
-                      <tr key={side} className={isWinner ? "sb-winner" : ""}>
+                      <tr key={side} data-side={side.toLowerCase()} className={isWinner ? "sb-winner" : ""}>
                         <td className="sb-name">
                           <span className={`sb-dot ${isServing ? "on" : ""}`} aria-hidden />
                           <span>{name}</span>
@@ -785,6 +802,7 @@ export default function JogoPage() {
           <SportSetup
             initialSport={sport}
             initialRules={rulesRef.current}
+            initialTheme={theme}
             context="ingame"
             onClose={() => setSetupOpen(false)}
             onConfirm={onSetupConfirm}
