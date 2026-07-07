@@ -644,64 +644,55 @@ export default function JogoPage() {
         {renderBlock("red")}
       </main>
 
-      {/* ZONA SEGURA central: fica sobre a linha divisória entre os dois blocos
-          (em retrato a divisa é horizontal, em paisagem é vertical). É a faixa
-          onde NINGUÉM toca pra marcar ponto. O wrapper é pointer-events-none e
-          SÓ os controles recebem toque (pointer-events-auto), então os vãos
-          entre eles NÃO bloqueiam a marcação nos blocos; stopPropagation reforça.
+      {/* Controles nas BORDAS (topo + rodapé), NUNCA no meio: o miolo da tela —
+          onde vivem os números gigantes dos dois blocos — fica LIVRE de controle
+          em qualquer orientação. Regra fixa (retrato e paisagem):
+            - PLACAR GERAL: sempre no TOPO, centralizado.
+            - Barra de controles (voltar · contagem · voz/config): sempre no RODAPÉ.
+          Cada controle é pointer-events-auto + stopPropagation; os containers de
+          borda são pointer-events-none, então seus vãos deixam o toque passar e o
+          resto da tela (os blocos) continua sendo a área de marcar ponto. */}
 
-          Distribuição por ORIENTAÇÃO (para NÃO cobrir os números gigantes, que
-          ficam no centro vertical de CADA bloco):
-          - RETRATO: os números estão ACIMA e ABAIXO da divisa, então os controles
-            se ESPALHAM na faixa central (36%–64% da altura): [placar + voltar] no
-            ALTO da faixa, [toggle de contagem] na base. O vão entre eles é o
-            centro morto (ninguém marca ali) e deixa o toque passar.
-          - PAISAGEM: os números ficam à ESQUERDA e à DIREITA; o centro é livre,
-            então os três ficam num cluster centralizado sobre a divisa vertical. */}
-      <div
-        className="pointer-events-none absolute left-1/2 -translate-x-1/2 z-20 flex flex-col items-center
-          top-[36%] bottom-[36%] justify-between
-          landscape:top-1/2 landscape:bottom-auto landscape:-translate-y-1/2 landscape:justify-center landscape:gap-3"
+      {/* PLACAR GERAL no TOPO: só o PANORAMA que os blocos NÃO mostram (o ponto
+          atual já é GIGANTE). Tênis: SETS + GAMES; rally/sideout (sem sets): só
+          GAMES ganhos. Tiebreak vira o selo TB. Toca pra abrir o placar geral. */}
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation()
+          openOverview()
+        }}
+        aria-label="Ver placar geral"
+        className="glass pointer-events-auto absolute top-3 left-1/2 -translate-x-1/2 z-20
+          rounded-2xl px-4 py-1.5 flex items-end gap-3.5 active:scale-95 transition-transform"
       >
-        {/* Grupo do ALTO da faixa: placar central + voltar, juntos. */}
-        <div className="pointer-events-none flex flex-col items-center gap-2.5 landscape:gap-3">
-        {/* PLACAR CENTRAL: só o PANORAMA que os blocos NÃO mostram (o ponto atual
-            já aparece GIGANTE). Tênis: SETS + GAMES. Rally/sideout (sem sets):
-            GAMES ganhos. Nada de "pts" (redundante). Números grandes pra ler de
-            longe; o tiebreak vira só um selo TB (o número do TB já é gigante). */}
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation()
-            openOverview()
-          }}
-          aria-label="Ver placar geral"
-          className="glass pointer-events-auto rounded-2xl px-5 py-2.5 flex items-end gap-4
-            active:scale-95 transition-transform"
-        >
-          {isTennisFamily && (
-            <span className="flex flex-col items-center leading-none">
-              <span className="opacity-60 text-[9px] md:text-[11px] uppercase tracking-wider mb-1">sets</span>
-              <span className="tabular-nums font-bold text-3xl md:text-4xl leading-none">
-                {gs.A.sets}-{gs.B.sets}
-              </span>
-            </span>
-          )}
-          {isTennisFamily && <span className="opacity-25 text-2xl md:text-3xl leading-none pb-0.5">·</span>}
+        {isTennisFamily && (
           <span className="flex flex-col items-center leading-none">
-            <span className="opacity-60 text-[9px] md:text-[11px] uppercase tracking-wider mb-1">games</span>
-            <span className="tabular-nums font-bold text-3xl md:text-4xl leading-none">
-              {gs.A.games}-{gs.B.games}
+            <span className="opacity-60 text-[9px] md:text-[10px] uppercase tracking-wider mb-0.5">sets</span>
+            <span className="tabular-nums font-bold text-2xl md:text-3xl leading-none">
+              {gs.A.sets}-{gs.B.sets}
             </span>
           </span>
-          {isTiebreak && (
-            <span className="self-center font-bold tracking-widest text-[11px] md:text-sm opacity-90">TB</span>
-          )}
-        </button>
+        )}
+        {isTennisFamily && <span className="opacity-25 text-xl md:text-2xl leading-none pb-0.5">·</span>}
+        <span className="flex flex-col items-center leading-none">
+          <span className="opacity-60 text-[9px] md:text-[10px] uppercase tracking-wider mb-0.5">games</span>
+          <span className="tabular-nums font-bold text-2xl md:text-3xl leading-none">
+            {gs.A.games}-{gs.B.games}
+          </span>
+        </span>
+        {isTiebreak && (
+          <span className="self-center font-bold tracking-widest text-[10px] md:text-xs opacity-90">TB</span>
+        )}
+      </button>
 
-        {/* VOLTAR (undo): logo abaixo do placar. Desabilita quando não há o que
-            desfazer (nenhum ponto/game/set jogado). Liga no engine.undo — e a voz
-            (se ligada) dá o feedback de correção (ver undoLastPoint). */}
+      {/* BARRA DE CONTROLES no RODAPÉ: três posições (grid-cols-3) que nunca se
+          sobrepõem — ESQUERDA: voltar · CENTRO: contagem · DIREITA: voz + config.
+          O container é pointer-events-none (vãos passam o toque); cada controle é
+          pointer-events-auto. Config/voz saíram do canto p/ esta barra, sem
+          sobrepor o toggle. Rótulos do toggle curtos p/ caber em telas estreitas. */}
+      <div className="pointer-events-none absolute inset-x-3 bottom-4 z-20 grid grid-cols-3 items-center">
+        {/* ESQUERDA: VOLTAR (undo). Desabilita quando não há o que desfazer. */}
         <button
           type="button"
           onClick={(e) => {
@@ -711,23 +702,22 @@ export default function JogoPage() {
           disabled={!started}
           aria-label="Desfazer último ponto"
           title="Desfazer último ponto"
-          className="glass pointer-events-auto rounded-full p-2.5 active:scale-95 transition-transform
-            disabled:opacity-35 disabled:pointer-events-none"
+          className="glass pointer-events-auto justify-self-start rounded-full p-2.5
+            active:scale-95 transition-transform disabled:opacity-35 disabled:pointer-events-none"
         >
           <Undo2 className="h-5 w-5" />
         </button>
-        </div>
 
-        {/* CONTAGEM (base da faixa): ponto-a-ponto vs por games — acessível NO JOGO (um juiz/amigo
-            pode entrar no meio e decidir marcar ponto a ponto). Segmentado: o modo
-            ATIVO fica destacado. Trocar não zera o placar (motor tem os dois modos). */}
+        {/* CENTRO: CONTAGEM ponto-a-ponto vs por games — acessível NO JOGO (um
+            juiz/amigo entra no meio e troca). Segmentado: modo ATIVO destacado.
+            Trocar não zera o placar (o motor tem os dois modos). */}
         <div
-          className="glass pointer-events-auto rounded-full p-1 flex items-center gap-1"
+          className="glass pointer-events-auto justify-self-center rounded-full p-1 flex items-center gap-1"
           onClick={(e) => e.stopPropagation()}
         >
           {([
-            ["pontos", "Ponto a ponto"],
-            ["games", "Por games"],
+            ["pontos", "Pontos"],
+            ["games", "Games"],
           ] as const).map(([mode, label]) => {
             const on = gameConfig.scoreType === mode
             return (
@@ -739,7 +729,8 @@ export default function JogoPage() {
                   if (!on) toggleScoreType()
                 }}
                 aria-pressed={on}
-                className={`px-2.5 py-1 rounded-full text-[10px] md:text-xs font-bold uppercase tracking-wide
+                title={mode === "pontos" ? "Contar ponto a ponto" : "Contar por games"}
+                className={`px-3 py-1 rounded-full text-[10px] md:text-xs font-bold uppercase tracking-wide
                   transition-colors ${on ? "central-seg-on" : "opacity-60"}`}
               >
                 {label}
@@ -747,40 +738,37 @@ export default function JogoPage() {
             )
           })}
         </div>
-      </div>
 
-      {/* Controles flutuantes agrupados no canto inferior DIREITO (VOZ + CONFIG),
-          lado a lado. Ficam à direita de propósito: o badge de desenvolvimento
-          do Next.js mora no canto inferior ESQUERDO e cobria a voz ali.
-          Ambos param a propagação para não marcarem ponto (stopPropagation). */}
-      <div className="absolute bottom-4 right-4 z-20 flex items-center gap-3">
-        {/* Botão de VOZ: liga/desliga o anúncio (mute/unmute); o ícone reflete o estado. */}
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation()
-            toggleVoice()
-          }}
-          aria-label={voiceEnabled ? "Desligar voz" : "Ligar voz"}
-          aria-pressed={voiceEnabled}
-          title={voiceEnabled ? "Voz ligada" : "Voz desligada"}
-          className="glass rounded-full p-3 active:scale-95 transition-transform"
-        >
-          {voiceEnabled ? <Volume2 className="h-5 w-5" /> : <VolumeX className="h-5 w-5 opacity-70" />}
-        </button>
+        {/* DIREITA: VOZ + CONFIG (saíram do canto para o rodapé, sem sobrepor). */}
+        <div className="justify-self-end flex items-center gap-2">
+          {/* VOZ: liga/desliga o anúncio (mute/unmute); o ícone reflete o estado. */}
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation()
+              toggleVoice()
+            }}
+            aria-label={voiceEnabled ? "Desligar voz" : "Ligar voz"}
+            aria-pressed={voiceEnabled}
+            title={voiceEnabled ? "Voz ligada" : "Voz desligada"}
+            className="glass pointer-events-auto rounded-full p-2.5 active:scale-95 transition-transform"
+          >
+            {voiceEnabled ? <Volume2 className="h-5 w-5" /> : <VolumeX className="h-5 w-5 opacity-70" />}
+          </button>
 
-        {/* Botão de CONFIGURAÇÃO: abre o menu existente. */}
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation()
-            setSetupOpen(true)
-          }}
-          aria-label="Configurações"
-          className="glass rounded-full p-3 active:scale-95 transition-transform"
-        >
-          <Settings className="h-5 w-5" />
-        </button>
+          {/* CONFIG: abre a mesma tela de setup. */}
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation()
+              setSetupOpen(true)
+            }}
+            aria-label="Configurações"
+            className="glass pointer-events-auto rounded-full p-2.5 active:scale-95 transition-transform"
+          >
+            <Settings className="h-5 w-5" />
+          </button>
+        </div>
       </div>
 
       {/* Placar geral expandido: overlay glass de tela cheia, estilo BROADCAST
