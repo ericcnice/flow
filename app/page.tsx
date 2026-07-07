@@ -2,8 +2,8 @@
  * LANDING de PLATAFORMA (raiz do produto). Substitui o antigo grid de quadras
  * de admin (movido para /admin). Tom de plataforma estabelecida, mobile-first,
  * alto contraste, coerente com a estética do placar (tema neutro P&B + variáveis
- * de cor já existentes). NÃO lista clubes e NÃO menciona o SPAC — o contexto de
- * clube segue acessível só via URL direta /[clube]/... (ex.: /spac/...).
+ * de cor já existentes). NÃO lista nem nomeia clubes — o contexto de clube segue
+ * acessível só via URL direta /[clube]/... (rota da jornada de contexto).
  *
  * Server Component estático (sem estado): só marcação + um CTA de WhatsApp.
  */
