@@ -27,8 +27,12 @@ import { DEFAULT_THEME } from "@/lib/themes"
 
 const SCREEN_MS = 2500
 
-// Logo do Nicholas: fundo escuro na Tela 2 → usa a versão CLARA (contrasta).
-const NICHOLAS_LOGO = "/nicholas-light.png"
+// Logo do Nicholas na Tela 2 (fundo PRETO = var(--palco-fundo) do tema neutro).
+// Os dois arquivos têm fundo SÓLIDO (sem transparência): nicholas-light.png tem
+// fundo BRANCO e nicholas-dark.png tem fundo PRETO com o brasão claro. Para não
+// aparecer um retângulo, casamos o fundo do arquivo com o da tela → usamos a
+// versão de fundo PRETO sobre a tela preta.
+const NICHOLAS_LOGO = "/nicholas-dark.png"
 
 export function ClubOpening({ hasAd }: { hasAd: boolean }) {
   const router = useRouter()
@@ -142,20 +146,30 @@ export function ClubOpening({ hasAd }: { hasAd: boolean }) {
         className="flex-1 basis-0 flex items-center justify-center min-w-0 min-h-0"
         style={{ backgroundColor: "var(--lado-a-bg)", color: "var(--lado-a-texto)" }}
       >
-        <div className="relative w-[68%] h-[46%]">
-          <Image src={ctx.club.logo} alt={ctx.club.nome} fill sizes="60vw" priority className="object-contain" />
+        {/* Recorte CIRCULAR (avatar): o brasão do SPAC já é redondo, então o
+            círculo respeita a forma (o campo azul vira a borda do "badge"). A
+            caixa é quadrada e limitada pela menor dimensão da metade (altura em
+            retrato, largura em paisagem). */}
+        <div className="relative aspect-square rounded-full overflow-hidden portrait:h-[58%] landscape:w-[64%] max-h-[82%] max-w-[82%]">
+          <Image src={ctx.club.logo} alt={ctx.club.nome} fill sizes="60vw" priority className="object-cover" />
         </div>
       </div>
 
-      {/* Metade B: nome do esporte (cima) + "Quadra N" grande (embaixo). */}
+      {/* Metade B: ESPORTE forte no topo → "Quadra" discreto → NÚMERO grande (2
+          dígitos), na altura do número gigante do placar. */}
       <div
-        className="flex-1 basis-0 flex flex-col items-center justify-center gap-3 px-4 text-center min-w-0 min-h-0"
+        className="flex-1 basis-0 flex flex-col items-center justify-center px-4 text-center min-w-0 min-h-0"
         style={{ backgroundColor: "var(--lado-b-bg)", color: "var(--lado-b-texto)" }}
       >
-        <div className="uppercase tracking-[0.2em] font-semibold opacity-80 text-lg md:text-3xl">
+        <div className="font-black uppercase tracking-[0.1em] leading-tight text-2xl md:text-5xl">
           {ctx.sportName}
         </div>
-        <div className="font-black leading-none text-5xl md:text-8xl">Quadra {ctx.quadraNum}</div>
+        <div className="font-light uppercase tracking-[0.35em] opacity-70 text-xs md:text-base mt-3">
+          Quadra
+        </div>
+        <div className="font-black tabular-nums leading-none text-[26vw] landscape:text-[30vh]">
+          {ctx.quadraNum.padStart(2, "0")}
+        </div>
       </div>
     </div>
   )

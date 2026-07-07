@@ -747,13 +747,13 @@ export default function JogoPage() {
           pointer-events-none e só a chip recebe toque. */}
       <div className="pointer-events-none absolute top-2 left-1/2 -translate-x-1/2 z-20 flex flex-col items-center gap-1.5">
         {clube && clubBySlug(clube)?.logo && (
-          <div className="relative h-6 w-24 opacity-90">
+          <div className="relative aspect-square h-10 md:h-12 rounded-full overflow-hidden ring-1 ring-white/15 shadow-md">
             <Image
               src={clubBySlug(clube)!.logo}
               alt={clubBySlug(clube)!.nome}
               fill
-              sizes="120px"
-              className="object-contain"
+              sizes="56px"
+              className="object-cover"
             />
           </div>
         )}
