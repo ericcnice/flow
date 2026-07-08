@@ -8,7 +8,7 @@
  * amostra (swatch) do seletor. NÃO altera lib/scoring nem as regras/quadras.
  *
  * O tema escolhido é POR PARTIDA (parte da config, junto de esporte + regras) e
- * persiste no localStorage com o resto da config. Default = Neutro (P&B).
+ * persiste no localStorage com o resto da config. Default = Azul & Amarelo.
  */
 
 export type ThemeId = "neutro" | "azul-amarelo" | "vermelho-branco" | "verde-amarelo"
@@ -27,7 +27,7 @@ export type ThemeMeta = {
   bText: string
 }
 
-/** Ordem de exibição no seletor. Neutro é o primeiro (default). */
+/** Ordem de exibição no seletor. Neutro é o primeiro; o default é Azul & Amarelo. */
 export const THEMES: ThemeMeta[] = [
   {
     id: "neutro",
@@ -67,7 +67,7 @@ export const THEMES: ThemeMeta[] = [
   },
 ]
 
-export const DEFAULT_THEME: ThemeId = "neutro"
+export const DEFAULT_THEME: ThemeId = "azul-amarelo"
 
 /** Classe CSS do tema (cai no Neutro para id ausente/desconhecido). */
 export function themeClassName(id?: ThemeId | null): string {
