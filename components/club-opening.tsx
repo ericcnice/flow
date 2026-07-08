@@ -25,7 +25,9 @@ import { resolveClubContext } from "@/lib/clubs-config"
 import { defaultRulesFor } from "@/lib/sports-catalog"
 import { DEFAULT_THEME } from "@/lib/themes"
 
-const SCREEN_MS = 2500
+// Duração de cada tela da abertura: Tela 1 (logo do clube + esporte/quadra) e o
+// "logo do Nicholas sozinho" da Tela 2 antes de encolher e mostrar o JOGAR.
+const SCREEN_MS = 4000
 
 // Logo do Nicholas na Tela 2 (fundo PRETO = var(--palco-fundo) do tema neutro).
 // Os dois arquivos têm fundo SÓLIDO (sem transparência): nicholas-light.png tem
@@ -106,8 +108,12 @@ export function ClubOpening({ hasAd }: { hasAd: boolean }) {
         {/* Metade do LOGO: sempre presente; encolhe quando `split` abre a outra
             metade (o container do logo é % da metade, então acompanha o tamanho). */}
         <div className="flex-1 basis-0 flex items-center justify-center min-w-0 min-h-0">
-          <div className="relative w-[70%] h-[45%]">
-            <Image src={NICHOLAS_LOGO} alt="Nicholas" fill sizes="60vw" priority className="object-contain" />
+          {/* Container do logo em % da METADE: centralizado (metade = tela cheia)
+              fica grande/presente; ao encolher (metade = ~50%) acompanha, mas com
+              % maior preenche melhor a metade esquerda mantendo margem. object-
+              contain garante que nunca estoura. */}
+          <div className="relative w-[86%] h-[72%]">
+            <Image src={NICHOLAS_LOGO} alt="Nicholas" fill sizes="70vw" priority className="object-contain" />
           </div>
         </div>
 
