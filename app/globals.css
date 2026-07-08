@@ -91,8 +91,62 @@
   font-family: "DS-Digital", monospace;
 }
 
+/* Indicador de saque do placar LEGADO (app/placar) — mantido intacto: só a
+   transição de cor do pontinho daquela tela separada, fora deste escopo. */
 .serving-indicator {
   transition: background-color 0.3s ease;
+}
+
+/* --- BOLA DE SAQUE -------------------------------------------------------
+   Indicador GRANDE e MÓVEL de saque (no lugar do antigo pontinho de canto,
+   pouco visível sob sol). Renderizada só no bloco de quem saca. A posição
+   horizontal (`left`, definida inline no JSX) indica o LADO da quadra:
+   direita = quadra de iguais/par, esquerda = quadra de vantagem/ímpar; centro
+   = sem lateralidade (só indica QUEM saca). A transição em `left` faz a bola
+   DESLIZAR suavemente quando o lado muda entre pontos. Fica na FAIXA SUPERIOR
+   do bloco (abaixo do nome) para NÃO cobrir o número gigante (centralizado).
+   Cores herdam as variáveis do tema (definidas inline: fundo = --lado-*-texto,
+   anel = --lado-*-bg), então funciona igual nos 4 temas. */
+.serve-ball {
+  position: absolute;
+  top: 15%;
+  transform: translateX(-50%);
+  width: clamp(2.25rem, 7.5vmin, 3.5rem);
+  height: clamp(2.25rem, 7.5vmin, 3.5rem);
+  border-radius: 9999px;
+  pointer-events: none;
+  z-index: 10;
+  transition: left 0.45s cubic-bezier(0.22, 1, 0.36, 1);
+  animation: serveBallIn 0.3s ease-out;
+}
+@keyframes serveBallIn {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) scale(0.6);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) scale(1);
+  }
+}
+
+/* Chip discreto para ESCOLHER quem saca primeiro (só antes do 1º ponto). */
+.serve-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.625rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 0.15rem 0.5rem;
+  border-radius: 9999px;
+  border: 1.5px solid currentColor;
+  opacity: 0.72;
+  transition: opacity 0.2s ease;
+}
+.serve-toggle:hover {
+  opacity: 1;
 }
 
 .set-block {

@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import Image from "next/image"
 import { Input } from "@/components/ui/input"
-import { Settings, Volume2, VolumeX, Undo2, BarChart2, RotateCcw, LogOut } from "lucide-react"
+import { Settings, Volume2, VolumeX, Undo2, BarChart2, RotateCcw, LogOut, ArrowLeftRight } from "lucide-react"
 import { ThirdSetModal } from "@/components/third-set-modal"
 // Superfície de configuração ÚNICA: a MESMA tela de setup (esporte + regras),
 // aberta agora também DE DENTRO do jogo pelo botão de config (aposenta o GameMenu
@@ -560,6 +560,40 @@ export default function JogoPage() {
     gs.completedSets.length > 0
   const initialServingSet = !started
 
+  // --- Lado da BOLA DE SAQUE dentro do bloco do sacador --------------------
+  // A bola grande aparece SÓ no bloco de quem saca (gs.server). Quando o
+  // esporte alterna o LADO da quadra a cada ponto E esse lado é DERIVÁVEL do
+  // estado que o motor já expõe (server + points/advantage/tiebreakPoints — NÃO
+  // tocamos lib/scoring), a bola desliza na horizontal a cada ponto:
+  //   • TÊNIS e PADEL — mesma mecânica de deuce/ad court do tênis:
+  //       - em tiebreak, a quadra alterna a CADA ponto → paridade do total de
+  //         pontos do tiebreak (par = direita, ímpar = esquerda);
+  //       - fora do tiebreak, o 40-40 com vantagem é sempre servido da quadra
+  //         de VANTAGEM (esquerda); nos demais casos, paridade do total de
+  //         pontos do game (par = quadra de IGUAIS/direita, ímpar = esquerda).
+  //   • PICKLEBALL — regra de simples: o sacador serve da quadra DIREITA quando
+  //       a PRÓPRIA pontuação é par, da ESQUERDA quando ímpar (derivável do
+  //       modelo de saque único da Fase 0 do motor).
+  //   • BEACH, SQUASH e PING PONG — "center": sem deslocamento (ver relatório).
+  //       Beach não tem a alternância deuce/ad do tênis; no squash o box do
+  //       saque depende do histórico de rallies vencidos no saque (não vem no
+  //       snapshot server+points); no ping pong o saque troca a cada 2 pontos
+  //       sem lado esquerdo/direito da quadra por ponto. Nesses, só QUEM saca.
+  type ServeCourt = "left" | "right" | "center"
+  const servingCourt: ServeCourt = (() => {
+    if (sport === "tennis" || sport === "padel") {
+      if (isTiebreak) {
+        return (gs.A.tiebreakPoints + gs.B.tiebreakPoints) % 2 === 0 ? "right" : "left"
+      }
+      if (gs.A.advantage || gs.B.advantage) return "left"
+      return (gs.A.points + gs.B.points) % 2 === 0 ? "right" : "left"
+    }
+    if (sport === "pickleball") {
+      return gs[gs.server].points % 2 === 0 ? "right" : "left"
+    }
+    return "center"
+  })()
+
   // Família de placar do esporte: "tennis" (15/30/40, games, sets, tiebreak) ou
   // "rally"/"sideout" (contagem corrida por game). Decide como exibir o placar.
   const family = familyOf(sport)
@@ -608,10 +642,11 @@ export default function JogoPage() {
     return formatPoint(sport, gs[side], false)
   }
 
-  // --- Bloco de um lado (ScoreBot): número gigante + nome/sacador no canto ---
+  // --- Bloco de um lado (ScoreBot): número gigante + nome + BOLA DE SAQUE -----
   // Toda a área é tocável e marca ponto para o lado (engine.pointFor via
-  // handleScoreClick). O nome e o indicador de saque param a propagação para não
-  // marcarem ponto quando editados/alternados. Cores vêm de variáveis CSS P&B.
+  // handleScoreClick). O nome e o toggle de sacador param a propagação para não
+  // marcarem ponto. A bola de saque é só indicador (pointer-events-none): nunca
+  // rouba o toque de marcar ponto. Cores vêm das variáveis CSS do tema ativo.
   const renderBlock = (team: "blue" | "red") => {
     const side: Side = sideOf(team)
     const isA = team === "blue"
@@ -677,30 +712,46 @@ export default function JogoPage() {
             </span>
           )}
 
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation()
-              toggleServing()
-            }}
-            title={
-              initialServingSet
-                ? "Toque para alterar o sacador"
-                : "O sacador não pode ser alterado após o início da partida"
-            }
-            aria-label="Indicador de saque"
-            className="shrink-0 -mt-0.5"
-          >
-            <span
-              className={`block w-3.5 h-3.5 rounded-full serving-indicator ${!initialServingSet ? "opacity-60" : ""}`}
-              style={{
-                backgroundColor: isServing ? "currentColor" : "transparent",
-                border: "2px solid currentColor",
-                opacity: isServing ? 1 : 0.35,
+          {/* Troca de sacador: SÓ antes do 1º ponto e SÓ no bloco de quem saca
+              (após o início, o sacador não muda — o motor rejeita). O indicador
+              visual de saque agora é a BOLA GRANDE abaixo; este chip é só o
+              controle discreto para escolher quem começa sacando. */}
+          {initialServingSet && isServing && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation()
+                toggleServing()
               }}
-            />
-          </button>
+              title="Toque para trocar quem saca primeiro (só antes do 1º ponto)"
+              aria-label="Trocar sacador"
+              className="serve-toggle shrink-0"
+              style={{ color: `var(${txtVar})` }}
+            >
+              <ArrowLeftRight className="h-3 w-3" />
+              saque
+            </button>
+          )}
         </div>
+
+        {/* BOLA DE SAQUE: indicador GRANDE e MÓVEL (substitui o antigo pontinho
+            de canto, pouco visível sob sol). Aparece só no bloco de quem saca;
+            desliza suavemente p/ esquerda/direita quando o lado da quadra muda
+            entre pontos (tênis/padel/pickleball) ou fica no centro quando a
+            lateralidade não se aplica (beach/squash/ping pong). Cor = a MESMA
+            variável de tema do número (--lado-*-texto) → mesmo contraste do
+            número nos 4 temas; anel = --lado-*-bg para destacar do fundo. */}
+        {isServing && !finished && (
+          <span
+            aria-hidden
+            className="serve-ball"
+            style={{
+              left: servingCourt === "left" ? "26%" : servingCourt === "right" ? "74%" : "50%",
+              backgroundColor: `var(${txtVar})`,
+              boxShadow: `0 0 0 0.3rem var(${bgVar}), 0 0.3rem 1rem rgba(0, 0, 0, 0.4)`,
+            }}
+          />
+        )}
 
         {/* Número gigante */}
         <div className={`giant-number text-center px-2 ${animating ? "score-animation" : ""}`}>{bigNumber(side)}</div>
