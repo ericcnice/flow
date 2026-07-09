@@ -23,7 +23,7 @@ import { createSpeechSynthesisSpeaker, type Speaker } from "@/lib/voice/speaker"
 // pong/pickleball). O "catálogo" (lib/sports-catalog) é a cola entre a UI e os
 // módulos — ele NÃO altera lib/scoring, só o consome.
 import { ScoringEngine } from "@/lib/scoring/engine"
-import { sportById, familyOf, formatPoint, defaultRulesFor, type SportId } from "@/lib/sports-catalog"
+import { sportById, familyOf, formatPoint, defaultRulesFor, buildScoreCols, type SportId } from "@/lib/sports-catalog"
 import { themeClassName, type ThemeId } from "@/lib/themes"
 import { clubBySlug } from "@/lib/clubs-config"
 import type { GameState, Side } from "@/lib/scoring/types"
@@ -610,19 +610,9 @@ export default function JogoPage() {
   //  - unidade encerrada  → placar daquela unidade (games no set, ou pontos no game);
   //  - unidade em andamento → valor atual, destacado (a "coluna corrente");
   //  - unidade por vir      → played:false → renderizado como dash (–).
-  // O valor da coluna corrente muda por família: games (tênis) vs. pontos corridos.
-  const broadcastCols = Array.from({ length: totalUnits }, (_, i) => {
-    const done = gs.completedSets[i]
-    if (done) {
-      return { setNum: i + 1, played: true, current: false, a: done.A, b: done.B, tb: !!done.tiebreak }
-    }
-    if (!finished && i === gs.completedSets.length) {
-      const a = isTennisFamily ? gs.A.games : gs.A.points
-      const b = isTennisFamily ? gs.B.games : gs.B.points
-      return { setNum: i + 1, played: true, current: true, a, b, tb: isTiebreak }
-    }
-    return { setNum: i + 1, played: false, current: false, a: null as number | null, b: null as number | null, tb: false }
-  })
+  // Fonte de verdade ÚNICA (lib/sports-catalog.buildScoreCols) compartilhada
+  // entre o PLACAR GERAL (tabela horizontal) e a TRILHA da chip central.
+  const broadcastCols = buildScoreCols(gs, { bestOf: totalUnits, isTennisFamily, finished, isTiebreak })
 
   // Ponto do game atual de um lado (coluna destacada na ponta direita).
   // Em tiebreak são os pontos do tiebreak; com a partida encerrada fica vazio.
@@ -833,14 +823,17 @@ export default function JogoPage() {
           </div>
         )}
 
-        {/* PLACAR GERAL: só o PANORAMA que os blocos NÃO mostram (o ponto atual já
-            é GIGANTE). Tênis: SETS + GAMES; rally/sideout (sem sets): só GAMES.
-            Tiebreak vira o selo TB. Toca pra abrir o placar geral (overview).
-            DISPOSIÇÃO: pares EMPILHADOS VERTICALMENTE (SETS em cima, GAMES
-            embaixo), cada linha = rótulo pequeno + números, tudo centralizado.
-            Números em tamanho compacto (text-lg/xl) para a chip não crescer para
-            baixo e invadir a bola de saque (~15% do topo do bloco) nem o número
-            gigante (centralizado no bloco) — em retrato e paisagem. */}
+        {/* TRILHA DE SETS/GAMES: panorama que os blocos NÃO mostram (o ponto
+            atual já é GIGANTE). Uma célula POR UNIDADE (set no tênis/beach/padel,
+            game no rally/side-out), 1 até bestOf, usando o MESMO buildScoreCols
+            do placar geral. Cada célula = nº da unidade (pequeno/discreto) + o
+            resultado dela (ex. "6-4"), em TAMANHO FIXO — só a COR muda:
+              • encerrada  → BRANCO;   • em andamento → AMARELO (#FEE100);
+              • futura     → DASH (–) esmaecido.
+            SEM rótulo "Set"/"Game": idêntico para tênis e rally. Fundo PRETO
+            cobrindo a chip inteira (alto contraste sob sol). Compacta (nº +
+            resultado, sem crescer p/ baixo) p/ não invadir número gigante nem a
+            bola de saque, em retrato e paisagem. Toca p/ abrir o overview. */}
         <button
           type="button"
           onClick={(e) => {
@@ -848,25 +841,28 @@ export default function JogoPage() {
             openOverview()
           }}
           aria-label="Ver placar geral"
-          className="glass pointer-events-auto rounded-2xl px-3.5 py-1.5 flex flex-col items-center gap-0.5
+          className="glass pointer-events-auto rounded-2xl px-2.5 py-1.5 flex items-stretch gap-2 md:gap-3
             active:scale-95 transition-transform"
+          style={{ backgroundColor: "#0a0a0a" }}
         >
-          {isTennisFamily && (
-            <span className="flex items-baseline gap-1.5 leading-none">
-              <span className="opacity-60 text-[9px] md:text-[10px] uppercase tracking-wider">sets</span>
-              <span className="tabular-nums font-bold text-lg md:text-xl leading-none">
-                {gs.A.sets}-{gs.B.sets}
+          {broadcastCols.map((c) => (
+            <span key={c.setNum} className="flex flex-col items-center leading-none">
+              <span className="tabular-nums font-semibold text-[8px] md:text-[9px] text-white/40">{c.setNum}</span>
+              <span
+                className="mt-1 tabular-nums font-bold text-sm md:text-base leading-none"
+                style={{ color: !c.played ? "rgba(255,255,255,0.3)" : c.current ? "#FEE100" : "#ffffff" }}
+              >
+                {c.played ? `${c.a}-${c.b}` : "–"}
               </span>
             </span>
-          )}
-          <span className="flex items-baseline gap-1.5 leading-none">
-            <span className="opacity-60 text-[9px] md:text-[10px] uppercase tracking-wider">games</span>
-            <span className="tabular-nums font-bold text-lg md:text-xl leading-none">
-              {gs.A.games}-{gs.B.games}
-            </span>
-          </span>
+          ))}
           {isTiebreak && (
-            <span className="font-bold tracking-widest text-[10px] md:text-xs opacity-90">TB</span>
+            <span
+              className="self-center font-bold tracking-widest text-[10px] md:text-xs"
+              style={{ color: "#FEE100" }}
+            >
+              TB
+            </span>
           )}
         </button>
       </div>

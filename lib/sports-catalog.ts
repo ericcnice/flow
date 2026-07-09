@@ -82,6 +82,55 @@ export function formatPoint(id: string, side: SideState, isTiebreak: boolean): s
   return side.points.toString()
 }
 
+/**
+ * Uma "coluna" do placar por UNIDADE da partida: set no tênis/beach/padel,
+ * game nos esportes de rally/side-out (squash/ping pong/pickleball).
+ *  - played:true, current:false → unidade JÁ encerrada (resultado em a/b);
+ *  - current:true               → unidade EM ANDAMENTO (valor ao vivo em a/b);
+ *  - played:false               → unidade FUTURA (a/b = null → dash na UI).
+ */
+export type ScoreCol = {
+  /** Número da unidade (1-based): set 1, set 2… (ou game 1, game 2…). */
+  setNum: number
+  played: boolean
+  current: boolean
+  a: number | null
+  b: number | null
+  /** Unidade decidida em tiebreak/super tiebreak (só marca no tênis). */
+  tb: boolean
+}
+
+/**
+ * Monta as colunas do placar (uma por unidade POSSÍVEL, de 1 até `bestOf`) a
+ * partir do {@link GameState}. Fonte de verdade ÚNICA para o placar geral
+ * (visão horizontal/tabela) E para a trilha compacta da chip central — ambos
+ * consomem o MESMO array. NÃO altera lib/scoring: só LÊ o estado exposto
+ * (completedSets + games/points do lado corrente).
+ *
+ * Combina duas fontes: as unidades encerradas vêm de `state.completedSets`; a
+ * unidade em andamento vem dos contadores ao vivo (`games` no tênis, `points`
+ * no rally/side-out); as demais ficam como futuras (dash).
+ */
+export function buildScoreCols(
+  state: GameState,
+  opts: { bestOf: number; isTennisFamily: boolean; finished: boolean; isTiebreak: boolean },
+): ScoreCol[] {
+  const { bestOf, isTennisFamily, finished, isTiebreak } = opts
+  const totalUnits = bestOf || 3
+  return Array.from({ length: totalUnits }, (_, i) => {
+    const done = state.completedSets[i]
+    if (done) {
+      return { setNum: i + 1, played: true, current: false, a: done.A, b: done.B, tb: !!done.tiebreak }
+    }
+    if (!finished && i === state.completedSets.length) {
+      const a = isTennisFamily ? state.A.games : state.A.points
+      const b = isTennisFamily ? state.B.games : state.B.points
+      return { setNum: i + 1, played: true, current: true, a, b, tb: isTiebreak }
+    }
+    return { setNum: i + 1, played: false, current: false, a: null as number | null, b: null as number | null, tb: false }
+  })
+}
+
 /* ------------------------------------------------------------------------- */
 /* Regras configuráveis por esporte (declarativo, para a tela de setup)       */
 /* ------------------------------------------------------------------------- */
