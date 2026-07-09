@@ -180,6 +180,34 @@
   animation: scoreAnimation 0.3s ease-in-out;
 }
 
+/* --- FLASH DE FUNDO ao marcar ponto ------------------------------------
+   Confirmação visual FORTE (perceptível sob sol, onde a variação de tamanho
+   do número é sutil): ao marcar um ponto, o bloco do lado que pontuou INVERTE
+   as cores do tema por um instante — o fundo vira a cor do número e o número
+   vira o fundo — e volta suave ao normal. Usa as variáveis do tema expostas
+   no próprio bloco (--blk-bg/--blk-text = --lado-*-bg/--lado-*-texto),
+   INVERTIDAS, então funciona corretamente nos 4 temas (nunca uma cor fixa).
+   Convive com o crescer do número (.score-animation, em elemento distinto):
+   o flash de ÁREA resolve a leitura sob sol; o crescer continua bonito
+   indoor. Só o bloco que pontuou recebe a classe (via estado `animating`,
+   setado apenas ao marcar ponto/game), então NUNCA dispara em outras ações
+   (abrir config, trocar tema, desfazer). Durante a animação os valores do
+   keyframe vencem o style inline; ao terminar, volta ao normal do inline. */
+@keyframes pointFlash {
+  0%,
+  45% {
+    background-color: var(--blk-text);
+    color: var(--blk-bg);
+  }
+  100% {
+    background-color: var(--blk-bg);
+    color: var(--blk-text);
+  }
+}
+.point-flash {
+  animation: pointFlash 0.34s ease-out;
+}
+
 @keyframes blinkYellow {
   0%,
   100% {

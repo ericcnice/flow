@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, type CSSProperties } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import Image from "next/image"
 import { Input } from "@/components/ui/input"
@@ -309,13 +309,15 @@ export default function JogoPage() {
     // 2º toque rápido no mesmo lado seja reconhecido como "desfazer".
     lastTapRef.current = { team, time: now }
 
-    // Animate the score
+    // Animate the score: crescer do número (.score-animation, 0.3s) + FLASH de
+    // fundo invertido (.point-flash, 0.34s) — os dois pendurados no mesmo estado
+    // `animating`. 360ms cobre a maior das duas p/ a classe não sair no meio.
     if (team === "blue") {
       setAnimatingBlue(true)
-      setTimeout(() => setAnimatingBlue(false), 300)
+      setTimeout(() => setAnimatingBlue(false), 360)
     } else {
       setAnimatingRed(true)
-      setTimeout(() => setAnimatingRed(false), 300)
+      setTimeout(() => setAnimatingRed(false), 360)
     }
 
     // Piscar o card do vencedor quando um game/set/partida é fechado.
@@ -658,9 +660,26 @@ export default function JogoPage() {
         aria-label={`Marcar ponto para ${name}`}
         onClick={() => handleScoreClick(team)}
         className={`relative flex-1 basis-0 flex flex-col items-stretch justify-center overflow-hidden cursor-pointer select-none
-          ${blinking ? "win-blink" : ""}`}
-        style={{ backgroundColor: `var(${bgVar})`, color: `var(${txtVar})` }}
+          ${animating ? "point-flash" : ""}`}
+        style={{
+          backgroundColor: `var(${bgVar})`,
+          color: `var(${txtVar})`,
+          // Expõe as cores do tema deste lado para o keyframe pointFlash inverter
+          // (fundo↔texto) sem saber se é lado A ou B.
+          "--blk-bg": `var(${bgVar})`,
+          "--blk-text": `var(${txtVar})`,
+        } as CSSProperties}
       >
+        {/* Piscar do bloco vencedor (game/set/partida): overlay dedicado. Fica
+            NUM ELEMENTO À PARTE do bloco de propósito — o bloco usa a propriedade
+            `animation` para o FLASH ao marcar ponto (.point-flash), e um elemento
+            só pode ter uma `animation`; o overlay mantém o win-blink (box-shadow
+            inset = mesma borda interna) sem colidir. pointer-events-none p/ não
+            roubar o toque de marcar ponto. */}
+        {blinking && (
+          <span aria-hidden className="win-blink pointer-events-none absolute inset-0 z-20" />
+        )}
+
         {/* Canto: nome do jogador (pequeno) + indicador de saque.
             RETRATO (blocos empilhados): nome à esquerda, saque à direita
             (justify-between) — inalterado. PAISAGEM (blocos lado a lado): o
