@@ -104,12 +104,16 @@
    direita = quadra de iguais/par, esquerda = quadra de vantagem/ímpar; centro
    = sem lateralidade (só indica QUEM saca). A transição em `left` faz a bola
    DESLIZAR suavemente quando o lado muda entre pontos. Fica na FAIXA SUPERIOR
-   do bloco (abaixo do nome) para NÃO cobrir o número gigante (centralizado).
-   Cores herdam as variáveis do tema (definidas inline: fundo = --lado-*-texto,
-   anel = --lado-*-bg), então funciona igual nos 4 temas. */
+   do bloco (abaixo do nome) para NÃO cobrir o número gigante (centralizado);
+   `top: 10%` (era 15%) dá um respiro maior entre a bola e o topo do número —
+   inclusive com números largos como "40" — em retrato e paisagem. Desenhada
+   como uma BOLA DE TÊNIS (SVG): disco na cor do número (--lado-*-texto via
+   currentColor) + duas curvas de costura na cor de fundo do tema (--lado-*-bg)
+   em baixa opacidade, dando profundidade sem prejudicar a leitura de longe.
+   O anel (box-shadow --lado-*-bg) destaca do fundo. Funciona igual nos 4 temas. */
 .serve-ball {
   position: absolute;
-  top: 15%;
+  top: 10%;
   transform: translateX(-50%);
   width: clamp(2.25rem, 7.5vmin, 3.5rem);
   height: clamp(2.25rem, 7.5vmin, 3.5rem);

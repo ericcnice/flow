@@ -738,19 +738,43 @@ export default function JogoPage() {
             de canto, pouco visível sob sol). Aparece só no bloco de quem saca;
             desliza suavemente p/ esquerda/direita quando o lado da quadra muda
             entre pontos (tênis/padel/pickleball) ou fica no centro quando a
-            lateralidade não se aplica (beach/squash/ping pong). Cor = a MESMA
-            variável de tema do número (--lado-*-texto) → mesmo contraste do
-            número nos 4 temas; anel = --lado-*-bg para destacar do fundo. */}
+            lateralidade não se aplica (beach/squash/ping pong).
+            FORMA: bola de tênis estilizada em SVG — disco na cor do número
+            (currentColor = --lado-*-texto, mesmo contraste do número nos 4
+            temas) + duas curvas de "costura" na cor de fundo do tema
+            (--lado-*-bg) em baixa opacidade, dando profundidade de bola de
+            verdade sem comprometer a leitura de longe. Anel = --lado-*-bg. */}
         {isServing && !finished && (
-          <span
+          <svg
             aria-hidden
+            viewBox="0 0 100 100"
             className="serve-ball"
             style={{
               left: servingCourt === "left" ? "26%" : servingCourt === "right" ? "74%" : "50%",
-              backgroundColor: `var(${txtVar})`,
+              color: `var(${txtVar})`,
               boxShadow: `0 0 0 0.3rem var(${bgVar}), 0 0.3rem 1rem rgba(0, 0, 0, 0.4)`,
             }}
-          />
+          >
+            <circle cx="50" cy="50" r="49" fill="currentColor" />
+            {/* Costura da bola: duas curvas simétricas que arqueiam para o
+                centro (a "linha em S" clássica da bola de tênis/padel/beach). */}
+            <path
+              d="M22 10 C40 33 40 67 22 90"
+              fill="none"
+              stroke={`var(${bgVar})`}
+              strokeOpacity={0.5}
+              strokeWidth={4}
+              strokeLinecap="round"
+            />
+            <path
+              d="M78 10 C60 33 60 67 78 90"
+              fill="none"
+              stroke={`var(${bgVar})`}
+              strokeOpacity={0.5}
+              strokeWidth={4}
+              strokeLinecap="round"
+            />
+          </svg>
         )}
 
         {/* Número gigante */}
