@@ -827,16 +827,18 @@ export default function JogoPage() {
         {/* PLACAR CENTRAL: pílula ÚNICA com GLASS (vidro fumê legível sobre o
             bloco claro e o escuro do tema), envolvendo uma TRILHA DE UNIDADES —
             o ÚNICO elemento (não há mais linhas fixas "SETS"/"GAMES"). Uma
-            COLUNA por unidade possível (1..bestOf), vinda de buildScoreCols:
-              • nº da unidade pequeno no topo (1, 2, 3…);
-              • embaixo, o resultado — COR pela unidade ESPECÍFICA (played/current):
-                  - encerrada (played && !current) → BRANCO (placar final, ex "6-4");
-                  - EM ANDAMENTO (current)          → AMARELO #FEE100 (placar ao vivo);
-                  - futura (!played)                → DASH "–" (nunca 0/número).
-            O amarelo pertence à coluna current — conforme o jogo avança ele
-            "anda" da unidade que terminou (vira branca) para a próxima. Rally/
-            side-out usam a MESMA trilha (unidades = games), sem rótulo textual.
-            Toca p/ abrir o overview. */}
+            FILEIRA por unidade possível (1..bestOf), EMPILHADAS de cima p/ baixo
+            (flex-col, não row). Cada fileira = 3 elementos horizontais no grid
+            [1fr auto 1fr]: [lado A] · [dash "-" centralizado] · [lado B] — os
+            dashes centrais formam uma coluna alinhada no meio da pílula. COR por
+            fileira, da unidade ESPECÍFICA (buildScoreCols: c.played/c.current):
+              - encerrada (played && !current) → BRANCO (placar final, ex 6 - 4);
+              - EM ANDAMENTO (current)          → AMARELO #FEE100 (ao vivo, 2 - 1);
+              - futura (!played)                → "–" nos dois lados, esmaecido.
+            O amarelo pertence à fileira current — "anda" p/ a próxima quando um
+            set termina (a que terminou vira branca com o placar final). Rally/
+            side-out usam a MESMA estrutura (unidades = games). Toca p/ abrir o
+            overview. */}
         <button
           type="button"
           onClick={(e) => {
@@ -844,23 +846,29 @@ export default function JogoPage() {
             openOverview()
           }}
           aria-label="Ver placar geral"
-          className="glass pointer-events-auto rounded-2xl px-3 py-1.5 flex items-stretch gap-2.5 md:gap-3.5
+          className="glass pointer-events-auto rounded-2xl px-3.5 py-2 min-w-[3.75rem] flex flex-col items-stretch gap-0.5
             active:scale-95 transition-transform"
         >
-          {broadcastCols.map((c) => (
-            <span key={c.setNum} className="flex flex-col items-center leading-none">
-              <span className="tabular-nums font-semibold text-[8px] md:text-[9px] text-white/40">{c.setNum}</span>
+          {broadcastCols.map((c) => {
+            const color = !c.played ? "rgba(255,255,255,0.35)" : c.current ? "#FEE100" : "#ffffff"
+            return (
               <span
-                className="mt-1 tabular-nums font-bold text-sm md:text-base leading-none"
-                style={{ color: !c.played ? "rgba(255,255,255,0.35)" : c.current ? "#FEE100" : "#ffffff" }}
+                key={c.setNum}
+                className="grid grid-cols-[1fr_auto_1fr] items-baseline gap-x-2.5 leading-none tabular-nums font-bold text-sm md:text-base"
               >
-                {c.played ? `${c.a}-${c.b}` : "–"}
+                <span className="text-right" style={{ color }}>
+                  {c.played ? c.a : "–"}
+                </span>
+                <span className="text-center text-white/40">-</span>
+                <span className="text-left" style={{ color }}>
+                  {c.played ? c.b : "–"}
+                </span>
               </span>
-            </span>
-          ))}
+            )
+          })}
           {isTiebreak && (
             <span
-              className="self-center font-bold tracking-widest text-[10px] md:text-xs"
+              className="text-center font-bold tracking-widest text-[9px] md:text-[10px]"
               style={{ color: "#FEE100" }}
             >
               TB
