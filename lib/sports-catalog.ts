@@ -198,6 +198,7 @@ const racketControls = (): RuleControl[] => [
     key: "bestOf",
     label: "Melhor de",
     options: [
+      { label: "1 set", value: 1 },
       { label: "3 sets", value: 3 },
       { label: "5 sets", value: 5 },
     ],
@@ -253,6 +254,7 @@ const padelControls = (): RuleControl[] => [
     key: "bestOf",
     label: "Melhor de",
     options: [
+      { label: "1 set", value: 1 },
       { label: "3 sets", value: 3 },
       { label: "5 sets", value: 5 },
     ],
