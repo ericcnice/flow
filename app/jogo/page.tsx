@@ -122,6 +122,12 @@ export default function JogoPage() {
   const [redCardBlinking, setRedCardBlinking] = useState(false)
   const [maxSets, setMaxSets] = useState(3)
 
+  // Compartilhar o resultado: ref da "arte" (só a área visual a capturar, SEM
+  // os botões) + estado de "gerando" para o feedback no botão e evitar cliques
+  // repetidos enquanto a imagem é montada.
+  const finishArtRef = useRef<HTMLDivElement>(null)
+  const [sharing, setSharing] = useState(false)
+
   // Último toque de marcação (lado + instante), para reconhecer o DUPLO-TOQUE
   // que desfaz. Não dispara re-render (é só detecção de gesto) → fica em ref.
   const lastTapRef = useRef<{ team: "blue" | "red"; time: number } | null>(null)
@@ -478,6 +484,52 @@ export default function JogoPage() {
     localStorage.removeItem(`tennis_score_${quadra}`)
     rebuildEngine(rulesRef.current, "A", [])
     persist()
+  }
+
+  // COMPARTILHAR o resultado: captura a "arte" (finishArtRef — só o card visual,
+  // sem os botões) como PNG e abre o menu NATIVO de compartilhamento com o
+  // arquivo anexado (WhatsApp, Instagram, etc.). Fluxo:
+  //  1) html-to-image (import dinâmico → fora do bundle até o 1º uso) → Blob PNG;
+  //  2) monta um File e tenta navigator.share({ files }) se canShare aceitar;
+  //  3) FALLBACK (desktop/navegadores sem share de arquivos): baixa o PNG.
+  // Erros são tratados sem quebrar a tela; cancelar o share nativo (AbortError)
+  // é silencioso. O estado `sharing` dá o feedback "Gerando..." e trava recliques.
+  const shareResult = async () => {
+    const node = finishArtRef.current
+    if (!node || sharing) return
+    setSharing(true)
+    try {
+      const { toBlob } = await import("html-to-image")
+      const blob = await toBlob(node, { pixelRatio: 2, cacheBust: true })
+      if (!blob) throw new Error("não foi possível gerar a imagem")
+      const file = new File([blob], `resultado-quadra-${quadra}.png`, { type: "image/png" })
+
+      const nav = navigator as Navigator & { canShare?: (data?: ShareData) => boolean }
+      if (nav.share && nav.canShare?.({ files: [file] })) {
+        await nav.share({
+          files: [file],
+          title: "Resultado da partida",
+          text: `${winnerName} venceu!`,
+        })
+      } else {
+        // Fallback: baixar a imagem (link de download temporário).
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement("a")
+        a.href = url
+        a.download = file.name
+        document.body.appendChild(a)
+        a.click()
+        a.remove()
+        URL.revokeObjectURL(url)
+      }
+    } catch (err) {
+      // Usuário cancelou o menu nativo → silencioso; demais falhas, loga.
+      if ((err as Error)?.name !== "AbortError") {
+        console.error("Compartilhar falhou:", err)
+      }
+    } finally {
+      setSharing(false)
+    }
   }
 
   // Encerrar a partida: descarta o jogo desta quadra e volta pra home.
@@ -1184,7 +1236,7 @@ export default function JogoPage() {
           vencedor, o set-a-set, e o logo do patrocinador (se houver `ad`). */}
       {finished && gs.winner && (
         <div
-          className="stage-finish absolute inset-0 z-40 flex flex-col items-center justify-center gap-5 px-6 py-8 text-center overflow-y-auto"
+          className="stage-finish absolute inset-0 z-40 flex flex-col items-center justify-center gap-5 px-4 py-8 overflow-y-auto"
           style={{
             backgroundColor: `var(--lado-${winnerLetter}-texto)`,
             color: `var(--lado-${winnerLetter}-bg)`,
@@ -1192,67 +1244,82 @@ export default function JogoPage() {
           role="dialog"
           aria-label="Resultado final"
         >
-          {/* Logo do CLUBE (sempre que houver clube de contexto). */}
-          {finishClub?.logo && (
-            <div className="relative aspect-square h-14 md:h-16 rounded-full overflow-hidden shadow-md">
-              <Image src={finishClub.logo} alt={finishClub.nome} fill sizes="72px" className="object-cover" />
-            </div>
-          )}
+          {/* A "ARTE" (finishArtRef): SÓ o que entra na imagem compartilhada —
+              logo do clube, nomes, placar, medalha e patrocinador. Tem fundo
+              próprio (mesma cor da tela → some na tela, mas o PNG fica completo
+              e autocontido). Os botões de ação ficam FORA desta div, então NÃO
+              aparecem na captura. */}
+          <div
+            ref={finishArtRef}
+            className="w-full max-w-md flex flex-col items-center gap-5 rounded-3xl px-6 py-8 text-center"
+            style={{
+              backgroundColor: `var(--lado-${winnerLetter}-texto)`,
+              color: `var(--lado-${winnerLetter}-bg)`,
+            }}
+          >
+            {/* Logo do CLUBE (sempre que houver clube de contexto). */}
+            {finishClub?.logo && (
+              <div className="relative aspect-square h-14 md:h-16 rounded-full overflow-hidden shadow-md">
+                <Image src={finishClub.logo} alt={finishClub.nome} fill sizes="72px" className="object-cover" />
+              </div>
+            )}
 
-          <div className="text-[11px] md:text-sm font-bold uppercase tracking-[0.3em] opacity-70">
-            Resultado final
-          </div>
-
-          {/* Placar: vencedor (🏆) e perdedor, com o total (sets/games). */}
-          <div className="w-full max-w-md flex flex-col gap-2">
-            <div className="flex items-center justify-between gap-4 text-2xl md:text-4xl font-black uppercase">
-              <span className="flex items-center gap-2 min-w-0">
-                <span aria-hidden>🏆</span>
-                <span className="truncate">{winnerName}</span>
-              </span>
-              <span className="tabular-nums">{winnerTally}</span>
+            <div className="text-[11px] md:text-sm font-bold uppercase tracking-[0.3em] opacity-70">
+              Resultado final
             </div>
-            <div className="flex items-center justify-between gap-4 text-xl md:text-3xl font-bold uppercase opacity-70">
-              <span className="truncate min-w-0">{loserName}</span>
-              <span className="tabular-nums">{loserTally}</span>
-            </div>
-          </div>
 
-          {/* Recap set-a-set (unidades já jogadas), em chips na cor normal do
-              vencedor (contraste sobre o fundo invertido). */}
-          <div className="flex items-center justify-center gap-2 flex-wrap text-sm md:text-base font-bold tabular-nums">
-            {broadcastCols
-              .filter((c) => c.played)
-              .map((c) => (
-                <span
-                  key={c.setNum}
-                  className="rounded-md px-2 py-0.5"
-                  style={{
-                    backgroundColor: `var(--lado-${winnerLetter}-bg)`,
-                    color: `var(--lado-${winnerLetter}-texto)`,
-                  }}
-                >
-                  {c.a}-{c.b}
+            {/* Placar: vencedor (🏆) e perdedor, com o total (sets/games). */}
+            <div className="w-full flex flex-col gap-2">
+              <div className="flex items-center justify-between gap-4 text-2xl md:text-4xl font-black uppercase">
+                <span className="flex items-center gap-2 min-w-0">
+                  <span aria-hidden>🏆</span>
+                  <span className="truncate">{winnerName}</span>
                 </span>
-              ))}
-          </div>
-
-          {/* Oferecimento: logo do patrocinador (só se houver `ad`). Cartão
-              branco sólido (assenta o logo de fundo branco e captura bem). */}
-          {finishAd?.logo && (
-            <div className="mt-1 flex flex-col items-center gap-1">
-              <span className="text-[10px] uppercase tracking-[0.2em] opacity-60">Oferecimento</span>
-              <div className="rounded-lg bg-white p-1.5 shadow-md">
-                <div className="relative h-8 md:h-10 w-24 md:w-28">
-                  <Image src={finishAd.logo} alt={finishAd.nome} fill sizes="120px" className="object-contain" />
-                </div>
+                <span className="tabular-nums">{winnerTally}</span>
+              </div>
+              <div className="flex items-center justify-between gap-4 text-xl md:text-3xl font-bold uppercase opacity-70">
+                <span className="truncate min-w-0">{loserName}</span>
+                <span className="tabular-nums">{loserTally}</span>
               </div>
             </div>
-          )}
 
-          {/* Ações. "Jogar de novo" funcional; "Compartilhar" é PLACEHOLDER
-              (desabilitado) — a funcionalidade vem numa etapa seguinte. */}
-          <div className="mt-2 flex items-center gap-3">
+            {/* Recap set-a-set (unidades já jogadas), em chips na cor normal do
+                vencedor (contraste sobre o fundo invertido). */}
+            <div className="flex items-center justify-center gap-2 flex-wrap text-sm md:text-base font-bold tabular-nums">
+              {broadcastCols
+                .filter((c) => c.played)
+                .map((c) => (
+                  <span
+                    key={c.setNum}
+                    className="rounded-md px-2 py-0.5"
+                    style={{
+                      backgroundColor: `var(--lado-${winnerLetter}-bg)`,
+                      color: `var(--lado-${winnerLetter}-texto)`,
+                    }}
+                  >
+                    {c.a}-{c.b}
+                  </span>
+                ))}
+            </div>
+
+            {/* Oferecimento: logo do patrocinador (só se houver `ad`). Cartão
+                branco sólido (assenta o logo de fundo branco e captura bem). */}
+            {finishAd?.logo && (
+              <div className="mt-1 flex flex-col items-center gap-1">
+                <span className="text-[10px] uppercase tracking-[0.2em] opacity-60">Oferecimento</span>
+                <div className="rounded-lg bg-white p-1.5 shadow-md">
+                  <div className="relative h-8 md:h-10 w-24 md:w-28">
+                    <Image src={finishAd.logo} alt={finishAd.nome} fill sizes="120px" className="object-contain" />
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Ações — FORA da arte (não entram na imagem). "Jogar de novo"
+              reinicia; "Compartilhar" captura a arte e abre o share nativo,
+              com feedback "Gerando..." enquanto monta o PNG. */}
+          <div className="mt-1 flex items-center gap-3">
             <button
               type="button"
               onClick={playAgain}
@@ -1267,13 +1334,13 @@ export default function JogoPage() {
             </button>
             <button
               type="button"
-              disabled
-              title="Em breve"
-              aria-label="Compartilhar (em breve)"
+              onClick={shareResult}
+              disabled={sharing}
+              aria-label="Compartilhar resultado"
               className="rounded-full px-6 py-3 font-bold uppercase tracking-wide text-sm md:text-base
-                border-2 border-current opacity-50 cursor-not-allowed"
+                border-2 border-current active:scale-95 transition-transform disabled:opacity-60 disabled:cursor-wait"
             >
-              Compartilhar
+              {sharing ? "Gerando…" : "Compartilhar"}
             </button>
           </div>
 
