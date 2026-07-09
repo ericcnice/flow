@@ -776,36 +776,107 @@ export default function JogoPage() {
           className={`absolute top-0 left-0 right-0 z-10 flex items-start justify-between gap-2 px-4 pt-3 md:px-5 md:pt-4
             ${isA ? "landscape:justify-start" : "landscape:justify-end"}`}
         >
-          {editing ? (
-            <Input
-              value={name}
-              onClick={(e) => e.stopPropagation()}
-              onChange={(e) => setName(e.target.value)}
-              onBlur={() => {
-                setEditing(false)
-                updatePlayerName(team, name)
-              }}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
+          {/* CONTAINER DO NOME: envolve SÓ o nome (texto/Input) e é a ÂNCORA
+              HORIZONTAL da bola de saque em LANDSCAPE. `landscape:relative` → em
+              paisagem este span vira o CONTAINING BLOCK da bola (position
+              estabelecida), então a bola (filha ABSOLUTA aqui dentro) segue a
+              POSIÇÃO REAL do nome — left/top em % passam a ser relativos à CAIXA
+              DO NOME, não a uma % fixa do bloco inteiro. Em RETRATO o container
+              fica `static` (sem `landscape:relative`), então o containing block da
+              bola volta a ser o WRAPPER externo (comportamento de portrait
+              INTACTO). O container NÃO é `portrait:hidden` (só o texto do nome é),
+              senão esconderia a bola junto; a bola é filha absoluta → não conta
+              na largura do container (o container continua "envolvendo só o nome").
+              `max-w-[75%] min-w-0` garante o truncamento do nome como antes. */}
+          <span className="min-w-0 max-w-[75%] landscape:relative">
+            {editing ? (
+              <Input
+                value={name}
+                onClick={(e) => e.stopPropagation()}
+                onChange={(e) => setName(e.target.value)}
+                onBlur={() => {
                   setEditing(false)
                   updatePlayerName(team, name)
-                }
-              }}
-              autoFocus
-              className="h-8 max-w-[70%] bg-transparent border-current/40 text-base font-semibold player-name portrait:hidden"
-              style={{ color: `var(${txtVar})` }}
-            />
-          ) : (
-            <span
-              onClick={(e) => {
-                e.stopPropagation()
-                setEditing(true)
-              }}
-              className="player-name truncate text-sm md:text-base font-semibold uppercase tracking-wide opacity-90 max-w-[75%] portrait:hidden"
-            >
-              {name}
-            </span>
-          )}
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    setEditing(false)
+                    updatePlayerName(team, name)
+                  }
+                }}
+                autoFocus
+                className="h-8 w-full bg-transparent border-current/40 text-base font-semibold player-name portrait:hidden"
+                style={{ color: `var(${txtVar})` }}
+              />
+            ) : (
+              <span
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setEditing(true)
+                }}
+                className="player-name block truncate text-sm md:text-base font-semibold uppercase tracking-wide opacity-90 portrait:hidden"
+              >
+                {name}
+              </span>
+            )}
+
+            {/* BOLA DE SAQUE: indicador GRANDE e MÓVEL. Filha absoluta do
+                CONTAINER DO NOME acima → fica SEMPRE logo abaixo do nome (`top:
+                100%` da caixa do nome + margem) e, em landscape, ACOMPANHA a
+                posição real do nome (não uma % do bloco). Aparece só no bloco de
+                quem saca; desliza p/ esquerda/direita quando o lado da quadra muda
+                (tênis/padel/pickleball) ou fica no centro quando não se aplica
+                (beach/squash/ping pong). FORMA: bola de tênis em SVG — disco na
+                cor do número (currentColor = --lado-*-texto) + duas curvas de
+                costura na cor de fundo do tema (--lado-*-bg) em baixa opacidade.
+                Anel = --lado-*-bg.
+
+                POSIÇÃO HORIZONTAL por ORIENTAÇÃO (a vertical `top:100%` já ancora
+                na base do nome nos dois casos): o `left` sai de duas variáveis e o
+                media query em .serve-ball escolhe qual usar:
+                  - RETRATO: container `static` → left é % do WRAPPER (bloco cheio):
+                    --serve-x-portrait = 26/74/50% ao longo da largura. INALTERADO.
+                  - PAISAGEM: container `relative` → left é % da CAIXA DO NOME:
+                    --serve-x-landscape = 35/50/65% (centrado sob o nome, com um
+                    leve deslize p/ indicar o lado da quadra em tênis/padel).
+                    Como o nome já é jogado p/ a borda externa (landscape:justify-
+                    start/end), a bola segue o nome no canto certo automaticamente. */}
+            {isServing && !finished && (
+              <svg
+                aria-hidden
+                viewBox="0 0 100 100"
+                className="serve-ball"
+                style={{
+                  "--serve-x-portrait":
+                    servingCourt === "left" ? "26%" : servingCourt === "right" ? "74%" : "50%",
+                  "--serve-x-landscape":
+                    servingCourt === "left" ? "35%" : servingCourt === "right" ? "65%" : "50%",
+                  color: `var(${txtVar})`,
+                  boxShadow: `0 0 0 0.3rem var(${bgVar}), 0 0.3rem 1rem rgba(0, 0, 0, 0.4)`,
+                } as CSSProperties}
+              >
+                <circle cx="50" cy="50" r="49" fill="currentColor" />
+                {/* Costura da bola: duas curvas simétricas que arqueiam para o
+                    centro (a "linha em S" clássica da bola de tênis/padel/beach). */}
+                <path
+                  d="M22 10 C40 33 40 67 22 90"
+                  fill="none"
+                  stroke={`var(${bgVar})`}
+                  strokeOpacity={0.5}
+                  strokeWidth={4}
+                  strokeLinecap="round"
+                />
+                <path
+                  d="M78 10 C60 33 60 67 78 90"
+                  fill="none"
+                  stroke={`var(${bgVar})`}
+                  strokeOpacity={0.5}
+                  strokeWidth={4}
+                  strokeLinecap="round"
+                />
+              </svg>
+            )}
+          </span>
 
           {/* Troca de sacador: SÓ antes do 1º ponto e SÓ no bloco de quem saca
               (após o início, o sacador não muda — o motor rejeita). O indicador
@@ -826,72 +897,6 @@ export default function JogoPage() {
               <ArrowLeftRight className="h-3 w-3" />
               saque
             </button>
-          )}
-
-          {/* BOLA DE SAQUE: indicador GRANDE e MÓVEL, ANCORADA a este mesmo
-              container do nome (é filho absoluto do wrapper nome+indicador). Por
-              isso fica SEMPRE logo abaixo do nome (`top: 100%` do wrapper +
-              pequena margem), como um único grupo "quem é / está sacando" — nunca
-              solta no meio nem perto do número gigante. Aparece só no bloco de
-              quem saca; desliza p/ esquerda/direita quando o lado da quadra muda
-              (tênis/padel/pickleball) ou fica no centro quando não se aplica
-              (beach/squash/ping pong). FORMA: bola de tênis em SVG — disco na cor
-              do número (currentColor = --lado-*-texto) + duas curvas de costura
-              na cor de fundo do tema (--lado-*-bg) em baixa opacidade. Anel =
-              --lado-*-bg.
-
-              POSIÇÃO HORIZONTAL por ORIENTAÇÃO (a vertical `top:100%` já ancora na
-              base do nome nos dois casos): o `left` sai de duas variáveis e o
-              media query em .serve-ball escolhe qual usar:
-                - RETRATO (bloco = tela cheia): --serve-x-portrait = 26/74/50% —
-                  mostra o lado da quadra ao longo de toda a largura. INALTERADO.
-                - PAISAGEM (bloco = meia tela): --serve-x-landscape fica no CANTO
-                  do nome (A à esquerda 14–26%, B à direita 74–86%), logo abaixo do
-                  nome e longe do número gigante central; ainda desliza um pouco p/
-                  indicar o lado da quadra (tênis/padel). */}
-          {isServing && !finished && (
-            <svg
-              aria-hidden
-              viewBox="0 0 100 100"
-              className="serve-ball"
-              style={{
-                "--serve-x-portrait":
-                  servingCourt === "left" ? "26%" : servingCourt === "right" ? "74%" : "50%",
-                "--serve-x-landscape": isA
-                  ? servingCourt === "left"
-                    ? "14%"
-                    : servingCourt === "right"
-                      ? "26%"
-                      : "20%"
-                  : servingCourt === "left"
-                    ? "74%"
-                    : servingCourt === "right"
-                      ? "86%"
-                      : "80%",
-                color: `var(${txtVar})`,
-                boxShadow: `0 0 0 0.3rem var(${bgVar}), 0 0.3rem 1rem rgba(0, 0, 0, 0.4)`,
-              } as CSSProperties}
-            >
-              <circle cx="50" cy="50" r="49" fill="currentColor" />
-              {/* Costura da bola: duas curvas simétricas que arqueiam para o
-                  centro (a "linha em S" clássica da bola de tênis/padel/beach). */}
-              <path
-                d="M22 10 C40 33 40 67 22 90"
-                fill="none"
-                stroke={`var(${bgVar})`}
-                strokeOpacity={0.5}
-                strokeWidth={4}
-                strokeLinecap="round"
-              />
-              <path
-                d="M78 10 C60 33 60 67 78 90"
-                fill="none"
-                stroke={`var(${bgVar})`}
-                strokeOpacity={0.5}
-                strokeWidth={4}
-                strokeLinecap="round"
-              />
-            </svg>
           )}
         </div>
 
