@@ -838,17 +838,39 @@ export default function JogoPage() {
               (beach/squash/ping pong). FORMA: bola de tênis em SVG — disco na cor
               do número (currentColor = --lado-*-texto) + duas curvas de costura
               na cor de fundo do tema (--lado-*-bg) em baixa opacidade. Anel =
-              --lado-*-bg. */}
+              --lado-*-bg.
+
+              POSIÇÃO HORIZONTAL por ORIENTAÇÃO (a vertical `top:100%` já ancora na
+              base do nome nos dois casos): o `left` sai de duas variáveis e o
+              media query em .serve-ball escolhe qual usar:
+                - RETRATO (bloco = tela cheia): --serve-x-portrait = 26/74/50% —
+                  mostra o lado da quadra ao longo de toda a largura. INALTERADO.
+                - PAISAGEM (bloco = meia tela): --serve-x-landscape fica no CANTO
+                  do nome (A à esquerda 14–26%, B à direita 74–86%), logo abaixo do
+                  nome e longe do número gigante central; ainda desliza um pouco p/
+                  indicar o lado da quadra (tênis/padel). */}
           {isServing && !finished && (
             <svg
               aria-hidden
               viewBox="0 0 100 100"
               className="serve-ball"
               style={{
-                left: servingCourt === "left" ? "26%" : servingCourt === "right" ? "74%" : "50%",
+                "--serve-x-portrait":
+                  servingCourt === "left" ? "26%" : servingCourt === "right" ? "74%" : "50%",
+                "--serve-x-landscape": isA
+                  ? servingCourt === "left"
+                    ? "14%"
+                    : servingCourt === "right"
+                      ? "26%"
+                      : "20%"
+                  : servingCourt === "left"
+                    ? "74%"
+                    : servingCourt === "right"
+                      ? "86%"
+                      : "80%",
                 color: `var(${txtVar})`,
                 boxShadow: `0 0 0 0.3rem var(${bgVar}), 0 0.3rem 1rem rgba(0, 0, 0, 0.4)`,
-              }}
+              } as CSSProperties}
             >
               <circle cx="50" cy="50" r="49" fill="currentColor" />
               {/* Costura da bola: duas curvas simétricas que arqueiam para o

@@ -123,8 +123,20 @@
   border-radius: 9999px;
   pointer-events: none;
   z-index: 10;
+  /* Posição horizontal por orientação (valores vêm inline como CSS vars). A
+     vertical (top:100%) já ancora na base do nome nos dois casos.
+     - Retrato (bloco = tela cheia): posição ao longo de toda a largura. */
+  left: var(--serve-x-portrait);
   transition: left 0.45s cubic-bezier(0.22, 1, 0.36, 1);
   animation: serveBallIn 0.3s ease-out;
+}
+/* Paisagem (larga-e-baixa, bloco = meia tela): a bola vai p/ o CANTO do nome
+   (A à esquerda, B à direita), logo abaixo do nome e longe do número gigante
+   central — em vez de ficar solta sobre ele. Mesma transição em `left`. */
+@media (orientation: landscape) {
+  .serve-ball {
+    left: var(--serve-x-landscape);
+  }
 }
 @keyframes serveBallIn {
   from {
