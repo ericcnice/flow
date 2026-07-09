@@ -722,50 +722,51 @@ export default function JogoPage() {
               saque
             </button>
           )}
-        </div>
 
-        {/* BOLA DE SAQUE: indicador GRANDE e MÓVEL (substitui o antigo pontinho
-            de canto, pouco visível sob sol). Aparece só no bloco de quem saca;
-            desliza suavemente p/ esquerda/direita quando o lado da quadra muda
-            entre pontos (tênis/padel/pickleball) ou fica no centro quando a
-            lateralidade não se aplica (beach/squash/ping pong).
-            FORMA: bola de tênis estilizada em SVG — disco na cor do número
-            (currentColor = --lado-*-texto, mesmo contraste do número nos 4
-            temas) + duas curvas de "costura" na cor de fundo do tema
-            (--lado-*-bg) em baixa opacidade, dando profundidade de bola de
-            verdade sem comprometer a leitura de longe. Anel = --lado-*-bg. */}
-        {isServing && !finished && (
-          <svg
-            aria-hidden
-            viewBox="0 0 100 100"
-            className="serve-ball"
-            style={{
-              left: servingCourt === "left" ? "26%" : servingCourt === "right" ? "74%" : "50%",
-              color: `var(${txtVar})`,
-              boxShadow: `0 0 0 0.3rem var(${bgVar}), 0 0.3rem 1rem rgba(0, 0, 0, 0.4)`,
-            }}
-          >
-            <circle cx="50" cy="50" r="49" fill="currentColor" />
-            {/* Costura da bola: duas curvas simétricas que arqueiam para o
-                centro (a "linha em S" clássica da bola de tênis/padel/beach). */}
-            <path
-              d="M22 10 C40 33 40 67 22 90"
-              fill="none"
-              stroke={`var(${bgVar})`}
-              strokeOpacity={0.5}
-              strokeWidth={4}
-              strokeLinecap="round"
-            />
-            <path
-              d="M78 10 C60 33 60 67 78 90"
-              fill="none"
-              stroke={`var(${bgVar})`}
-              strokeOpacity={0.5}
-              strokeWidth={4}
-              strokeLinecap="round"
-            />
-          </svg>
-        )}
+          {/* BOLA DE SAQUE: indicador GRANDE e MÓVEL, ANCORADA a este mesmo
+              container do nome (é filho absoluto do wrapper nome+indicador). Por
+              isso fica SEMPRE logo abaixo do nome (`top: 100%` do wrapper +
+              pequena margem), como um único grupo "quem é / está sacando" — nunca
+              solta no meio nem perto do número gigante. Aparece só no bloco de
+              quem saca; desliza p/ esquerda/direita quando o lado da quadra muda
+              (tênis/padel/pickleball) ou fica no centro quando não se aplica
+              (beach/squash/ping pong). FORMA: bola de tênis em SVG — disco na cor
+              do número (currentColor = --lado-*-texto) + duas curvas de costura
+              na cor de fundo do tema (--lado-*-bg) em baixa opacidade. Anel =
+              --lado-*-bg. */}
+          {isServing && !finished && (
+            <svg
+              aria-hidden
+              viewBox="0 0 100 100"
+              className="serve-ball"
+              style={{
+                left: servingCourt === "left" ? "26%" : servingCourt === "right" ? "74%" : "50%",
+                color: `var(${txtVar})`,
+                boxShadow: `0 0 0 0.3rem var(${bgVar}), 0 0.3rem 1rem rgba(0, 0, 0, 0.4)`,
+              }}
+            >
+              <circle cx="50" cy="50" r="49" fill="currentColor" />
+              {/* Costura da bola: duas curvas simétricas que arqueiam para o
+                  centro (a "linha em S" clássica da bola de tênis/padel/beach). */}
+              <path
+                d="M22 10 C40 33 40 67 22 90"
+                fill="none"
+                stroke={`var(${bgVar})`}
+                strokeOpacity={0.5}
+                strokeWidth={4}
+                strokeLinecap="round"
+              />
+              <path
+                d="M78 10 C60 33 60 67 78 90"
+                fill="none"
+                stroke={`var(${bgVar})`}
+                strokeOpacity={0.5}
+                strokeWidth={4}
+                strokeLinecap="round"
+              />
+            </svg>
+          )}
+        </div>
 
         {/* Número gigante */}
         <div className={`giant-number text-center px-2 ${animating ? "score-animation" : ""}`}>{bigNumber(side)}</div>
@@ -823,19 +824,19 @@ export default function JogoPage() {
           </div>
         )}
 
-        {/* PLACAR CENTRAL: pílula ÚNICA com GLASS (vidro fumê que fica legível
-            tanto sobre o bloco claro quanto o escuro do tema). Panorama que os
-            blocos NÃO mostram (o ponto atual já é GIGANTE), em DUAS LINHAS
-            empilhadas que "atravessam" a divisa das duas metades:
-              LINHA 1 (SETS):  A à esquerda · traço centralizado na divisa · B à direita
-              LINHA 2 (GAMES): mesma estrutura (games do set/unidade atual)
-            Uma divisória vertical sutil no meio costura as duas metades e o
-            traço de cada linha fica exatamente sobre ela. CORES: sets encerrados
-            em BRANCO; a linha em andamento (games) em AMARELO (#FEE100) — ambas
-            legíveis no glass em todos os 4 temas. Rally/side-out (sem sets):
-            só a linha de GAMES. O detalhamento set-a-set + dashes de unidades
-            futuras (buildScoreCols) segue no OVERVIEW (um toque). Toca p/ abrir
-            o overview. Compacta (2 linhas) p/ não invadir número/bola de saque. */}
+        {/* PLACAR CENTRAL: pílula ÚNICA com GLASS (vidro fumê legível sobre o
+            bloco claro e o escuro do tema), envolvendo uma TRILHA DE UNIDADES —
+            o ÚNICO elemento (não há mais linhas fixas "SETS"/"GAMES"). Uma
+            COLUNA por unidade possível (1..bestOf), vinda de buildScoreCols:
+              • nº da unidade pequeno no topo (1, 2, 3…);
+              • embaixo, o resultado — COR pela unidade ESPECÍFICA (played/current):
+                  - encerrada (played && !current) → BRANCO (placar final, ex "6-4");
+                  - EM ANDAMENTO (current)          → AMARELO #FEE100 (placar ao vivo);
+                  - futura (!played)                → DASH "–" (nunca 0/número).
+            O amarelo pertence à coluna current — conforme o jogo avança ele
+            "anda" da unidade que terminou (vira branca) para a próxima. Rally/
+            side-out usam a MESMA trilha (unidades = games), sem rótulo textual.
+            Toca p/ abrir o overview. */}
         <button
           type="button"
           onClick={(e) => {
@@ -843,35 +844,25 @@ export default function JogoPage() {
             openOverview()
           }}
           aria-label="Ver placar geral"
-          className="glass pointer-events-auto relative rounded-2xl px-3 py-1.5 min-w-[4.75rem] flex flex-col items-stretch gap-0.5
+          className="glass pointer-events-auto rounded-2xl px-3 py-1.5 flex items-stretch gap-2.5 md:gap-3.5
             active:scale-95 transition-transform"
         >
-          {/* Divisória vertical central (costura das duas metades). */}
-          <span
-            aria-hidden
-            className="pointer-events-none absolute top-1.5 bottom-1.5 left-1/2 w-px -translate-x-1/2 bg-white/15"
-          />
-
-          {isTennisFamily && (
-            <span className="grid grid-cols-[1fr_auto_1fr] items-baseline gap-x-2.5 leading-none text-white">
-              <span className="tabular-nums font-bold text-base md:text-lg text-right">{gs.A.sets}</span>
-              <span className="tabular-nums font-bold text-base md:text-lg text-center text-white/45">-</span>
-              <span className="tabular-nums font-bold text-base md:text-lg text-left">{gs.B.sets}</span>
+          {broadcastCols.map((c) => (
+            <span key={c.setNum} className="flex flex-col items-center leading-none">
+              <span className="tabular-nums font-semibold text-[8px] md:text-[9px] text-white/40">{c.setNum}</span>
+              <span
+                className="mt-1 tabular-nums font-bold text-sm md:text-base leading-none"
+                style={{ color: !c.played ? "rgba(255,255,255,0.35)" : c.current ? "#FEE100" : "#ffffff" }}
+              >
+                {c.played ? `${c.a}-${c.b}` : "–"}
+              </span>
             </span>
-          )}
-
-          <span className="grid grid-cols-[1fr_auto_1fr] items-baseline gap-x-2.5 leading-none">
-            <span className="tabular-nums font-bold text-base md:text-lg text-right" style={{ color: "#FEE100" }}>
-              {gs.A.games}
-            </span>
-            <span className="tabular-nums font-bold text-base md:text-lg text-center text-white/45">-</span>
-            <span className="tabular-nums font-bold text-base md:text-lg text-left" style={{ color: "#FEE100" }}>
-              {gs.B.games}
-            </span>
-          </span>
-
+          ))}
           {isTiebreak && (
-            <span className="text-center font-bold tracking-widest text-[9px] md:text-[10px]" style={{ color: "#FEE100" }}>
+            <span
+              className="self-center font-bold tracking-widest text-[10px] md:text-xs"
+              style={{ color: "#FEE100" }}
+            >
               TB
             </span>
           )}

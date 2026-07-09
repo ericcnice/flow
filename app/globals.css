@@ -103,18 +103,20 @@
    horizontal (`left`, definida inline no JSX) indica o LADO da quadra:
    direita = quadra de iguais/par, esquerda = quadra de vantagem/ímpar; centro
    = sem lateralidade (só indica QUEM saca). A transição em `left` faz a bola
-   DESLIZAR suavemente quando o lado muda entre pontos. Fica ANCORADA logo
-   ABAIXO do grupo nome+indicador do topo do bloco (`top: 2.75rem`, um pouco
-   abaixo da linha do nome) — não mais "solta no meio" — e continua acima do
-   número gigante (centralizado). Tamanho MAIOR (clamp 3–4.25rem) para não se
-   perder. Desenhada como uma BOLA DE TÊNIS (SVG): disco na cor do número
-   (--lado-*-texto via currentColor) + duas curvas de costura na cor de fundo do
-   tema (--lado-*-bg) em baixa opacidade, dando profundidade sem prejudicar a
-   leitura de longe. O anel (box-shadow --lado-*-bg) destaca do fundo. Funciona
-   igual nos 4 temas, em retrato e paisagem. */
+   DESLIZAR suavemente quando o lado muda entre pontos. É filha ABSOLUTA do
+   wrapper nome+indicador (position:absolute, top-0), então `top: 100%` a
+   ancora exatamente na BASE do nome e `margin-top` dá um respiro curto — a
+   bola acompanha o nome como um só grupo, sempre logo abaixo dele (nome curto
+   ou longo, que é truncado numa linha), bem acima do número gigante. Tamanho
+   MAIOR (clamp 3–4.25rem) para não se perder. Desenhada como uma BOLA DE TÊNIS
+   (SVG): disco na cor do número (--lado-*-texto via currentColor) + duas curvas
+   de costura na cor de fundo do tema (--lado-*-bg) em baixa opacidade, dando
+   profundidade sem prejudicar a leitura de longe. O anel (box-shadow
+   --lado-*-bg) destaca do fundo. Funciona igual nos 4 temas, retrato/paisagem. */
 .serve-ball {
   position: absolute;
-  top: 2.75rem;
+  top: 100%;
+  margin-top: 0.4rem;
   transform: translateX(-50%);
   width: clamp(3rem, 11vmin, 4.25rem);
   height: clamp(3rem, 11vmin, 4.25rem);
