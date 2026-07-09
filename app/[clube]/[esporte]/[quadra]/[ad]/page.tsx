@@ -6,8 +6,12 @@
  * botão JOGAR) antes de iniciar o jogo.
  */
 
+import { useParams } from "next/navigation"
 import { ClubOpening } from "@/components/club-opening"
 
 export default function ClubQuadraAdPage() {
-  return <ClubOpening hasAd={true} />
+  // Passa o VALOR real do anúncio (ex.: "ad1") — não só o booleano — para que
+  // ele seja persistido na config e usado depois (tela de fim de jogo).
+  const params = useParams<{ ad: string }>()
+  return <ClubOpening hasAd ad={params?.ad} />
 }

@@ -25,7 +25,7 @@ import { createSpeechSynthesisSpeaker, type Speaker } from "@/lib/voice/speaker"
 import { ScoringEngine } from "@/lib/scoring/engine"
 import { sportById, familyOf, formatPoint, defaultRulesFor, buildScoreCols, type SportId } from "@/lib/sports-catalog"
 import { themeClassName, type ThemeId } from "@/lib/themes"
-import { clubBySlug } from "@/lib/clubs-config"
+import { clubBySlug, adBySlug } from "@/lib/clubs-config"
 import type { GameState, Side } from "@/lib/scoring/types"
 
 type GameConfig = {
@@ -37,6 +37,9 @@ type GameConfig = {
   /** Clube de contexto (quando a partida veio da jornada /[clube]/...). Ausente
    *  = jogo genérico iniciado pela home; sem assinatura de clube no placar. */
   clube?: string
+  /** Anúncio/patrocinador da abertura (ex.: "ad1"). Só quando a rota tinha
+   *  /[ad]; ausente em jogos sem patrocínio ou partidas antigas. */
+  ad?: string
   gameType: string
   scoreType: string
   players: {
@@ -466,6 +469,17 @@ export default function JogoPage() {
     }
   }
 
+  // "Jogar de novo" da TELA DE FIM: zera o placar mantendo o MESMO config e os
+  // mesmos jogadores. Reaproveita a reconstrução do resetGame, sem o confirm —
+  // a partida já acabou, não há o que perder. finished volta a false → a tela de
+  // fim some e o placar normal reaparece zerado.
+  const playAgain = () => {
+    localStorage.removeItem(`tennis_engine_${quadra}`)
+    localStorage.removeItem(`tennis_score_${quadra}`)
+    rebuildEngine(rulesRef.current, "A", [])
+    persist()
+  }
+
   // Encerrar a partida: descarta o jogo desta quadra e volta pra home.
   // (Ação herdada do antigo GameMenu — ver rodapé do overlay de config.)
   const endMatch = () => {
@@ -615,6 +629,23 @@ export default function JogoPage() {
   // Fonte de verdade ÚNICA (lib/sports-catalog.buildScoreCols) compartilhada
   // entre o PLACAR GERAL (tabela horizontal) e a TRILHA da chip central.
   const broadcastCols = buildScoreCols(gs, { bestOf: totalUnits, isTennisFamily, finished, isTiebreak })
+
+  // --- Dados da TELA DE FIM DE JOGO (só usados quando finished) -------------
+  // Lado vencedor → letra da variável de tema (--lado-a-* / --lado-b-*). A tela
+  // de fim usa essas cores INVERTIDAS (fundo = cor do número, texto = fundo),
+  // "congelando" a cor do vencedor. O tally é sets no tênis, games no rally.
+  const winnerLetter = gs.winner === "B" ? "b" : "a"
+  const winnerName = gs.winner === "B" ? redPlayerName : bluePlayerName
+  const loserName = gs.winner === "B" ? bluePlayerName : redPlayerName
+  const winnerTally = isTennisFamily
+    ? gs.winner === "B" ? gs.B.sets : gs.A.sets
+    : gs.winner === "B" ? gs.B.games : gs.A.games
+  const loserTally = isTennisFamily
+    ? gs.winner === "B" ? gs.A.sets : gs.B.sets
+    : gs.winner === "B" ? gs.A.games : gs.B.games
+  // Logos: clube SEMPRE que houver clube; patrocinador só se o campo `ad` existir.
+  const finishClub = clube ? clubBySlug(clube) : null
+  const finishAd = adBySlug(gameConfig.ad)
 
   // Ponto do game atual de um lado (coluna destacada na ponta direita).
   // Em tiebreak são os pontos do tiebreak; com a partida encerrada fica vazio.
@@ -1138,6 +1169,122 @@ export default function JogoPage() {
               </div>
             }
           />
+        </div>
+      )}
+
+      {/* TELA DE FIM DE JOGO: quando a partida termina, um overlay OPACO de tela
+          cheia SUBSTITUI o placar normal com o resultado final. Pensada como "a
+          arte que vira imagem de compartilhamento": SÓ cores sólidas do tema +
+          texto + logos, SEM glass/blur (efeitos complexos capturam mal).
+          A cor do vencedor "congela": o fundo INTEIRO usa as cores do lado
+          vencedor INVERTIDAS (fundo = cor do número, texto = fundo do bloco) —
+          a mesma lógica de cor do flash de ponto, mas permanente até reiniciar,
+          deixando claro de longe quem ganhou. Mostra: logo do clube (se houver),
+          nomes + placar final (sets no tênis / games no rally) com 🏆 no
+          vencedor, o set-a-set, e o logo do patrocinador (se houver `ad`). */}
+      {finished && gs.winner && (
+        <div
+          className="stage-finish absolute inset-0 z-40 flex flex-col items-center justify-center gap-5 px-6 py-8 text-center overflow-y-auto"
+          style={{
+            backgroundColor: `var(--lado-${winnerLetter}-texto)`,
+            color: `var(--lado-${winnerLetter}-bg)`,
+          }}
+          role="dialog"
+          aria-label="Resultado final"
+        >
+          {/* Logo do CLUBE (sempre que houver clube de contexto). */}
+          {finishClub?.logo && (
+            <div className="relative aspect-square h-14 md:h-16 rounded-full overflow-hidden shadow-md">
+              <Image src={finishClub.logo} alt={finishClub.nome} fill sizes="72px" className="object-cover" />
+            </div>
+          )}
+
+          <div className="text-[11px] md:text-sm font-bold uppercase tracking-[0.3em] opacity-70">
+            Resultado final
+          </div>
+
+          {/* Placar: vencedor (🏆) e perdedor, com o total (sets/games). */}
+          <div className="w-full max-w-md flex flex-col gap-2">
+            <div className="flex items-center justify-between gap-4 text-2xl md:text-4xl font-black uppercase">
+              <span className="flex items-center gap-2 min-w-0">
+                <span aria-hidden>🏆</span>
+                <span className="truncate">{winnerName}</span>
+              </span>
+              <span className="tabular-nums">{winnerTally}</span>
+            </div>
+            <div className="flex items-center justify-between gap-4 text-xl md:text-3xl font-bold uppercase opacity-70">
+              <span className="truncate min-w-0">{loserName}</span>
+              <span className="tabular-nums">{loserTally}</span>
+            </div>
+          </div>
+
+          {/* Recap set-a-set (unidades já jogadas), em chips na cor normal do
+              vencedor (contraste sobre o fundo invertido). */}
+          <div className="flex items-center justify-center gap-2 flex-wrap text-sm md:text-base font-bold tabular-nums">
+            {broadcastCols
+              .filter((c) => c.played)
+              .map((c) => (
+                <span
+                  key={c.setNum}
+                  className="rounded-md px-2 py-0.5"
+                  style={{
+                    backgroundColor: `var(--lado-${winnerLetter}-bg)`,
+                    color: `var(--lado-${winnerLetter}-texto)`,
+                  }}
+                >
+                  {c.a}-{c.b}
+                </span>
+              ))}
+          </div>
+
+          {/* Oferecimento: logo do patrocinador (só se houver `ad`). Cartão
+              branco sólido (assenta o logo de fundo branco e captura bem). */}
+          {finishAd?.logo && (
+            <div className="mt-1 flex flex-col items-center gap-1">
+              <span className="text-[10px] uppercase tracking-[0.2em] opacity-60">Oferecimento</span>
+              <div className="rounded-lg bg-white p-1.5 shadow-md">
+                <div className="relative h-8 md:h-10 w-24 md:w-28">
+                  <Image src={finishAd.logo} alt={finishAd.nome} fill sizes="120px" className="object-contain" />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Ações. "Jogar de novo" funcional; "Compartilhar" é PLACEHOLDER
+              (desabilitado) — a funcionalidade vem numa etapa seguinte. */}
+          <div className="mt-2 flex items-center gap-3">
+            <button
+              type="button"
+              onClick={playAgain}
+              className="rounded-full px-6 py-3 font-black uppercase tracking-wide text-sm md:text-base
+                active:scale-95 transition-transform shadow-md"
+              style={{
+                backgroundColor: `var(--lado-${winnerLetter}-bg)`,
+                color: `var(--lado-${winnerLetter}-texto)`,
+              }}
+            >
+              Jogar de novo
+            </button>
+            <button
+              type="button"
+              disabled
+              title="Em breve"
+              aria-label="Compartilhar (em breve)"
+              className="rounded-full px-6 py-3 font-bold uppercase tracking-wide text-sm md:text-base
+                border-2 border-current opacity-50 cursor-not-allowed"
+            >
+              Compartilhar
+            </button>
+          </div>
+
+          {/* Encerrar (voltar à home) — discreto, para não ficar preso na tela. */}
+          <button
+            type="button"
+            onClick={endMatch}
+            className="mt-1 text-[11px] uppercase tracking-widest underline opacity-60"
+          >
+            Encerrar partida
+          </button>
         </div>
       )}
 

@@ -36,7 +36,7 @@ const SCREEN_MS = 4000
 // versão de fundo PRETO sobre a tela preta.
 const NICHOLAS_LOGO = "/nicholas-dark.png"
 
-export function ClubOpening({ hasAd }: { hasAd: boolean }) {
+export function ClubOpening({ hasAd, ad }: { hasAd: boolean; ad?: string }) {
   const router = useRouter()
   const params = useParams<{ clube: string; esporte: string; quadra: string }>()
 
@@ -59,6 +59,9 @@ export function ClubOpening({ hasAd }: { hasAd: boolean }) {
       sport: sportId,
       theme: DEFAULT_THEME,
       clube: club.id,
+      // Patrocinador/anúncio da abertura (ex.: "ad1"). Só entra quando a rota
+      // tem /[ad]; sem ele o campo nem aparece na config (retrocompatível).
+      ...(ad ? { ad } : {}),
       gameType: "simples",
       scoreType: "pontos",
       players: { blue1: "Jogador 1", blue2: "Jogador 2", red1: "Jogador 3", red2: "Jogador 4" },

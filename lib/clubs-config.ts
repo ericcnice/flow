@@ -47,10 +47,32 @@ export const SPORT_SLUG_TO_ID: Record<string, SportId> = {
   pickleball: "pickleball",
 }
 
+/** Um ANÚNCIO/PATROCINADOR da jornada de contexto (segmento /[ad] da URL). */
+export type AdConfig = {
+  /** id estável = slug do anúncio na URL (ex.: "ad1"). */
+  id: string
+  /** Nome amigável do patrocinador. */
+  nome: string
+  /** Logo em /public. Versão de FUNDO BRANCO (assenta bem num cartão claro,
+   *  ex.: a tela de fim de jogo que vira imagem de compartilhamento). */
+  logo: string
+}
+
+/** Anúncios cadastrados, indexados pelo slug de URL (ex.: "ad1" = Nicholas). */
+export const ADS: Record<string, AdConfig> = {
+  ad1: { id: "ad1", nome: "Nicholas", logo: "/nicholas-light.png" },
+}
+
 /** Clube pelo slug (case-insensitive). null se não existir. */
 export function clubBySlug(slug: string | null | undefined): ClubConfig | null {
   if (!slug) return null
   return CLUBS[slug.toLowerCase()] ?? null
+}
+
+/** Anúncio/patrocinador pelo slug (case-insensitive). null se ausente/vazio. */
+export function adBySlug(slug: string | null | undefined): AdConfig | null {
+  if (!slug) return null
+  return ADS[slug.toLowerCase()] ?? null
 }
 
 /** id do esporte a partir do slug de URL. null se o slug não for reconhecido. */
