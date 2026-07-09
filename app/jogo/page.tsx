@@ -915,7 +915,7 @@ export default function JogoPage() {
             }
           }}
           autoFocus
-          className="h-7 w-full bg-transparent border-white/30 text-center text-sm font-semibold text-white player-name"
+          className="h-7 w-full bg-transparent border-white/30 text-left text-sm font-semibold text-white player-name"
         />
       )
     }
@@ -926,7 +926,7 @@ export default function JogoPage() {
           e.stopPropagation()
           setEditing(true)
         }}
-        className="player-name w-full truncate text-center text-xs font-semibold uppercase tracking-wide text-white/90"
+        className="player-name w-full truncate text-left text-xs font-semibold uppercase tracking-wide text-white/90"
       >
         {nm}
       </button>
@@ -1034,44 +1034,77 @@ export default function JogoPage() {
       </div>
 
       {/* PLACAR CENTRAL — VARIANTE RETRATO (estreita-e-alta): FAIXA HORIZONTAL
-          FINA ancorada na LINHA DIVISÓRIA entre os dois blocos empilhados (meio
-          da tela, top-1/2), NÃO no topo-centro. Dentro dela, da esquerda p/ a
-          direita: NOME do JOGADOR 1 (lado A/azul) · placar de sets/games compacto
-          (mesmos c.a/c.b e cores de buildScoreCols, agrupados "a-b" na horizontal)
-          · NOME do JOGADOR 3 (lado B/vermelho). Os nomes vieram dos cantos (que
-          agora ficam livres p/ a bola de saque). Mesmo GLASS da pílula de
-          paisagem; tocar no placar central abre o overview; tocar num nome edita.
+          ancorada na LINHA DIVISÓRIA entre os dois blocos empilhados (meio da
+          tela, top-1/2), NÃO no topo-centro. Estrutura em DUAS LINHAS, uma por
+          jogador (sem bloco de placar central separado):
+            - LINHA 1: nome do JOGADOR 1 (lado A/azul) à esquerda + os números de
+              c.a de cada coluna de buildScoreCols (na ordem, com "–" p/ futuras);
+            - LINHA 2: nome do JOGADOR 3 (lado B/vermelho) à esquerda + os números
+              de c.b, na MESMA ordem.
+          Um ÚNICO GRID [nome | col×N] com auto-flow em linha garante que o número
+          de cada unidade fique em COLUNA alinhada verticalmente entre as duas
+          linhas (set 1 de cima exatamente acima do set 1 de baixo, etc.): a 1ª
+          coluna é o nome (minmax(0,1fr), truncável) e as N seguintes têm LARGURA
+          FIXA por unidade. Cor por UNIDADE (não por jogador): branco encerrada,
+          amarelo current (aplicada ao número daquela unidade nas DUAS linhas),
+          dash esmaecido futura — direto de buildScoreCols. Os nomes vieram dos
+          cantos (que ficam livres p/ a bola de saque). Mesmo GLASS da pílula de
+          paisagem; tocar na pílula abre o overview (div role=button, os nomes dão
+          stopPropagation p/ editar); tocar num nome edita.
           `landscape:hidden` → em paisagem (larga-e-baixa) esta faixa NÃO existe e
           vale a pílula vertical do topo (inalterada). */}
       <div className="landscape:hidden pointer-events-none absolute left-1/2 top-1/2 z-30 flex w-full -translate-x-1/2 -translate-y-1/2 justify-center px-3">
-        <div className="glass pointer-events-auto flex max-w-full items-center gap-2 rounded-full py-1 pl-3 pr-3">
-          <div className="min-w-0 flex-1">{renderPillName("blue")}</div>
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation()
-              openOverview()
-            }}
-            aria-label="Ver placar geral"
-            className="flex shrink-0 items-center gap-2 px-1 active:scale-95 transition-transform"
-          >
-            {broadcastCols.map((c) => {
-              const color = !c.played ? "rgba(255,255,255,0.35)" : c.current ? "#FEE100" : "#ffffff"
-              return (
-                <span key={c.setNum} className="flex items-baseline gap-0.5 leading-none tabular-nums font-bold text-sm">
-                  <span style={{ color }}>{c.played ? c.a : "–"}</span>
-                  <span className="text-white/40">-</span>
-                  <span style={{ color }}>{c.played ? c.b : "–"}</span>
-                </span>
-              )
-            })}
-            {isTiebreak && (
-              <span className="font-bold tracking-widest text-[9px]" style={{ color: "#FEE100" }}>
-                TB
+        <div
+          role="button"
+          tabIndex={0}
+          onClick={(e) => {
+            e.stopPropagation()
+            openOverview()
+          }}
+          aria-label="Ver placar geral"
+          className="glass pointer-events-auto grid max-w-full items-center gap-x-3 gap-y-1 rounded-2xl px-3.5 py-2
+            active:scale-[0.98] transition-transform"
+          style={{ gridTemplateColumns: `minmax(0,1fr) repeat(${broadcastCols.length}, 1.35rem)` }}
+        >
+          {/* LINHA 1 — JOGADOR 1 (lado A): nome + números c.a por unidade */}
+          <div className="min-w-0">{renderPillName("blue")}</div>
+          {broadcastCols.map((c) => {
+            const color = !c.played ? "rgba(255,255,255,0.35)" : c.current ? "#FEE100" : "#ffffff"
+            return (
+              <span
+                key={`a-${c.setNum}`}
+                className="text-center leading-none tabular-nums font-bold text-sm"
+                style={{ color }}
+              >
+                {c.played ? c.a : "–"}
               </span>
-            )}
-          </button>
-          <div className="min-w-0 flex-1">{renderPillName("red")}</div>
+            )
+          })}
+
+          {/* LINHA 2 — JOGADOR 3 (lado B): nome + números c.b por unidade (mesma
+              ordem/colunas, cor da MESMA unidade → alinhamento vertical) */}
+          <div className="min-w-0">{renderPillName("red")}</div>
+          {broadcastCols.map((c) => {
+            const color = !c.played ? "rgba(255,255,255,0.35)" : c.current ? "#FEE100" : "#ffffff"
+            return (
+              <span
+                key={`b-${c.setNum}`}
+                className="text-center leading-none tabular-nums font-bold text-sm"
+                style={{ color }}
+              >
+                {c.played ? c.b : "–"}
+              </span>
+            )
+          })}
+
+          {isTiebreak && (
+            <span
+              className="col-span-full text-center font-bold tracking-widest text-[9px]"
+              style={{ color: "#FEE100" }}
+            >
+              TB
+            </span>
+          )}
         </div>
       </div>
 
