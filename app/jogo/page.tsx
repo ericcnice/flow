@@ -683,21 +683,35 @@ export default function JogoPage() {
   const broadcastCols = buildScoreCols(gs, { bestOf: totalUnits, isTennisFamily, finished, isTiebreak })
 
   // --- Dados da TELA DE FIM DE JOGO (só usados quando finished) -------------
-  // Lado vencedor → letra da variável de tema (--lado-a-* / --lado-b-*). A tela
-  // de fim usa essas cores INVERTIDAS (fundo = cor do número, texto = fundo),
-  // "congelando" a cor do vencedor. O tally é sets no tênis, games no rally.
+  // Lado vencedor → letra p/ selecionar quem venceu (A/B). O recap por unidade
+  // usa broadcastCols (adaptado por família), então não precisamos mais do tally
+  // agregado de sets/games aqui.
   const winnerLetter = gs.winner === "B" ? "b" : "a"
   const winnerName = gs.winner === "B" ? redPlayerName : bluePlayerName
   const loserName = gs.winner === "B" ? bluePlayerName : redPlayerName
-  const winnerTally = isTennisFamily
-    ? gs.winner === "B" ? gs.B.sets : gs.A.sets
-    : gs.winner === "B" ? gs.B.games : gs.A.games
-  const loserTally = isTennisFamily
-    ? gs.winner === "B" ? gs.A.sets : gs.B.sets
-    : gs.winner === "B" ? gs.A.games : gs.B.games
   // Logos: clube SEMPRE que houver clube; patrocinador só se o campo `ad` existir.
   const finishClub = clube ? clubBySlug(clube) : null
   const finishAd = adBySlug(gameConfig.ad)
+
+  // --- Dados extra da ARTE de fim de jogo (design azul-marinho FIXO) ---------
+  // Nome AMIGÁVEL do esporte (dinâmico p/ o título da arte): "Tênis", "Beach
+  // Tennis", "Padel", "Squash", "Ping Pong", "Pickleball" — vem do catálogo.
+  const finishSportName = sportById(sport).name
+  // Recap por UNIDADE: números do vencedor (linha de cima) e do perdedor (linha
+  // de baixo), uma entrada por unidade JÁ JOGADA. Igual p/ todas as famílias —
+  // broadcastCols já adapta a "unidade" (set no tênis; game/pontos no rally/
+  // side-out), então squash/ping pong/pickleball ganham o recap coerente de graça.
+  const finishPlayedCols = broadcastCols.filter((c) => c.played)
+  const winnerRecap = finishPlayedCols.map((c) => (winnerLetter === "a" ? c.a : c.b))
+  const loserRecap = finishPlayedCols.map((c) => (winnerLetter === "a" ? c.b : c.a))
+  // Data do jogo formatada (ex. "9 DE JULHO 2026") a partir de startTime.
+  const finishMonths = [
+    "JANEIRO", "FEVEREIRO", "MARÇO", "ABRIL", "MAIO", "JUNHO",
+    "JULHO", "AGOSTO", "SETEMBRO", "OUTUBRO", "NOVEMBRO", "DEZEMBRO",
+  ]
+  const finishDate = startTime
+    ? `${startTime.getDate()} DE ${finishMonths[startTime.getMonth()]} ${startTime.getFullYear()}`
+    : ""
 
   // Ponto do game atual de um lado (coluna destacada na ponta direita).
   // Em tiebreak são os pontos do tiebreak; com a partida encerrada fica vazio.
@@ -1385,111 +1399,139 @@ export default function JogoPage() {
         </div>
       )}
 
-      {/* TELA DE FIM DE JOGO: quando a partida termina, um overlay OPACO de tela
-          cheia SUBSTITUI o placar normal com o resultado final. Pensada como "a
-          arte que vira imagem de compartilhamento": SÓ cores sólidas do tema +
-          texto + logos, SEM glass/blur (efeitos complexos capturam mal).
-          A cor do vencedor "congela": o fundo INTEIRO usa as cores do lado
-          vencedor INVERTIDAS (fundo = cor do número, texto = fundo do bloco) —
-          a mesma lógica de cor do flash de ponto, mas permanente até reiniciar,
-          deixando claro de longe quem ganhou. Mostra: logo do clube (se houver),
-          nomes + placar final (sets no tênis / games no rally) com 🏆 no
-          vencedor, o set-a-set, e o logo do patrocinador (se houver `ad`). */}
+      {/* TELA DE FIM DE JOGO: overlay OPACO de tela cheia com o resultado final,
+          pensado como "a arte que vira imagem de compartilhamento". Desde este
+          redesign o visual é FIXO — fundo AZUL-MARINHO escuro sólido (#12123a),
+          textos branco/amarelo/cinza — e NÃO depende do tema do jogo nem do
+          esporte (funciona idêntico p/ tênis, beach, padel, squash, ping pong,
+          pickleball). SÓ cores sólidas + texto + logos, SEM glass/blur (efeitos
+          complexos capturam mal). O nome do esporte é dinâmico (catálogo) e o
+          recap usa broadcastCols (adapta set/game por família). */}
       {finished && gs.winner && (
         <div
-          className="stage-finish absolute inset-0 z-40 flex flex-col items-center justify-center gap-5 px-4 py-8 overflow-y-auto"
-          style={{
-            backgroundColor: `var(--lado-${winnerLetter}-texto)`,
-            color: `var(--lado-${winnerLetter}-bg)`,
-          }}
+          className="stage-finish absolute inset-0 z-40 flex flex-col items-center justify-center gap-4 px-4 py-8 overflow-y-auto"
+          style={{ backgroundColor: "#0b0b24", color: "#ffffff" }}
           role="dialog"
           aria-label="Resultado final"
         >
-          {/* A "ARTE" (finishArtRef): SÓ o que entra na imagem compartilhada —
-              logo do clube, nomes, placar, medalha e patrocinador. Tem fundo
-              próprio (mesma cor da tela → some na tela, mas o PNG fica completo
-              e autocontido). Os botões de ação ficam FORA desta div, então NÃO
-              aparecem na captura. */}
+          {/* A "ARTE" (finishArtRef): SÓ o que entra na imagem compartilhada.
+              Fundo próprio (azul-marinho) → o PNG fica completo e autocontido.
+              Os botões de ação ficam FORA desta div (abaixo), então NÃO aparecem
+              na captura — mecanismo de captura inalterado. */}
           <div
             ref={finishArtRef}
-            className="w-full max-w-md flex flex-col items-center gap-5 rounded-3xl px-6 py-8 text-center"
-            style={{
-              backgroundColor: `var(--lado-${winnerLetter}-texto)`,
-              color: `var(--lado-${winnerLetter}-bg)`,
-            }}
+            className="w-full max-w-sm flex flex-col items-center gap-4 rounded-3xl px-7 py-8 text-center"
+            style={{ backgroundColor: "#12123a", color: "#ffffff" }}
           >
-            {/* Logo do CLUBE (sempre que houver clube de contexto). */}
+            {/* 1. Logo do CLUBE — grande, centralizado no topo. */}
             {finishClub?.logo && (
-              <div className="relative aspect-square h-14 md:h-16 rounded-full overflow-hidden shadow-md">
-                <Image src={finishClub.logo} alt={finishClub.nome} fill sizes="72px" className="object-cover" />
+              <div className="relative aspect-square h-24 md:h-28 rounded-full overflow-hidden shadow-lg">
+                <Image src={finishClub.logo} alt={finishClub.nome} fill sizes="128px" className="object-cover" />
               </div>
             )}
 
-            <div className="text-[11px] md:text-sm font-bold uppercase tracking-[0.3em] opacity-70">
-              Resultado final
+            {/* 2. Divisor fino. */}
+            <div className="h-px w-full bg-white/15" />
+
+            {/* 3. Nome do ESPORTE (dinâmico), grande, branco, com boa separação. */}
+            <div className="text-2xl md:text-3xl font-black uppercase tracking-[0.22em] leading-tight">
+              {finishSportName}
             </div>
 
-            {/* Placar: vencedor (🏆) e perdedor, com o total (sets/games). */}
-            <div className="w-full flex flex-col gap-2">
-              <div className="flex items-center justify-between gap-4 text-2xl md:text-4xl font-black uppercase">
-                <span className="flex items-center gap-2 min-w-0">
-                  <span aria-hidden>🏆</span>
-                  <span className="truncate">{winnerName}</span>
+            {/* 4. Divisor fino. */}
+            <div className="h-px w-full bg-white/15" />
+
+            {/* 5. Colocação do vencedor: anel azul-claro (só contorno) com "1º"
+                   grande em amarelo (número + "º" sobrescrito menor). */}
+            <div
+              className="flex items-center justify-center rounded-full"
+              style={{ height: "6rem", width: "6rem", border: "3px solid #6c9cff" }}
+            >
+              <span className="font-black leading-none" style={{ color: "#FEE100" }}>
+                <span className="text-5xl md:text-6xl align-baseline">1</span>
+                <span className="text-xl md:text-2xl align-super">º</span>
+              </span>
+            </div>
+
+            {/* 6. Vencedor: nome em amarelo bold + "VENCEDOR" abaixo, branco/menor. */}
+            <div className="flex flex-col items-center gap-1">
+              <div
+                className="max-w-full truncate text-3xl md:text-4xl font-black uppercase leading-none"
+                style={{ color: "#FEE100" }}
+              >
+                {winnerName}
+              </div>
+              <div className="text-xs md:text-sm font-bold uppercase tracking-[0.35em] text-white/85">
+                Vencedor
+              </div>
+            </div>
+
+            {/* 7. Recap do placar: uma linha por jogador — vencedor em cima
+                   (branco), perdedor embaixo (cinza). Cada linha: nome à esquerda
+                   + números por unidade (set no tênis; game/pontos no rally/
+                   side-out) alinhados em coluna entre as duas linhas. */}
+            <div
+              className="w-full flex flex-col gap-1 text-lg md:text-xl font-bold tabular-nums"
+              style={{ display: "grid", gridTemplateColumns: `minmax(0,1fr) repeat(${finishPlayedCols.length}, 1.6rem)` }}
+            >
+              <div className="contents">
+                <span className="truncate text-left uppercase" style={{ color: "#ffffff" }}>
+                  {winnerName}
                 </span>
-                <span className="tabular-nums">{winnerTally}</span>
-              </div>
-              <div className="flex items-center justify-between gap-4 text-xl md:text-3xl font-bold uppercase opacity-70">
-                <span className="truncate min-w-0">{loserName}</span>
-                <span className="tabular-nums">{loserTally}</span>
-              </div>
-            </div>
-
-            {/* Recap set-a-set (unidades já jogadas), em chips na cor normal do
-                vencedor (contraste sobre o fundo invertido). */}
-            <div className="flex items-center justify-center gap-2 flex-wrap text-sm md:text-base font-bold tabular-nums">
-              {broadcastCols
-                .filter((c) => c.played)
-                .map((c) => (
-                  <span
-                    key={c.setNum}
-                    className="rounded-md px-2 py-0.5"
-                    style={{
-                      backgroundColor: `var(--lado-${winnerLetter}-bg)`,
-                      color: `var(--lado-${winnerLetter}-texto)`,
-                    }}
-                  >
-                    {c.a}-{c.b}
+                {winnerRecap.map((v, i) => (
+                  <span key={`w-${i}`} className="text-center" style={{ color: "#ffffff" }}>
+                    {v}
                   </span>
                 ))}
+              </div>
+              <div className="contents">
+                <span className="truncate text-left uppercase" style={{ color: "#8a8ab0" }}>
+                  {loserName}
+                </span>
+                {loserRecap.map((v, i) => (
+                  <span key={`l-${i}`} className="text-center" style={{ color: "#8a8ab0" }}>
+                    {v}
+                  </span>
+                ))}
+              </div>
             </div>
 
-            {/* Oferecimento: logo do patrocinador (só se houver `ad`). Cartão
-                branco sólido (assenta o logo de fundo branco e captura bem). */}
+            {/* 9 + 10. Oferecimento: divisor + "OFERECIMENTO" à esquerda e o logo
+                   do patrocinador em CARTÃO PRETO grande à direita (só se `ad`). */}
             {finishAd?.logo && (
-              <div className="mt-1 flex flex-col items-center gap-1">
-                <span className="text-[10px] uppercase tracking-[0.2em] opacity-60">Oferecimento</span>
-                <div className="rounded-lg bg-white p-1.5 shadow-md">
-                  <div className="relative h-8 md:h-10 w-24 md:w-28">
-                    <Image src={finishAd.logo} alt={finishAd.nome} fill sizes="120px" className="object-contain" />
+              <>
+                <div className="h-px w-full bg-white/15" />
+                <div className="w-full flex items-center justify-between gap-3">
+                  <span className="text-[11px] md:text-xs font-bold uppercase tracking-[0.2em] text-white/70">
+                    Oferecimento
+                  </span>
+                  <div className="rounded-xl bg-black p-2.5 shadow-md">
+                    <div className="relative h-12 md:h-14 w-32 md:w-36">
+                      <Image src={finishAd.logo} alt={finishAd.nome} fill sizes="160px" className="object-contain" />
+                    </div>
                   </div>
                 </div>
-              </div>
+              </>
             )}
+
+            {/* 11. Divisor + data do jogo (dinâmica). */}
+            <div className="h-px w-full bg-white/15" />
+            <div className="text-[11px] md:text-xs font-bold uppercase tracking-[0.25em] text-white/60">
+              {finishDate}
+            </div>
           </div>
 
-          {/* Ações — FORA da arte (não entram na imagem). "Jogar de novo"
-              reinicia; "Compartilhar" captura a arte e abre o share nativo,
-              com feedback "Gerando..." enquanto monta o PNG. */}
+          {/* 8. Ações — FORA da arte (não entram na imagem). "JOGAR DE NOVO"
+              (preenchido branco) e "COMPARTILHAR" (contornado, transparente).
+              Compartilhar captura a arte e abre o share nativo, com "Gerando…"
+              enquanto monta o PNG. */}
           <div className="mt-1 flex items-center gap-3">
             <button
               type="button"
               onClick={playAgain}
               className="rounded-full px-6 py-3 font-black uppercase tracking-wide text-sm md:text-base
                 active:scale-95 transition-transform shadow-md"
-              style={{
-                backgroundColor: `var(--lado-${winnerLetter}-bg)`,
-                color: `var(--lado-${winnerLetter}-texto)`,
-              }}
+              style={{ backgroundColor: "#ffffff", color: "#12123a" }}
             >
               Jogar de novo
             </button>
@@ -1499,7 +1541,7 @@ export default function JogoPage() {
               disabled={sharing}
               aria-label="Compartilhar resultado"
               className="rounded-full px-6 py-3 font-bold uppercase tracking-wide text-sm md:text-base
-                border-2 border-current active:scale-95 transition-transform disabled:opacity-60 disabled:cursor-wait"
+                border-2 border-white text-white active:scale-95 transition-transform disabled:opacity-60 disabled:cursor-wait"
             >
               {sharing ? "Gerando…" : "Compartilhar"}
             </button>
@@ -1509,7 +1551,7 @@ export default function JogoPage() {
           <button
             type="button"
             onClick={endMatch}
-            className="mt-1 text-[11px] uppercase tracking-widest underline opacity-60"
+            className="mt-1 text-[11px] uppercase tracking-widest underline text-white/60"
           >
             Encerrar partida
           </button>
