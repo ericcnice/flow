@@ -811,7 +811,12 @@ export default function JogoPage() {
 
         {/* PLACAR GERAL: só o PANORAMA que os blocos NÃO mostram (o ponto atual já
             é GIGANTE). Tênis: SETS + GAMES; rally/sideout (sem sets): só GAMES.
-            Tiebreak vira o selo TB. Toca pra abrir o placar geral. */}
+            Tiebreak vira o selo TB. Toca pra abrir o placar geral (overview).
+            DISPOSIÇÃO: pares EMPILHADOS VERTICALMENTE (SETS em cima, GAMES
+            embaixo), cada linha = rótulo pequeno + números, tudo centralizado.
+            Números em tamanho compacto (text-lg/xl) para a chip não crescer para
+            baixo e invadir a bola de saque (~15% do topo do bloco) nem o número
+            gigante (centralizado no bloco) — em retrato e paisagem. */}
         <button
           type="button"
           onClick={(e) => {
@@ -819,26 +824,25 @@ export default function JogoPage() {
             openOverview()
           }}
           aria-label="Ver placar geral"
-          className="glass pointer-events-auto rounded-2xl px-4 py-1.5 flex items-end gap-3.5
+          className="glass pointer-events-auto rounded-2xl px-3.5 py-1.5 flex flex-col items-center gap-0.5
             active:scale-95 transition-transform"
         >
           {isTennisFamily && (
-            <span className="flex flex-col items-center leading-none">
-              <span className="opacity-60 text-[9px] md:text-[10px] uppercase tracking-wider mb-0.5">sets</span>
-              <span className="tabular-nums font-bold text-2xl md:text-3xl leading-none">
+            <span className="flex items-baseline gap-1.5 leading-none">
+              <span className="opacity-60 text-[9px] md:text-[10px] uppercase tracking-wider">sets</span>
+              <span className="tabular-nums font-bold text-lg md:text-xl leading-none">
                 {gs.A.sets}-{gs.B.sets}
               </span>
             </span>
           )}
-          {isTennisFamily && <span className="opacity-25 text-xl md:text-2xl leading-none pb-0.5">·</span>}
-          <span className="flex flex-col items-center leading-none">
-            <span className="opacity-60 text-[9px] md:text-[10px] uppercase tracking-wider mb-0.5">games</span>
-            <span className="tabular-nums font-bold text-2xl md:text-3xl leading-none">
+          <span className="flex items-baseline gap-1.5 leading-none">
+            <span className="opacity-60 text-[9px] md:text-[10px] uppercase tracking-wider">games</span>
+            <span className="tabular-nums font-bold text-lg md:text-xl leading-none">
               {gs.A.games}-{gs.B.games}
             </span>
           </span>
           {isTiebreak && (
-            <span className="self-center font-bold tracking-widest text-[10px] md:text-xs opacity-90">TB</span>
+            <span className="font-bold tracking-widest text-[10px] md:text-xs opacity-90">TB</span>
           )}
         </button>
       </div>
