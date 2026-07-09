@@ -764,11 +764,14 @@ export default function JogoPage() {
         )}
 
         {/* Canto: nome do jogador (pequeno) + indicador de saque.
-            RETRATO (blocos empilhados): nome à esquerda, saque à direita
-            (justify-between) — inalterado. PAISAGEM (blocos lado a lado): o
-            grupo nome+saque foge do CENTRO (onde fica o placar geral no topo) e
-            huga a borda EXTERNA de cada bloco — lado A à esquerda, lado B à
-            direita — para o placar central não cobrir o nome do lado direito. */}
+            RETRATO (estreita-e-alta, blocos empilhados): o NOME SAI do canto (é
+            `portrait:hidden` aqui) e passa para a FAIXA HORIZONTAL central sobre
+            a linha divisória — assim o canto fica LIVRE e a bola de saque vira o
+            único elemento ali (menos sobreposição do nome/número/bola). PAISAGEM
+            (larga-e-baixa, blocos lado a lado): INALTERADO — o grupo nome+saque
+            foge do CENTRO (onde fica o placar geral no topo) e huga a borda
+            EXTERNA de cada bloco — lado A à esquerda, lado B à direita — para o
+            placar central não cobrir o nome do lado direito. */}
         <div
           className={`absolute top-0 left-0 right-0 z-10 flex items-start justify-between gap-2 px-4 pt-3 md:px-5 md:pt-4
             ${isA ? "landscape:justify-start" : "landscape:justify-end"}`}
@@ -789,7 +792,7 @@ export default function JogoPage() {
                 }
               }}
               autoFocus
-              className="h-8 max-w-[70%] bg-transparent border-current/40 text-base font-semibold player-name"
+              className="h-8 max-w-[70%] bg-transparent border-current/40 text-base font-semibold player-name portrait:hidden"
               style={{ color: `var(${txtVar})` }}
             />
           ) : (
@@ -798,7 +801,7 @@ export default function JogoPage() {
                 e.stopPropagation()
                 setEditing(true)
               }}
-              className="player-name truncate text-sm md:text-base font-semibold uppercase tracking-wide opacity-90 max-w-[75%]"
+              className="player-name truncate text-sm md:text-base font-semibold uppercase tracking-wide opacity-90 max-w-[75%] portrait:hidden"
             >
               {name}
             </span>
@@ -883,6 +886,53 @@ export default function JogoPage() {
     )
   }
 
+  // Nome do jogador DENTRO da faixa central (só RETRATO): mesma edição inline do
+  // canto (mesmo estado editing*, mesmo updatePlayerName), mas centralizado e em
+  // cor de vidro. Como o canto é `portrait:hidden` (display:none) em retrato, só
+  // ESTE input existe/autofoca em retrato; em paisagem esta faixa é
+  // `landscape:hidden` (display:none) e quem edita é o canto — sem conflito de
+  // autofocus nem duplicidade.
+  const renderPillName = (team: "blue" | "red") => {
+    const isA = team === "blue"
+    const nm = isA ? bluePlayerName : redPlayerName
+    const setNm = isA ? setBluePlayerName : setRedPlayerName
+    const editing = isA ? editingBluePlayer : editingRedPlayer
+    const setEditing = isA ? setEditingBluePlayer : setEditingRedPlayer
+    if (editing) {
+      return (
+        <Input
+          value={nm}
+          onClick={(e) => e.stopPropagation()}
+          onChange={(e) => setNm(e.target.value)}
+          onBlur={() => {
+            setEditing(false)
+            updatePlayerName(team, nm)
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              setEditing(false)
+              updatePlayerName(team, nm)
+            }
+          }}
+          autoFocus
+          className="h-7 w-full bg-transparent border-white/30 text-center text-sm font-semibold text-white player-name"
+        />
+      )
+    }
+    return (
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation()
+          setEditing(true)
+        }}
+        className="player-name w-full truncate text-center text-xs font-semibold uppercase tracking-wide text-white/90"
+      >
+        {nm}
+      </button>
+    )
+  }
+
   return (
     <div
       className={`relative flex flex-col h-[100dvh] overflow-hidden mono-tabular ${themeClassName(theme)}`}
@@ -926,7 +976,11 @@ export default function JogoPage() {
           </div>
         )}
 
-        {/* PLACAR CENTRAL: pílula ÚNICA com GLASS (vidro fumê legível sobre o
+        {/* PLACAR CENTRAL — VARIANTE PAISAGEM (larga-e-baixa): pílula VERTICAL
+            no TOPO-CENTRO, INALTERADA. É `portrait:hidden`, então em retrato dá
+            lugar à faixa horizontal logo abaixo (sobre a divisória). Em paisagem
+            (larga-e-baixa) permanece EXATAMENTE como antes.
+            Pílula ÚNICA com GLASS (vidro fumê legível sobre o
             bloco claro e o escuro do tema), envolvendo uma TRILHA DE UNIDADES —
             o ÚNICO elemento (não há mais linhas fixas "SETS"/"GAMES"). Uma
             FILEIRA por unidade possível (1..bestOf), EMPILHADAS de cima p/ baixo
@@ -949,7 +1003,7 @@ export default function JogoPage() {
           }}
           aria-label="Ver placar geral"
           className="glass pointer-events-auto rounded-2xl px-3.5 py-2 min-w-[3.75rem] flex flex-col items-stretch gap-0.5
-            active:scale-95 transition-transform"
+            active:scale-95 transition-transform portrait:hidden"
         >
           {broadcastCols.map((c) => {
             const color = !c.played ? "rgba(255,255,255,0.35)" : c.current ? "#FEE100" : "#ffffff"
@@ -977,6 +1031,48 @@ export default function JogoPage() {
             </span>
           )}
         </button>
+      </div>
+
+      {/* PLACAR CENTRAL — VARIANTE RETRATO (estreita-e-alta): FAIXA HORIZONTAL
+          FINA ancorada na LINHA DIVISÓRIA entre os dois blocos empilhados (meio
+          da tela, top-1/2), NÃO no topo-centro. Dentro dela, da esquerda p/ a
+          direita: NOME do JOGADOR 1 (lado A/azul) · placar de sets/games compacto
+          (mesmos c.a/c.b e cores de buildScoreCols, agrupados "a-b" na horizontal)
+          · NOME do JOGADOR 3 (lado B/vermelho). Os nomes vieram dos cantos (que
+          agora ficam livres p/ a bola de saque). Mesmo GLASS da pílula de
+          paisagem; tocar no placar central abre o overview; tocar num nome edita.
+          `landscape:hidden` → em paisagem (larga-e-baixa) esta faixa NÃO existe e
+          vale a pílula vertical do topo (inalterada). */}
+      <div className="landscape:hidden pointer-events-none absolute left-1/2 top-1/2 z-30 flex w-full -translate-x-1/2 -translate-y-1/2 justify-center px-3">
+        <div className="glass pointer-events-auto flex max-w-full items-center gap-2 rounded-full py-1 pl-3 pr-3">
+          <div className="min-w-0 flex-1">{renderPillName("blue")}</div>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation()
+              openOverview()
+            }}
+            aria-label="Ver placar geral"
+            className="flex shrink-0 items-center gap-2 px-1 active:scale-95 transition-transform"
+          >
+            {broadcastCols.map((c) => {
+              const color = !c.played ? "rgba(255,255,255,0.35)" : c.current ? "#FEE100" : "#ffffff"
+              return (
+                <span key={c.setNum} className="flex items-baseline gap-0.5 leading-none tabular-nums font-bold text-sm">
+                  <span style={{ color }}>{c.played ? c.a : "–"}</span>
+                  <span className="text-white/40">-</span>
+                  <span style={{ color }}>{c.played ? c.b : "–"}</span>
+                </span>
+              )
+            })}
+            {isTiebreak && (
+              <span className="font-bold tracking-widest text-[9px]" style={{ color: "#FEE100" }}>
+                TB
+              </span>
+            )}
+          </button>
+          <div className="min-w-0 flex-1">{renderPillName("red")}</div>
+        </div>
       </div>
 
       {/* BARRA DE CONTROLES no RODAPÉ: três posições (grid-cols-3) que nunca se
