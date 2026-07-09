@@ -832,23 +832,28 @@ export default function JogoPage() {
                 Anel = --lado-*-bg.
 
                 POSIÇÃO HORIZONTAL por ORIENTAÇÃO (a vertical `top:100%` já ancora
-                na base do nome nos dois casos): o `left` sai de duas variáveis e o
-                media query em .serve-ball escolhe qual usar:
-                  - RETRATO: container `static` → left é % do WRAPPER (bloco cheio):
-                    --serve-x-portrait = 26/74/50% ao longo da largura. INALTERADO.
+                perto do topo do bloco nos dois casos): o `left` sai de duas
+                variáveis e o media query em .serve-ball escolhe qual usar:
+                  - RETRATO: container `static` → left é % do WRAPPER (que cobre a
+                    faixa superior do bloco inteiro, left-0 right-0). Aqui os nomes
+                    migraram p/ a pílula central, então os cantos ficaram livres:
+                    --serve-x-portrait é FIXO em 85% (canto superior DIREITO), IGUAL
+                    nos dois blocos (não espelhado) e SEM deslizar — não segue mais
+                    o lado da quadra nem a antiga posição do nome. Só muda QUAL
+                    bloco a exibe (o de quem saca).
                   - PAISAGEM: container `relative` → left é % da CAIXA DO NOME:
                     --serve-x-landscape = 35/50/65% (centrado sob o nome, com um
                     leve deslize p/ indicar o lado da quadra em tênis/padel).
                     Como o nome já é jogado p/ a borda externa (landscape:justify-
-                    start/end), a bola segue o nome no canto certo automaticamente. */}
+                    start/end), a bola segue o nome no canto certo automaticamente.
+                    INALTERADO. */}
             {isServing && !finished && (
               <svg
                 aria-hidden
                 viewBox="0 0 100 100"
                 className="serve-ball"
                 style={{
-                  "--serve-x-portrait":
-                    servingCourt === "left" ? "26%" : servingCourt === "right" ? "74%" : "50%",
+                  "--serve-x-portrait": "85%",
                   "--serve-x-landscape":
                     servingCourt === "left" ? "35%" : servingCourt === "right" ? "65%" : "50%",
                   color: `var(${txtVar})`,

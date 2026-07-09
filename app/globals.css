@@ -128,8 +128,9 @@
      BLOCK muda por orientação via o container do nome (static em retrato,
      `landscape:relative` em paisagem), então o mesmo `left: %` mede coisas
      diferentes em cada modo:
-     - Retrato: container do nome é `static` → % é relativa ao WRAPPER (bloco
-       cheio); --serve-x-portrait = 26/74/50% ao longo de toda a largura. */
+     - Retrato: container do nome é `static` → % é relativa ao WRAPPER (faixa
+       superior do bloco inteiro); --serve-x-portrait é FIXO em 85% = canto
+       superior direito, sem deslizar (os nomes migraram p/ a pílula central). */
   left: var(--serve-x-portrait);
   transition: left 0.45s cubic-bezier(0.22, 1, 0.36, 1);
   animation: serveBallIn 0.3s ease-out;
