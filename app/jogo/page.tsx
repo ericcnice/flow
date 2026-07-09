@@ -823,17 +823,19 @@ export default function JogoPage() {
           </div>
         )}
 
-        {/* TRILHA DE SETS/GAMES: panorama que os blocos NÃO mostram (o ponto
-            atual já é GIGANTE). Uma célula POR UNIDADE (set no tênis/beach/padel,
-            game no rally/side-out), 1 até bestOf, usando o MESMO buildScoreCols
-            do placar geral. Cada célula = nº da unidade (pequeno/discreto) + o
-            resultado dela (ex. "6-4"), em TAMANHO FIXO — só a COR muda:
-              • encerrada  → BRANCO;   • em andamento → AMARELO (#FEE100);
-              • futura     → DASH (–) esmaecido.
-            SEM rótulo "Set"/"Game": idêntico para tênis e rally. Fundo PRETO
-            cobrindo a chip inteira (alto contraste sob sol). Compacta (nº +
-            resultado, sem crescer p/ baixo) p/ não invadir número gigante nem a
-            bola de saque, em retrato e paisagem. Toca p/ abrir o overview. */}
+        {/* PLACAR CENTRAL: pílula ÚNICA com GLASS (vidro fumê que fica legível
+            tanto sobre o bloco claro quanto o escuro do tema). Panorama que os
+            blocos NÃO mostram (o ponto atual já é GIGANTE), em DUAS LINHAS
+            empilhadas que "atravessam" a divisa das duas metades:
+              LINHA 1 (SETS):  A à esquerda · traço centralizado na divisa · B à direita
+              LINHA 2 (GAMES): mesma estrutura (games do set/unidade atual)
+            Uma divisória vertical sutil no meio costura as duas metades e o
+            traço de cada linha fica exatamente sobre ela. CORES: sets encerrados
+            em BRANCO; a linha em andamento (games) em AMARELO (#FEE100) — ambas
+            legíveis no glass em todos os 4 temas. Rally/side-out (sem sets):
+            só a linha de GAMES. O detalhamento set-a-set + dashes de unidades
+            futuras (buildScoreCols) segue no OVERVIEW (um toque). Toca p/ abrir
+            o overview. Compacta (2 linhas) p/ não invadir número/bola de saque. */}
         <button
           type="button"
           onClick={(e) => {
@@ -841,26 +843,35 @@ export default function JogoPage() {
             openOverview()
           }}
           aria-label="Ver placar geral"
-          className="glass pointer-events-auto rounded-2xl px-2.5 py-1.5 flex items-stretch gap-2 md:gap-3
+          className="glass pointer-events-auto relative rounded-2xl px-3 py-1.5 min-w-[4.75rem] flex flex-col items-stretch gap-0.5
             active:scale-95 transition-transform"
-          style={{ backgroundColor: "#0a0a0a" }}
         >
-          {broadcastCols.map((c) => (
-            <span key={c.setNum} className="flex flex-col items-center leading-none">
-              <span className="tabular-nums font-semibold text-[8px] md:text-[9px] text-white/40">{c.setNum}</span>
-              <span
-                className="mt-1 tabular-nums font-bold text-sm md:text-base leading-none"
-                style={{ color: !c.played ? "rgba(255,255,255,0.3)" : c.current ? "#FEE100" : "#ffffff" }}
-              >
-                {c.played ? `${c.a}-${c.b}` : "–"}
-              </span>
+          {/* Divisória vertical central (costura das duas metades). */}
+          <span
+            aria-hidden
+            className="pointer-events-none absolute top-1.5 bottom-1.5 left-1/2 w-px -translate-x-1/2 bg-white/15"
+          />
+
+          {isTennisFamily && (
+            <span className="grid grid-cols-[1fr_auto_1fr] items-baseline gap-x-2.5 leading-none text-white">
+              <span className="tabular-nums font-bold text-base md:text-lg text-right">{gs.A.sets}</span>
+              <span className="tabular-nums font-bold text-base md:text-lg text-center text-white/45">-</span>
+              <span className="tabular-nums font-bold text-base md:text-lg text-left">{gs.B.sets}</span>
             </span>
-          ))}
+          )}
+
+          <span className="grid grid-cols-[1fr_auto_1fr] items-baseline gap-x-2.5 leading-none">
+            <span className="tabular-nums font-bold text-base md:text-lg text-right" style={{ color: "#FEE100" }}>
+              {gs.A.games}
+            </span>
+            <span className="tabular-nums font-bold text-base md:text-lg text-center text-white/45">-</span>
+            <span className="tabular-nums font-bold text-base md:text-lg text-left" style={{ color: "#FEE100" }}>
+              {gs.B.games}
+            </span>
+          </span>
+
           {isTiebreak && (
-            <span
-              className="self-center font-bold tracking-widest text-[10px] md:text-xs"
-              style={{ color: "#FEE100" }}
-            >
+            <span className="text-center font-bold tracking-widest text-[9px] md:text-[10px]" style={{ color: "#FEE100" }}>
               TB
             </span>
           )}
