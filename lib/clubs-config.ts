@@ -19,7 +19,15 @@ export type ClubConfig = {
   logo: string
   /** Esportes habilitados (ids do catálogo) — restringe o que a URL aceita. */
   esportes: SportId[]
-  /** Quadras válidas (slugs da URL, ex.: "q1".."q6"). */
+  /**
+   * Quadras válidas (slugs da URL). Lista ÚNICA e plana por clube — a validação
+   * (resolveClubContext) só checa `includes`, sem vínculo quadra↔esporte (Fase 0).
+   * Ids SEM sufixo (ex.: "q1") atendem qualquer esporte; ids COM sufixo de piso
+   * (ex.: "q1-saibro") nomeiam o tipo de superfície. Sufixos de piso reconhecidos
+   * hoje: "saibro" e "rapida"; "grama" fica reservado para uso futuro. Como o
+   * sufixo é só parte opaca do id (nada valida a "gramática"), acrescentar uma
+   * quadra de grama no futuro é apenas incluir "qN-grama" nesta lista.
+   */
   quadras: string[]
 }
 
@@ -30,7 +38,14 @@ export const CLUBS: Record<string, ClubConfig> = {
     nome: "SPAC",
     logo: "/spac.png",
     esportes: ["tennis", "beach", "squash", "tabletennis"],
-    quadras: ["q1", "q2", "q3", "q4", "q5", "q6"],
+    // Beach (q1,q2) e squash (q1,q2,q3) reaproveitam os ids SEM sufixo; tênis usa
+    // os ids COM sufixo de piso (saibro/rapida). A lista é única e sem prefixo por
+    // esporte, então "q1"/"q2"/"q3" cobrem beach e squash ao mesmo tempo.
+    quadras: [
+      "q1", "q2", "q3",
+      "q1-saibro", "q2-saibro", "q3-saibro", "q4-saibro",
+      "q5-saibro", "q6-saibro", "q7-saibro", "q8-rapida",
+    ],
   },
 }
 
