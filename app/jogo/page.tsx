@@ -874,25 +874,38 @@ export default function JogoPage() {
                   boxShadow: `0 0 0 0.3rem var(${bgVar}), 0 0.3rem 1rem rgba(0, 0, 0, 0.4)`,
                 } as CSSProperties}
               >
-                <circle cx="50" cy="50" r="49" fill="currentColor" />
-                {/* Costura da bola: duas curvas simétricas que arqueiam para o
-                    centro (a "linha em S" clássica da bola de tênis/padel/beach). */}
-                <path
-                  d="M22 10 C40 33 40 67 22 90"
-                  fill="none"
-                  stroke={`var(${bgVar})`}
-                  strokeOpacity={0.5}
-                  strokeWidth={4}
-                  strokeLinecap="round"
-                />
-                <path
-                  d="M78 10 C60 33 60 67 78 90"
-                  fill="none"
-                  stroke={`var(${bgVar})`}
-                  strokeOpacity={0.5}
-                  strokeWidth={4}
-                  strokeLinecap="round"
-                />
+                {sport === "squash" ? (
+                  <>
+                    {/* Bola de SQUASH: disco PRETO sólido — a bola de squash é
+                        sempre preta, independente do tema (por isso #000 fixo, e
+                        não currentColor) — com o "pingo" amarelo de velocidade na
+                        lateral, como a marcação das bolas reais. */}
+                    <circle cx="50" cy="50" r="49" fill="#000000" />
+                    <circle cx="70" cy="50" r="9" fill="#FEE100" />
+                  </>
+                ) : (
+                  <>
+                    <circle cx="50" cy="50" r="49" fill="currentColor" />
+                    {/* Costura da bola: duas curvas simétricas que arqueiam para o
+                        centro (a "linha em S" clássica da bola de tênis/padel/beach). */}
+                    <path
+                      d="M22 10 C40 33 40 67 22 90"
+                      fill="none"
+                      stroke={`var(${bgVar})`}
+                      strokeOpacity={0.5}
+                      strokeWidth={4}
+                      strokeLinecap="round"
+                    />
+                    <path
+                      d="M78 10 C60 33 60 67 78 90"
+                      fill="none"
+                      stroke={`var(${bgVar})`}
+                      strokeOpacity={0.5}
+                      strokeWidth={4}
+                      strokeLinecap="round"
+                    />
+                  </>
+                )}
               </svg>
             )}
           </span>
