@@ -21,20 +21,13 @@
 import { useEffect, useMemo, useState } from "react"
 import { useParams, useRouter } from "next/navigation"
 import Image from "next/image"
-import { resolveClubContext } from "@/lib/clubs-config"
+import { resolveClubContext, adBySlug } from "@/lib/clubs-config"
 import { defaultRulesFor } from "@/lib/sports-catalog"
 import { DEFAULT_THEME } from "@/lib/themes"
 
 // Duração de cada tela da abertura: Tela 1 (logo do clube + esporte/quadra) e o
-// "logo do Nicholas sozinho" da Tela 2 antes de encolher e mostrar o JOGAR.
+// "logo do patrocinador sozinho" da Tela 2 antes de encolher e mostrar o JOGAR.
 const SCREEN_MS = 4000
-
-// Logo do Nicholas na Tela 2 (fundo PRETO = var(--palco-fundo) do tema neutro).
-// Os dois arquivos têm fundo SÓLIDO (sem transparência): nicholas-light.png tem
-// fundo BRANCO e nicholas-dark.png tem fundo PRETO com o brasão claro. Para não
-// aparecer um retângulo, casamos o fundo do arquivo com o da tela → usamos a
-// versão de fundo PRETO sobre a tela preta.
-const NICHOLAS_LOGO = "/nicholas-dark.png"
 
 export function ClubOpening({ hasAd, ad }: { hasAd: boolean; ad?: string }) {
   const router = useRouter()
@@ -44,6 +37,22 @@ export function ClubOpening({ hasAd, ad }: { hasAd: boolean; ad?: string }) {
     () => resolveClubContext(params?.clube, params?.esporte, params?.quadra),
     [params?.clube, params?.esporte, params?.quadra],
   )
+
+  // Patrocinador da abertura resolvido DO MAPA ADS (mesma fonte da tela de fim de
+  // jogo, via adBySlug) — não mais hardcoded. null se a rota não tem /[ad] ou se
+  // o slug não existe no mapa. Adicionar um novo anúncio passa a ser só uma
+  // entrada em ADS: o logo aparece aqui e na tela de fim sem mexer em mais nada.
+  const adCfg = useMemo(() => (hasAd ? adBySlug(ad) : null), [hasAd, ad])
+  // Só há Tela 2 (patrocinador) quando o slug resolve para um anúncio VÁLIDO.
+  // Se `hasAd` mas o slug é desconhecido, tratamos como "sem anúncio": pula a
+  // Tela 2 e vai direto ao jogo (graceful), em vez de mostrar um logo fantasma.
+  const showAdScreen = adCfg !== null
+  // Logo na Tela 2 sobre fundo PRETO (var(--palco-fundo)). O mapa guarda a versão
+  // de fundo BRANCO (usada no cartão claro da tela de fim); aqui, sobre a tela
+  // preta, usamos a variante de fundo ESCURO pela convenção de nome do projeto
+  // "-light"→"-dark" (ex.: /nicholas-light.png → /nicholas-dark.png), evitando o
+  // retângulo branco. Sem "-light" no nome, cai no próprio logo do mapa.
+  const adLogoDark = adCfg ? adCfg.logo.replace("-light", "-dark") : null
 
   // "one" = Tela 1; "two" = Tela 2 (com `split` controlando o encolhimento).
   const [phase, setPhase] = useState<"one" | "two">("one")
@@ -59,9 +68,10 @@ export function ClubOpening({ hasAd, ad }: { hasAd: boolean; ad?: string }) {
       sport: sportId,
       theme: DEFAULT_THEME,
       clube: club.id,
-      // Patrocinador/anúncio da abertura (ex.: "ad1"). Só entra quando a rota
-      // tem /[ad]; sem ele o campo nem aparece na config (retrocompatível).
-      ...(ad ? { ad } : {}),
+      // Patrocinador/anúncio da abertura (ex.: "ad1"). Só entra quando o slug
+      // resolve para um anúncio VÁLIDO do mapa ADS; grava o id canônico. Sem ele
+      // (ou slug desconhecido) o campo nem aparece na config (retrocompatível).
+      ...(adCfg ? { ad: adCfg.id } : {}),
       gameType: "simples",
       scoreType: "pontos",
       players: { blue1: "Jogador 1", blue2: "Jogador 2", red1: "Jogador 3", red2: "Jogador 4" },
@@ -84,10 +94,11 @@ export function ClubOpening({ hasAd, ad }: { hasAd: boolean; ad?: string }) {
       return
     }
     const timers: ReturnType<typeof setTimeout>[] = []
-    // Fim da Tela 1: sem /ad → joga; com /ad → Tela 2 (centralizada → encolhe).
+    // Fim da Tela 1: sem anúncio válido → joga; com anúncio → Tela 2 (centralizada
+    // → encolhe).
     timers.push(
       setTimeout(() => {
-        if (!hasAd) {
+        if (!showAdScreen) {
           startGame()
           return
         }
@@ -97,12 +108,12 @@ export function ClubOpening({ hasAd, ad }: { hasAd: boolean; ad?: string }) {
     )
     return () => timers.forEach(clearTimeout)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ctx, hasAd])
+  }, [ctx, showAdScreen])
 
   if (!ctx) return null
 
   // ---------------------------------------------------------------- TELA 2 (ad)
-  if (phase === "two") {
+  if (phase === "two" && adCfg && adLogoDark) {
     return (
       <div
         className="tema-neutro palco-main flex h-[100dvh] w-screen overflow-hidden"
@@ -116,7 +127,7 @@ export function ClubOpening({ hasAd, ad }: { hasAd: boolean; ad?: string }) {
               % maior preenche melhor a metade esquerda mantendo margem. object-
               contain garante que nunca estoura. */}
           <div className="relative w-[86%] h-[72%]">
-            <Image src={NICHOLAS_LOGO} alt="Nicholas" fill sizes="70vw" priority className="object-contain" />
+            <Image src={adLogoDark} alt={adCfg.nome} fill sizes="70vw" priority className="object-contain" />
           </div>
         </div>
 
