@@ -61,6 +61,7 @@ export type AdConfig = {
 /** Anúncios cadastrados, indexados pelo slug de URL (ex.: "ad1" = Nicholas). */
 export const ADS: Record<string, AdConfig> = {
   ad1: { id: "ad1", nome: "Nicholas", logo: "/nicholas-light.png" },
+  ad2: { id: "ad2", nome: "PWER Squash", logo: "/ad2-light.png" },
 }
 
 /** Clube pelo slug (case-insensitive). null se não existir. */
