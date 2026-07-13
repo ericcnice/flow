@@ -4,8 +4,9 @@ import { useState, useEffect, useRef, type CSSProperties } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import Image from "next/image"
 import { Input } from "@/components/ui/input"
-import { Settings, Volume2, VolumeX, Undo2, BarChart2, RotateCcw, LogOut, ArrowLeftRight } from "lucide-react"
+import { Settings, Volume2, VolumeX, Undo2, BarChart2, RotateCcw, LogOut, ArrowLeftRight, Share2 } from "lucide-react"
 import { ThirdSetModal } from "@/components/third-set-modal"
+import { ShareModal } from "@/components/share-modal"
 // Superfície de configuração ÚNICA: a MESMA tela de setup (esporte + regras),
 // aberta agora também DE DENTRO do jogo pelo botão de config (aposenta o GameMenu
 // antigo neste fluxo).
@@ -27,6 +28,11 @@ import { sportById, familyOf, formatPoint, defaultRulesFor, buildScoreCols, type
 import { themeClassName, type ThemeId } from "@/lib/themes"
 import { clubBySlug, adBySlug } from "@/lib/clubs-config"
 import type { GameState, Side } from "@/lib/scoring/types"
+
+// Realtime (bônus, offline-first): cria/assina a sala ao vivo. O jogo NUNCA
+// depende disso — se o Supabase falhar, tudo segue funcionando localmente.
+import { createLiveMatch } from "@/lib/supabase/live-match"
+import { useRealtimeMatch } from "@/lib/hooks/use-realtime-match"
 
 type GameConfig = {
   quadra: string
@@ -50,6 +56,11 @@ type GameConfig = {
   }
   startTime: string
   maxSets?: number
+  /** Sala Realtime (bônus). Ausentes em partidas offline ou antigas.
+   *  `editToken` é o SEGREDO do dono; `viewToken` é seguro de compartilhar. */
+  matchId?: string
+  viewToken?: string
+  editToken?: string
 }
 
 // Ação registrada para persistência: o estado do motor é reconstruído por
@@ -64,12 +75,23 @@ const sideOf = (team: "blue" | "red"): Side => (team === "blue" ? "A" : "B")
 // nunca acontecem em <300ms).
 const DOUBLE_TAP_MS = 300
 
+// Botão COMPARTILHAR: visual destacado (fundo sólido branco), diferente dos
+// demais botões glass. Centralizado aqui para ajuste fácil de cor/efeito.
+const SHARE_BTN_STYLE: CSSProperties = { background: "#ffffff", color: "#0a0a0a" }
+
 export default function JogoPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const quadra = searchParams.get("quadra") || "1"
 
   const [gameConfig, setGameConfig] = useState<GameConfig | null>(null)
+
+  // Realtime da partida (bônus). Conectamos como 'editor' (dono do jogo). O
+  // hook falha graciosamente: nada aqui bloqueia a marcação de pontos local.
+  const rt = useRealtimeMatch()
+  const [shareOpen, setShareOpen] = useState(false)
+  // Evita recriar/reassinar a sala mais de uma vez por carga da tela.
+  const realtimeInitRef = useRef(false)
 
   // Esporte da partida (do setup). Fica em estado (para o render decidir família
   // de placar) e em ref (para acesso estável dentro de rebuildEngine, sem closure
@@ -215,6 +237,40 @@ export default function JogoPage() {
         }
       }
       rebuildEngine(rules, firstServer, actions)
+
+      // --- Realtime (BÔNUS, fire-and-forget) ---------------------------------
+      // Roda DEPOIS do rebuildEngine e NÃO é aguardado: a tela já está pronta e
+      // jogável. Qualquer falha aqui é silenciosa — o jogo é offline-first.
+      if (!realtimeInitRef.current) {
+        realtimeInitRef.current = true
+        void (async () => {
+          try {
+            if (config.matchId && config.viewToken) {
+              // Partida existente (reload): o dono volta como editor, sem criar
+              // sala nova.
+              await rt.subscribe(config.viewToken, config.matchId, "editor")
+            } else {
+              // Partida nova (nunca teve sala): cria uma e persiste os tokens
+              // de volta no MESMO objeto de config (tennis_match_${quadra}).
+              const room = await createLiveMatch(config.clube)
+              if (!room) return
+              const updated: GameConfig = {
+                ...config,
+                matchId: room.id,
+                viewToken: room.viewToken,
+                editToken: room.editToken,
+              }
+              localStorage.setItem(`tennis_match_${quadra}`, JSON.stringify(updated))
+              setGameConfig(updated)
+              // Entra no canal como editor (presence/broadcast).
+              await rt.subscribe(room.viewToken, room.id, "editor")
+            }
+          } catch (err) {
+            // Sala é bônus: logar e seguir. O jogo NÃO depende disso.
+            console.error("Realtime indisponível (jogo segue offline):", err)
+          }
+        })()
+      }
     } else {
       // Redirect to configuration if no game is set up
       router.push(`/`)
@@ -1173,24 +1229,42 @@ export default function JogoPage() {
           pointer-events-auto. Config/voz saíram do canto p/ esta barra, sem
           sobrepor o toggle. Rótulos do toggle curtos p/ caber em telas estreitas. */}
       <div className="pointer-events-none absolute inset-x-3 bottom-4 z-20 grid grid-cols-3 items-center">
-        {/* ESQUERDA: VOLTAR (undo). SEMPRE renderizado/visível: quando não há o
-            que desfazer, fica DESABILITADO (esmaecido + não-clicável), nunca some
-            — o jogador vê que a função existe. (O sumiço reportado era o badge de
-            DEV do Next no canto inferior-esquerdo; movido em next.config.) */}
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation()
-            undoLastPoint()
-          }}
-          disabled={!started}
-          aria-label="Desfazer último ponto"
-          title={started ? "Desfazer último ponto" : "Nada para desfazer"}
-          className="glass pointer-events-auto justify-self-start rounded-full p-2.5
-            active:scale-95 transition-transform disabled:opacity-40 disabled:pointer-events-none"
-        >
-          <Undo2 className="h-5 w-5" />
-        </button>
+        {/* ESQUERDA: COMPARTILHAR + VOLTAR (undo). O undo é SEMPRE renderizado:
+            quando não há o que desfazer, fica DESABILITADO (esmaecido +
+            não-clicável), nunca some — o jogador vê que a função existe. */}
+        <div className="justify-self-start flex items-center gap-2">
+          {/* COMPARTILHAR: destaque (fundo sólido, ver SHARE_BTN_STYLE) para se
+              diferenciar dos demais botões glass — é o convite a colaborar. */}
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation()
+              setShareOpen(true)
+            }}
+            aria-label="Compartilhar partida"
+            title="Compartilhar partida"
+            style={SHARE_BTN_STYLE}
+            className="pointer-events-auto rounded-full p-2.5 shadow-lg ring-1 ring-black/10
+              active:scale-95 transition-transform"
+          >
+            <Share2 className="h-5 w-5" />
+          </button>
+
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation()
+              undoLastPoint()
+            }}
+            disabled={!started}
+            aria-label="Desfazer último ponto"
+            title={started ? "Desfazer último ponto" : "Nada para desfazer"}
+            className="glass pointer-events-auto rounded-full p-2.5
+              active:scale-95 transition-transform disabled:opacity-40 disabled:pointer-events-none"
+          >
+            <Undo2 className="h-5 w-5" />
+          </button>
+        </div>
 
         {/* CENTRO: CONTAGEM ponto-a-ponto vs por games — acessível NO JOGO (um
             juiz/amigo entra no meio e troca). Segmentado: modo ATIVO destacado.
@@ -1573,6 +1647,19 @@ export default function JogoPage() {
 
       {/* Third Set Choice Modal */}
       <ThirdSetModal isOpen={showThirdSetModal} onClose={handleThirdSetChoice} />
+
+      {/* Modal de compartilhamento (QR de editor + link de espectador). Os
+          campos de sala vêm do gameConfig; se ausentes, o modal mostra estado
+          "indisponível" e o jogo segue local. editorCount vem do presence. */}
+      <ShareModal
+        isOpen={shareOpen}
+        onClose={() => setShareOpen(false)}
+        quadra={quadra}
+        matchId={gameConfig.matchId}
+        viewToken={gameConfig.viewToken}
+        editToken={gameConfig.editToken}
+        editorCount={rt.editorCount}
+      />
     </div>
   )
 }
