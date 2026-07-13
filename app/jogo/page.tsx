@@ -267,17 +267,18 @@ export default function JogoPage() {
           const rRules = rState.rules ?? defaultRulesFor(resolvedSport)
           const rFirst: Side = rState.firstServer === "B" ? "B" : "A"
 
-          // Filtra as actions da sala: separa o sinal de scoreType (set_score_type)
-          // das ações de placar (point/game) — rebuildEngine só entende point/game.
+          // scoreType agora vive na RAIZ do state (padrão unificado set_config);
+          // a URL (&scoreType=) é só fallback para salas/links antigos.
           const rawActions: any[] = Array.isArray(rState.actions) ? rState.actions : []
-          let loadedScoreType: "pontos" | "games" =
-            scoreTypeParam === "games" ? "games" : "pontos"
+          const loadedScoreType: "pontos" | "games" =
+            rState.scoreType === "games" || rState.scoreType === "pontos"
+              ? rState.scoreType
+              : scoreTypeParam === "games"
+                ? "games"
+                : "pontos"
+          // Só point/game vão para o rebuildEngine (config vive na raiz, não aqui).
           const cleanActions: Action[] = []
           for (const a of rawActions) {
-            if (a?.kind === "set_score_type") {
-              if (a.value === "pontos" || a.value === "games") loadedScoreType = a.value
-              continue
-            }
             if (a?.kind === "point" || a?.kind === "game") cleanActions.push({ kind: a.kind, side: a.side })
           }
 
@@ -494,12 +495,11 @@ export default function JogoPage() {
     if (themeChanged) setTheme(updated.theme as ThemeId)
   }
 
-  // --- PARTE B: sincronização contínua (broadcast → engine) ----------------
-  // Observa rt.state (histórico de ações da sala: leitura inicial + broadcasts):
-  //   1) aplica config COMPARTILHADA (set_score_type + set_config: firstServer/
-  //      players/rules) ao estado local, "último patch vence";
-  //   2) reconstrói o engine com as ações de placar (point/game), com dedup
-  //      anti-eco e guards de RESET (vazio) e UNDO (prefixo do local).
+  // --- PARTE B: sincronização do PLACAR (broadcast → engine) ---------------
+  // Observa rt.state (histórico de ações point/game) e reconstrói o engine com
+  // dedup anti-eco + guards de RESET (vazio) e UNDO (prefixo do local). A CONFIG
+  // (scoreType/players/firstServer/rules/theme) NÃO passa por aqui — vive na raiz
+  // do state e é aplicada pela Parte B2.
   useEffect(() => {
     const remote = rt.state
     if (!Array.isArray(remote)) return
@@ -508,27 +508,12 @@ export default function JogoPage() {
     // não regredir o placar local — o dono já tem o histórico completo.
     if (backfillingRef.current) return
 
-    // Separa: scoreType, patches de config (último vence por campo), ações de
-    // placar (point/game) e "resto" inesperado.
-    let remoteScoreType: "pontos" | "games" | null = null
-    let cfgFirstServer: Side | null = null
-    let cfgPlayers: Partial<GameConfig["players"]> | null = null
-    let cfgRules: any = null
+    // Esta Parte B cuida SÓ das ações de placar (point/game). Toda a CONFIG
+    // (scoreType/players/firstServer/rules/theme) vive na RAIZ do state e é
+    // aplicada pela Parte B2 — não é processada aqui dentro de actions.
     const scoreActions: Action[] = []
     let hasUnknown = false
     for (const a of remote as any[]) {
-      if (a?.kind === "set_score_type") {
-        if (a.value === "pontos" || a.value === "games") remoteScoreType = a.value
-        continue
-      }
-      if (a?.kind === "set_config") {
-        const p = a.patch || {}
-        if (p.firstServer === "A" || p.firstServer === "B") cfgFirstServer = p.firstServer
-        if (p.players && typeof p.players === "object") cfgPlayers = p.players
-        if (p.rules && typeof p.rules === "object") cfgRules = p.rules
-        if (p.scoreType === "pontos" || p.scoreType === "games") remoteScoreType = p.scoreType
-        continue
-      }
       if (a?.kind === "point" || a?.kind === "game") {
         scoreActions.push({ kind: a.kind, side: a.side })
         continue
@@ -536,18 +521,8 @@ export default function JogoPage() {
       hasUnknown = true // undo/reset crus ou algo inesperado
     }
 
-    // (1) Config puro no gameConfig (scoreType/players + maxSets vindo de rules).
-    // Aplicado sempre — é seguro e não depende do engine.
-    if (remoteScoreType || cfgPlayers || (cfgRules && typeof cfgRules.bestOf === "number")) {
-      applyLocalConfig({
-        scoreType: remoteScoreType ?? undefined,
-        players: cfgPlayers ?? undefined,
-        maxSets: cfgRules && (cfgRules.bestOf === 3 || cfgRules.bestOf === 5) ? cfgRules.bestOf : undefined,
-      })
-    }
-
-    // Segurança: kind inesperado (não point/game/set_score_type/set_config) →
-    // NÃO reconstrói o engine, mantém o local seguro (não adivinha).
+    // Segurança: kind inesperado (não point/game) dentro de actions → NÃO
+    // reconstrói o engine, mantém o local seguro (não adivinha).
     if (hasUnknown) {
       console.error("state.actions remoto com kind inesperado:", remote)
       return
@@ -574,24 +549,12 @@ export default function JogoPage() {
       if (!isReset && !isPrefix) targetActions = null
     }
 
-    // (3) Config que EXIGE rebuild (firstServer/rules) — mesmo sem mudança de ações.
-    let nextFirstServer = firstServerRef.current
-    let nextRules = rulesRef.current
-    let cfgRebuild = false
-    if (cfgFirstServer && cfgFirstServer !== firstServerRef.current) {
-      nextFirstServer = cfgFirstServer
-      cfgRebuild = true
-    }
-    if (cfgRules && JSON.stringify(cfgRules) !== JSON.stringify(rulesRef.current)) {
-      nextRules = cfgRules
-      cfgRebuild = true
-    }
+    // Ações não mudaram → nada a reconstruir aqui (config é tratada na Parte B2).
+    if (targetActions === null) return
 
-    // Nada mudou (nem ações, nem regras/sacador) → não reconstrói.
-    if (targetActions === null && !cfgRebuild) return
-
-    // Adota: novo placar (outro editor / undo / reset) e/ou nova config de motor.
-    rebuildEngine(nextRules, nextFirstServer, targetActions ?? local)
+    // Adota o novo placar (outro editor / undo / reset). Regras e sacador vêm dos
+    // refs atuais (mantidos em dia pela Parte B2 / handlers locais).
+    rebuildEngine(rulesRef.current, firstServerRef.current, targetActions)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rt.state])
 
@@ -599,8 +562,8 @@ export default function JogoPage() {
   // A RPC grava set_config na RAIZ do state (não em actions), então mudanças de
   // config NÃO alteram rt.state.length — o effect acima (deps [rt.state]) nunca
   // dispararia por elas. Aqui reagimos aos campos que o hook repassa da raiz:
-  // remotePlayers/remoteFirstServer/remoteRules/remoteTheme. Cada um tem dedup
-  // anti-eco: só aplica se o valor remoto DIFERE do que este device já tem (o
+  // remotePlayers/remoteFirstServer/remoteRules/remoteTheme/remoteScoreType. Cada
+  // um tem dedup anti-eco: só aplica se o valor remoto DIFERE do que já temos (o
   // eco da própria ação já bate com o ref/config local e é ignorado).
   useEffect(() => {
     // players → gameConfig local. applyLocalConfig já deduplica por conteúdo
@@ -613,6 +576,12 @@ export default function JogoPage() {
     // conteúdo: só muda se diferente do tema atual). Não afeta o motor.
     if (rt.remoteTheme) {
       applyLocalConfig({ theme: rt.remoteTheme as ThemeId })
+    }
+
+    // scoreType → gameConfig local (dedup por conteúdo no applyLocalConfig).
+    // Não afeta o motor: só muda a granularidade do próximo toque e o display.
+    if (rt.remoteScoreType === "pontos" || rt.remoteScoreType === "games") {
+      applyLocalConfig({ scoreType: rt.remoteScoreType })
     }
 
     // firstServer e rules podem exigir rebuild do motor. Combinamos num único
@@ -646,7 +615,7 @@ export default function JogoPage() {
       rebuildEngine(nextRules, nextFirstServer, actionsRef.current)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rt.remotePlayers, rt.remoteFirstServer, rt.remoteRules, rt.remoteTheme])
+  }, [rt.remotePlayers, rt.remoteFirstServer, rt.remoteRules, rt.remoteTheme, rt.remoteScoreType])
 
   useEffect(() => {
     // Update elapsed time
@@ -882,10 +851,11 @@ export default function JogoPage() {
 
     // (a) Efeito local imediato (como antes).
     setGameConfig(newConfig)
+    gameConfigRef.current = newConfig
     localStorage.setItem(`tennis_match_${quadra}`, JSON.stringify(newConfig))
-    // (b) Propaga o modo para os OUTROS devices da sala (estado compartilhado).
-    // A escolha vale para todos: o próximo toque de qualquer um gera o kind certo.
-    sendRealtimeAction({ kind: "set_score_type", value: next })
+    // (b) Propaga o modo pelo padrão UNIFICADO set_config (raiz do state), igual
+    // a players/firstServer/rules/theme. A escolha vale para todos os devices.
+    sendRealtimeAction({ kind: "set_config", patch: { scoreType: next } })
   }
 
   const handleThirdSetChoice = (_playTiebreak: boolean) => {
