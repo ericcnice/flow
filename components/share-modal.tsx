@@ -72,12 +72,19 @@ export function ShareModal({
     (sport ? `&sport=${encodeURIComponent(sport)}` : "") +
     (theme ? `&theme=${encodeURIComponent(theme)}` : "") +
     (scoreType ? `&scoreType=${encodeURIComponent(scoreType)}` : "")
+  // O link de EDITOR carrega o edit_token (permissão de escrita) E o view_token
+  // como &v= — este último é OBRIGATÓRIO para o convidado calcular o mesmo nome
+  // de canal (getLiveMatchTopic usa o view_token) que o servidor usa ao
+  // transmitir; sem ele o editor convidado assinaria o canal errado e nunca
+  // receberia os broadcasts do dono.
   const editUrl = useMemo(
     () =>
       ready
-        ? `${origin}/jogo?quadra=${quadra}&match=${matchId}&edit=${editToken}${extraParams}`
+        ? `${origin}/jogo?quadra=${quadra}&match=${matchId}&edit=${editToken}&v=${encodeURIComponent(
+            viewToken || "",
+          )}${extraParams}`
         : "",
-    [ready, origin, quadra, matchId, editToken, extraParams],
+    [ready, origin, quadra, matchId, editToken, viewToken, extraParams],
   )
   const viewUrl = useMemo(
     () =>

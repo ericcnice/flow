@@ -214,13 +214,24 @@ export default function JogoPage() {
     // sem depender de config local e SEM redirecionar para a home.
     const matchParam = searchParams.get("match")
     const editParam = searchParams.get("edit")
-    const viewParam = searchParams.get("view")
+    const viewParam = searchParams.get("view") // link de espectador (/placar) ou legado
+    const vParam = searchParams.get("v") // view_token no link de EDITOR (novo)
     const sportParam = searchParams.get("sport")
     const themeParam = searchParams.get("theme")
     const scoreTypeParam = searchParams.get("scoreType")
-    const remoteToken = editParam || viewParam
 
-    if (matchParam && remoteToken && !realtimeInitRef.current) {
+    // O CANAL de broadcast é sempre calculado a partir do view_token (é assim que
+    // o servidor transmite em apply_live_match_action). No link de espectador ele
+    // vem em `view=`; no link de editor, em `v=`.
+    const channelViewToken = viewParam || vParam || null
+    // O edit_token autoriza ESCRITA (applyLiveMatchAction). Para a leitura inicial
+    // qualquer um dos dois serve (get_live_match_state aceita view OU edit).
+    const anyToken = channelViewToken || editParam
+    // Token usado para assinar/ler: preferimos SEMPRE o view_token (canal certo);
+    // só caímos no edit_token em links ANTIGOS de editor (sem &v=).
+    const subscribeToken = channelViewToken || editParam
+
+    if (matchParam && anyToken && !realtimeInitRef.current) {
       realtimeInitRef.current = true
       setRemoteLoading(true)
       setLoadError(false)
@@ -232,9 +243,20 @@ export default function JogoPage() {
       setSport(resolvedSport)
       const resolvedTheme = (themeParam || "neutro") as ThemeId
 
+      // Aviso de link ANTIGO: é editor (tem edit=) mas sem o view_token (&v=/view=).
+      // Não quebra — segue com o edit_token, mas o canal ficará no tópico errado
+      // (não receberá broadcasts). Gere um novo link de compartilhamento.
+      if (editParam && !channelViewToken) {
+        console.warn(
+          "Link de editor em formato ANTIGO (sem &v=view_token): o canal de " +
+            "broadcast ficará incorreto e este device não receberá atualizações " +
+            "ao vivo. Gere um novo link de compartilhamento.",
+        )
+      }
+
       void (async () => {
         try {
-          const remote = await getLiveMatchState(remoteToken)
+          const remote = await getLiveMatchState(subscribeToken as string)
           if (!remote) {
             setLoadError(true)
             setRemoteLoading(false)
@@ -285,8 +307,9 @@ export default function JogoPage() {
           rebuildEngine(rRules, rFirst, cleanActions)
           setRemoteLoading(false)
 
-          // Continua escutando o canal: editor (edit=) ou espectador (view=).
-          await rt.subscribe(remoteToken, remote.id, editParam ? "editor" : "viewer")
+          // Continua escutando o canal usando o VIEW_TOKEN (subscribeToken) para
+          // o tópico bater com o do servidor. O papel é editor se há edit_token.
+          await rt.subscribe(subscribeToken as string, remote.id, editParam ? "editor" : "viewer")
         } catch (err) {
           console.error("Carregamento remoto falhou:", err)
           setLoadError(true)
