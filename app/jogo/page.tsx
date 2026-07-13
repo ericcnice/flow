@@ -351,13 +351,15 @@ export default function JogoPage() {
             } else {
               // Partida nova (nunca teve sala): cria uma e persiste os tokens
               // de volta no MESMO objeto de config (tennis_match_${quadra}).
-              // Passa o sport atual (e regras/sacador) como estado inicial da
-              // sala. Hoje o sport chega aos outros devices pela URL (&sport=);
-              // este param deixa a persistência server-side pronta p/ o futuro.
+              // Config inicial: a sala nasce já com scoreType/sacador/regras/
+              // jogadores atuais (gravados no `state` pela RPC), sem depender de
+              // set_config depois. O sport também viaja pela URL (&sport=).
               const room = await createLiveMatch(config.clube, {
-                sport: config.sport ?? sportRef.current,
-                rules: rulesRef.current,
+                scoreType: config.scoreType,
                 firstServer: firstServerRef.current,
+                rules: rulesRef.current,
+                players: config.players,
+                sport: config.sport ?? sportRef.current,
               })
               if (!room) return
               const updated: GameConfig = {

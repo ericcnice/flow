@@ -28,27 +28,37 @@ function firstRow<T>(data: unknown): T | null {
 
 /**
  * Cria uma nova sala de partida ao vivo.
-/** Estado inicial opcional da sala (sport + regras) para persistência futura. */
+/**
+ * Config inicial opcional da sala. É gravada pela RPC DIRETAMENTE como o `state`
+ * inicial da partida (create_live_match faz `state := coalesce(p_initial_config,
+ * '{}')`), então a sala já nasce com scoreType/firstServer/rules/players — sem
+ * depender de set_config depois. `sport` é opcional (também viaja pela URL).
+ */
 export interface LiveMatchInitialState {
-  sport?: string
-  rules?: any
+  scoreType?: string
   firstServer?: string
+  rules?: any
+  players?: Record<string, string>
+  sport?: string
 }
 
 /**
- * RPC: create_live_match(p_club_slug text) -> { id, view_token, edit_token }
+ * RPC: create_live_match(p_club_slug text, p_initial_config jsonb)
+ *      -> { id, view_token, edit_token }
  * Lança um erro claro em caso de falha (criar sala é uma operação crítica).
  *
- * `initialState` (sport/rules/firstServer) é ACEITO mas NÃO é persistido no
- * servidor por ora — ver nota abaixo. O sport é comunicado aos outros devices
- * pela URL de compartilhamento (&sport=...), sem exigir migration no banco.
+ * Passamos SEMPRE os dois parâmetros: enviar só `p_club_slug` seria ambíguo
+ * (o banco tem duas overloads e `p_initial_config` tem DEFAULT), o que faz o
+ * PostgREST não escolher candidato (PGRST203). Fornecer `p_initial_config`
+ * casa exclusivamente a overload de 2 args.
  */
 export async function createLiveMatch(
   clubSlug: string = 'flow',
-  initialState?: LiveMatchInitialState,
+  initialConfig?: LiveMatchInitialState,
 ): Promise<LiveMatchRoom> {
   const { data, error } = await supabase.rpc('create_live_match', {
     p_club_slug: clubSlug,
+    p_initial_config: initialConfig ?? {},
   })
 
   if (error) {
@@ -59,18 +69,6 @@ export async function createLiveMatch(
   if (!row) {
     throw new Error('createLiveMatch: RPC returned no data')
   }
-
-  // NOTA (sport da sala) — por que NÃO gravamos `initialState` no servidor agora:
-  // o ideal seria persistir `sport` dentro do `state` (jsonb) da sala, para que
-  // qualquer device que carregue o estado remoto instancie o módulo de scoring
-  // correto. Mas a RPC apply_live_match_action só entende point/game/undo/reset
-  // (ela ANEXA a `state.actions`); não há como "definir o estado inicial". Fazer
-  // isso exigiria uma ação nova {kind:'init', sport, rules, firstServer} que
-  // SOBRESCREVE o state — ou seja, uma MUDANÇA DE SQL, que NÃO aplicamos sem
-  // revisão. Enquanto essa persistência não existe, o sport viaja pela URL de
-  // compartilhamento (ver share-modal). `initialState` fica pronto para quando o
-  // servidor souber recebê-lo.
-  void initialState
 
   return {
     id: row.id,
