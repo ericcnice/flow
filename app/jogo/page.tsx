@@ -252,7 +252,14 @@ export default function JogoPage() {
             } else {
               // Partida nova (nunca teve sala): cria uma e persiste os tokens
               // de volta no MESMO objeto de config (tennis_match_${quadra}).
-              const room = await createLiveMatch(config.clube)
+              // Passa o sport atual (e regras/sacador) como estado inicial da
+              // sala. Hoje o sport chega aos outros devices pela URL (&sport=);
+              // este param deixa a persistência server-side pronta p/ o futuro.
+              const room = await createLiveMatch(config.clube, {
+                sport: config.sport ?? sportRef.current,
+                rules: rulesRef.current,
+                firstServer: firstServerRef.current,
+              })
               if (!room) return
               const updated: GameConfig = {
                 ...config,
@@ -1655,6 +1662,7 @@ export default function JogoPage() {
         isOpen={shareOpen}
         onClose={() => setShareOpen(false)}
         quadra={quadra}
+        sport={sport}
         matchId={gameConfig.matchId}
         viewToken={gameConfig.viewToken}
         editToken={gameConfig.editToken}

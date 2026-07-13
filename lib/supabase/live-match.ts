@@ -28,10 +28,25 @@ function firstRow<T>(data: unknown): T | null {
 
 /**
  * Cria uma nova sala de partida ao vivo.
+/** Estado inicial opcional da sala (sport + regras) para persistência futura. */
+export interface LiveMatchInitialState {
+  sport?: string
+  rules?: any
+  firstServer?: string
+}
+
+/**
  * RPC: create_live_match(p_club_slug text) -> { id, view_token, edit_token }
  * Lança um erro claro em caso de falha (criar sala é uma operação crítica).
+ *
+ * `initialState` (sport/rules/firstServer) é ACEITO mas NÃO é persistido no
+ * servidor por ora — ver nota abaixo. O sport é comunicado aos outros devices
+ * pela URL de compartilhamento (&sport=...), sem exigir migration no banco.
  */
-export async function createLiveMatch(clubSlug: string = 'flow'): Promise<LiveMatchRoom> {
+export async function createLiveMatch(
+  clubSlug: string = 'flow',
+  initialState?: LiveMatchInitialState,
+): Promise<LiveMatchRoom> {
   const { data, error } = await supabase.rpc('create_live_match', {
     p_club_slug: clubSlug,
   })
@@ -44,6 +59,18 @@ export async function createLiveMatch(clubSlug: string = 'flow'): Promise<LiveMa
   if (!row) {
     throw new Error('createLiveMatch: RPC returned no data')
   }
+
+  // NOTA (sport da sala) — por que NÃO gravamos `initialState` no servidor agora:
+  // o ideal seria persistir `sport` dentro do `state` (jsonb) da sala, para que
+  // qualquer device que carregue o estado remoto instancie o módulo de scoring
+  // correto. Mas a RPC apply_live_match_action só entende point/game/undo/reset
+  // (ela ANEXA a `state.actions`); não há como "definir o estado inicial". Fazer
+  // isso exigiria uma ação nova {kind:'init', sport, rules, firstServer} que
+  // SOBRESCREVE o state — ou seja, uma MUDANÇA DE SQL, que NÃO aplicamos sem
+  // revisão. Enquanto essa persistência não existe, o sport viaja pela URL de
+  // compartilhamento (ver share-modal). `initialState` fica pronto para quando o
+  // servidor souber recebê-lo.
+  void initialState
 
   return {
     id: row.id,

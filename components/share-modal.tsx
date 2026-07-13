@@ -8,6 +8,9 @@ interface ShareModalProps {
   isOpen: boolean
   onClose: () => void
   quadra: string
+  /** Esporte da partida — vai na URL (&sport=) p/ o device remoto instanciar o
+   *  módulo de scoring certo (squash/padel/etc), já que o servidor não guarda. */
+  sport?: string
   matchId?: string
   viewToken?: string
   editToken?: string
@@ -32,6 +35,7 @@ export function ShareModal({
   isOpen,
   onClose,
   quadra,
+  sport,
   matchId,
   viewToken,
   editToken,
@@ -50,18 +54,24 @@ export function ShareModal({
   const ready = Boolean(matchId && viewToken && editToken)
 
   // Formato das URLs (ver explicação no PR): reaproveitam o estilo de query já
-  // usado no app (quadra=...), carregando o id da sala + o token adequado.
+  // usado no app (quadra=...), carregando o id da sala + o token adequado + o
+  // sport (para o device remoto instanciar o módulo de scoring correto).
   //  - Editor  → /jogo   (tela de operação) com o edit_token (SEGREDO do dono).
   //  - Espectador → /placar (tela read-only) com o view_token (seguro de expor).
+  const sportParam = sport ? `&sport=${encodeURIComponent(sport)}` : ""
   const editUrl = useMemo(
     () =>
-      ready ? `${origin}/jogo?quadra=${quadra}&match=${matchId}&edit=${editToken}` : "",
-    [ready, origin, quadra, matchId, editToken],
+      ready
+        ? `${origin}/jogo?quadra=${quadra}&match=${matchId}&edit=${editToken}${sportParam}`
+        : "",
+    [ready, origin, quadra, matchId, editToken, sportParam],
   )
   const viewUrl = useMemo(
     () =>
-      ready ? `${origin}/placar?quadra=${quadra}&match=${matchId}&view=${viewToken}` : "",
-    [ready, origin, quadra, matchId, viewToken],
+      ready
+        ? `${origin}/placar?quadra=${quadra}&match=${matchId}&view=${viewToken}${sportParam}`
+        : "",
+    [ready, origin, quadra, matchId, viewToken, sportParam],
   )
 
   // Reset do feedback "Copiado!" a cada abertura.
