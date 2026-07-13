@@ -67,6 +67,10 @@ export interface UseRealtimeMatch {
   status: RealtimeStatus
   /** state.actions mais recente (via broadcast ou leitura inicial); null se ainda não há. */
   state: any
+  /** state.rules mais recente do remoto (repassado do payload completo); null se ausente. */
+  remoteRules: any
+  /** state.firstServer mais recente do remoto ('A'|'B'); null se ausente. */
+  remoteFirstServer: string | null
   /**
    * Total de conexões distintas ativas no canal (editores + espectadores).
    * COSMÉTICO: ver nota de "sem enforcement" na doc do hook abaixo.
@@ -106,6 +110,8 @@ export interface UseRealtimeMatch {
 export function useRealtimeMatch(options?: UseRealtimeMatchOptions): UseRealtimeMatch {
   const [status, setStatus] = useState<RealtimeStatus>('idle')
   const [state, setState] = useState<any>(null)
+  const [remoteRules, setRemoteRules] = useState<any>(null)
+  const [remoteFirstServer, setRemoteFirstServer] = useState<string | null>(null)
   const [presenceCount, setPresenceCount] = useState(0)
   const [editorCount, setEditorCount] = useState(0)
 
@@ -116,10 +122,13 @@ export function useRealtimeMatch(options?: UseRealtimeMatchOptions): UseRealtime
   // como presence key para deduplicar conexões e como identificador no track().
   const sessionIdRef = useRef<string>('')
 
-  // Aplica um novo state, expondo apenas state.actions (conforme contrato do hook).
+  // Aplica um novo state do remoto. Além de actions, repassa rules e firstServer
+  // (que já vêm no payload completo de getLiveMatchState/broadcast).
   const applyState = useCallback((newState: any) => {
     if (!mountedRef.current) return
     setState(newState?.actions ?? null)
+    if (newState?.rules !== undefined) setRemoteRules(newState.rules ?? null)
+    if (newState?.firstServer !== undefined) setRemoteFirstServer(newState.firstServer ?? null)
   }, [])
 
   // Recalcula a contagem de presença a partir do presenceState() atual.
@@ -316,5 +325,15 @@ export function useRealtimeMatch(options?: UseRealtimeMatchOptions): UseRealtime
     }
   }, [teardownChannel])
 
-  return { status, state, presenceCount, editorCount, create, applyAction, subscribe }
+  return {
+    status,
+    state,
+    remoteRules,
+    remoteFirstServer,
+    presenceCount,
+    editorCount,
+    create,
+    applyAction,
+    subscribe,
+  }
 }

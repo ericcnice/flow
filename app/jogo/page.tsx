@@ -98,6 +98,11 @@ export default function JogoPage() {
   // Já vimos alguma ação de placar vinda do remoto? Usado para distinguir um
   // RESET legítimo (remoto zera após ter tido ações) de dado inicial/atrasado.
   const hadRemoteActionsRef = useRef(false)
+  // Espelho estável do gameConfig (para o sync effect ler sem stale-closure).
+  const gameConfigRef = useRef<GameConfig | null>(null)
+  // Enquanto o dono faz o BACKFILL do histórico para a sala recém-criada, o
+  // sync effect deve IGNORAR os broadcasts (senão o placar do dono regride).
+  const backfillingRef = useRef(false)
 
   // Esporte da partida (do setup). Fica em estado (para o render decidir família
   // de placar) e em ref (para acesso estável dentro de rebuildEngine, sem closure
@@ -365,6 +370,24 @@ export default function JogoPage() {
               setGameConfig(updated)
               // Entra no canal como editor (presence/broadcast).
               await rt.subscribe(room.viewToken, room.id, "editor")
+
+              // BACKFILL (Bug 2): se o dono já jogou pontos ANTES de compartilhar,
+              // a sala nasce vazia e ele ficaria "à frente" do servidor para
+              // sempre (rejeitando todo broadcast → sincronização unidirecional).
+              // Reenvia o histórico local para a sala, em SEQUÊNCIA (ordem
+              // preservada) e fire-and-forget. Enquanto isso, o sync effect é
+              // silenciado (backfillingRef) para o placar do dono não regredir.
+              const pending = actionsRef.current.slice()
+              if (pending.length > 0) {
+                backfillingRef.current = true
+                try {
+                  for (const a of pending) {
+                    await rt.applyAction(room.editToken, room.id, { kind: a.kind, side: a.side })
+                  }
+                } finally {
+                  backfillingRef.current = false
+                }
+              }
             }
           } catch (err) {
             // Sala é bônus: logar e seguir. O jogo NÃO depende disso.
@@ -379,23 +402,93 @@ export default function JogoPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [quadra, router])
 
+  // Mantém o espelho do gameConfig sempre atual (lido pelo sync effect).
+  useEffect(() => {
+    gameConfigRef.current = gameConfig
+  }, [gameConfig])
+
+  // Aplica ao gameConfig LOCAL um patch de campos de configuração vindos do
+  // remoto (scoreType, players, maxSets). Atualiza também os nomes exibidos
+  // (derivados de players) e persiste. "último patch vence" (sem acumular).
+  const applyLocalConfig = (patch: {
+    scoreType?: "pontos" | "games"
+    players?: Partial<GameConfig["players"]>
+    maxSets?: number
+  }) => {
+    const prev = gameConfigRef.current
+    if (!prev) return
+    let changed = false
+    const updated: GameConfig = { ...prev }
+
+    if (patch.scoreType && prev.scoreType !== patch.scoreType) {
+      updated.scoreType = patch.scoreType
+      changed = true
+    }
+    let playersChanged = false
+    if (patch.players) {
+      const mergedPlayers = { ...prev.players, ...patch.players }
+      if (JSON.stringify(mergedPlayers) !== JSON.stringify(prev.players)) {
+        updated.players = mergedPlayers
+        changed = true
+        playersChanged = true
+      }
+    }
+    let maxSetsChanged = false
+    if (typeof patch.maxSets === "number" && prev.maxSets !== patch.maxSets) {
+      updated.maxSets = patch.maxSets
+      changed = true
+      maxSetsChanged = true
+    }
+    if (!changed) return
+
+    gameConfigRef.current = updated
+    setGameConfig(updated)
+    try {
+      localStorage.setItem(`tennis_match_${quadra}`, JSON.stringify(updated))
+    } catch {
+      // ignora
+    }
+    if (playersChanged) {
+      const p = updated.players
+      setBluePlayerName(updated.gameType === "simples" ? p.blue1 : `${p.blue1}/${p.blue2}`)
+      setRedPlayerName(updated.gameType === "simples" ? p.red1 : `${p.red1}/${p.red2}`)
+    }
+    if (maxSetsChanged) setMaxSets(updated.maxSets || 3)
+  }
+
   // --- PARTE B: sincronização contínua (broadcast → engine) ----------------
-  // Observa rt.state (lista de actions vinda do servidor: leitura inicial +
-  // broadcasts). Faz duas coisas:
-  //   1) aplica o scoreType COMPARTILHADO (ações set_score_type) ao config local;
+  // Observa rt.state (histórico de ações da sala: leitura inicial + broadcasts):
+  //   1) aplica config COMPARTILHADA (set_score_type + set_config: firstServer/
+  //      players/rules) ao estado local, "último patch vence";
   //   2) reconstrói o engine com as ações de placar (point/game), com dedup
-  //      anti-eco e um guard de RESET (remoto zera legitimamente).
+  //      anti-eco e guards de RESET (vazio) e UNDO (prefixo do local).
   useEffect(() => {
     const remote = rt.state
     if (!Array.isArray(remote)) return
 
-    // Separa: sinal de scoreType (última ocorrência), ações de placar, e o resto.
+    // Durante o backfill do dono, os broadcasts (parciais) são ignorados para
+    // não regredir o placar local — o dono já tem o histórico completo.
+    if (backfillingRef.current) return
+
+    // Separa: scoreType, patches de config (último vence por campo), ações de
+    // placar (point/game) e "resto" inesperado.
     let remoteScoreType: "pontos" | "games" | null = null
+    let cfgFirstServer: Side | null = null
+    let cfgPlayers: Partial<GameConfig["players"]> | null = null
+    let cfgRules: any = null
     const scoreActions: Action[] = []
     let hasUnknown = false
     for (const a of remote as any[]) {
       if (a?.kind === "set_score_type") {
         if (a.value === "pontos" || a.value === "games") remoteScoreType = a.value
+        continue
+      }
+      if (a?.kind === "set_config") {
+        const p = a.patch || {}
+        if (p.firstServer === "A" || p.firstServer === "B") cfgFirstServer = p.firstServer
+        if (p.players && typeof p.players === "object") cfgPlayers = p.players
+        if (p.rules && typeof p.rules === "object") cfgRules = p.rules
+        if (p.scoreType === "pontos" || p.scoreType === "games") remoteScoreType = p.scoreType
         continue
       }
       if (a?.kind === "point" || a?.kind === "game") {
@@ -405,23 +498,18 @@ export default function JogoPage() {
       hasUnknown = true // undo/reset crus ou algo inesperado
     }
 
-    // (1) scoreType compartilhado → aplica ao config local (sem re-propagar).
-    if (remoteScoreType) {
-      const value = remoteScoreType
-      setGameConfig((prev) => {
-        if (!prev || prev.scoreType === value) return prev // sem mudança → sem re-render
-        const updated = { ...prev, scoreType: value }
-        try {
-          localStorage.setItem(`tennis_match_${quadra}`, JSON.stringify(updated))
-        } catch {
-          // ignora
-        }
-        return updated
+    // (1) Config puro no gameConfig (scoreType/players + maxSets vindo de rules).
+    // Aplicado sempre — é seguro e não depende do engine.
+    if (remoteScoreType || cfgPlayers || (cfgRules && typeof cfgRules.bestOf === "number")) {
+      applyLocalConfig({
+        scoreType: remoteScoreType ?? undefined,
+        players: cfgPlayers ?? undefined,
+        maxSets: cfgRules && (cfgRules.bestOf === 3 || cfgRules.bestOf === 5) ? cfgRules.bestOf : undefined,
       })
     }
 
-    // Segurança: se sobrou kind inesperado (não point/game/set_score_type), NÃO
-    // reconstrói o engine — mantém o local seguro (não adivinha a correção).
+    // Segurança: kind inesperado (não point/game/set_score_type/set_config) →
+    // NÃO reconstrói o engine, mantém o local seguro (não adivinha).
     if (hasUnknown) {
       console.error("state.actions remoto com kind inesperado:", remote)
       return
@@ -431,23 +519,41 @@ export default function JogoPage() {
 
     const local = actionsRef.current
 
-    // Eco: conteúdo idêntico ao local (nossa própria ação voltou) → ignora.
-    const sameContent =
+    // (2) Decide as ações-alvo com dedup anti-eco + guards.
+    const sameActions =
       scoreActions.length === local.length &&
       scoreActions.every((a, i) => a.kind === local[i]?.kind && a.side === local[i]?.side)
-    if (sameContent) return
 
-    // Remoto MAIS CURTO que o local: por padrão é dado atrasado/out-of-order →
-    // protege. EXCEÇÃO (Problema 3): um RESET legítimo zera o array — aceito
-    // quando o remoto ficou VAZIO e já havíamos visto ações antes (não é o
-    // estado inicial de uma sala recém-criada).
-    if (scoreActions.length < local.length) {
+    let targetActions: Action[] | null = sameActions ? null : scoreActions
+    if (!sameActions && scoreActions.length < local.length) {
+      // Remoto mais curto: aceita se for RESET (vazio, já vimos ações) ou UNDO
+      // legítimo (remoto é PREFIXO EXATO do local). Caso contrário (divergência
+      // real) protege contra out-of-order.
       const isReset = scoreActions.length === 0 && hadRemoteActionsRef.current
-      if (!isReset) return
+      const isPrefix = scoreActions.every(
+        (a, i) => a.kind === local[i]?.kind && a.side === local[i]?.side,
+      )
+      if (!isReset && !isPrefix) targetActions = null
     }
 
-    // Novidade real (outro editor marcou) ou reset → adota o estado remoto.
-    rebuildEngine(rulesRef.current, firstServerRef.current, scoreActions)
+    // (3) Config que EXIGE rebuild (firstServer/rules) — mesmo sem mudança de ações.
+    let nextFirstServer = firstServerRef.current
+    let nextRules = rulesRef.current
+    let cfgRebuild = false
+    if (cfgFirstServer && cfgFirstServer !== firstServerRef.current) {
+      nextFirstServer = cfgFirstServer
+      cfgRebuild = true
+    }
+    if (cfgRules && JSON.stringify(cfgRules) !== JSON.stringify(rulesRef.current)) {
+      nextRules = cfgRules
+      cfgRebuild = true
+    }
+
+    // Nada mudou (nem ações, nem regras/sacador) → não reconstrói.
+    if (targetActions === null && !cfgRebuild) return
+
+    // Adota: novo placar (outro editor / undo / reset) e/ou nova config de motor.
+    rebuildEngine(nextRules, nextFirstServer, targetActions ?? local)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rt.state])
 
@@ -514,7 +620,12 @@ export default function JogoPage() {
   // convidado via URL). Sem eles (jogo local puro ou espectador) não envia nada.
   // NUNCA aguardamos: marcar ponto é instantâneo; o Realtime é paralelo e pode
   // falhar em silêncio.
-  const sendRealtimeAction = (action: { kind: string; side?: Side; value?: string }) => {
+  const sendRealtimeAction = (action: {
+    kind: string
+    side?: Side
+    value?: string
+    patch?: Record<string, any>
+  }) => {
     const editToken = gameConfig?.editToken || searchParams.get("edit") || undefined
     const matchId = gameConfig?.matchId || searchParams.get("match") || undefined
     if (!editToken || !matchId) return
@@ -667,6 +778,8 @@ export default function JogoPage() {
       const newFirstServer: Side = firstServerRef.current === "A" ? "B" : "A"
       rebuildEngine(rulesRef.current, newFirstServer, [])
       persist()
+      // Propaga o sacador para os outros devices (estado compartilhado).
+      sendRealtimeAction({ kind: "set_config", patch: { firstServer: newFirstServer } })
     }
   }
 
@@ -716,7 +829,10 @@ export default function JogoPage() {
     }
 
     setGameConfig(newConfig)
+    gameConfigRef.current = newConfig
     localStorage.setItem(`tennis_match_${quadra}`, JSON.stringify(newConfig))
+    // Propaga os nomes para os outros devices (estado compartilhado).
+    sendRealtimeAction({ kind: "set_config", patch: { players: newConfig.players } })
   }
 
   const resetGame = () => {
@@ -847,10 +963,13 @@ export default function JogoPage() {
           maxSets: nextRules.bestOf ?? gameConfig.maxSets,
         }
         setGameConfig(newConfig)
+        gameConfigRef.current = newConfig
         localStorage.setItem(`tennis_match_${quadra}`, JSON.stringify(newConfig))
       }
       setMaxSets(nextRules.bestOf ?? maxSets)
       persist()
+      // Propaga as REGRAS (bestOf/tiebreak/vantagem) para os outros devices.
+      sendRealtimeAction({ kind: "set_config", patch: { rules: nextRules } })
       setSetupOpen(false)
       return
     }
