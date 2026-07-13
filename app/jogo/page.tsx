@@ -31,7 +31,7 @@ import type { GameState, Side } from "@/lib/scoring/types"
 
 // Realtime (bônus, offline-first): cria/assina a sala ao vivo. O jogo NUNCA
 // depende disso — se o Supabase falhar, tudo segue funcionando localmente.
-import { createLiveMatch } from "@/lib/supabase/live-match"
+import { createLiveMatch, getLiveMatchState } from "@/lib/supabase/live-match"
 import { useRealtimeMatch } from "@/lib/hooks/use-realtime-match"
 
 type GameConfig = {
@@ -92,6 +92,9 @@ export default function JogoPage() {
   const [shareOpen, setShareOpen] = useState(false)
   // Evita recriar/reassinar a sala mais de uma vez por carga da tela.
   const realtimeInitRef = useRef(false)
+  // Carregamento REMOTE-FIRST (aberto via link/QR com match=/edit=/view= na URL).
+  const [remoteLoading, setRemoteLoading] = useState(false)
+  const [loadError, setLoadError] = useState(false)
 
   // Esporte da partida (do setup). Fica em estado (para o render decidir família
   // de placar) e em ref (para acesso estável dentro de rebuildEngine, sem closure
@@ -198,6 +201,78 @@ export default function JogoPage() {
   }
 
   useEffect(() => {
+    // --- PARTE A: REMOTE-FIRST (aberto via link/QR) -------------------------
+    // Se a URL traz match + (edit OU view), carregamos o estado da SALA remota,
+    // sem depender de config local e SEM redirecionar para a home.
+    const matchParam = searchParams.get("match")
+    const editParam = searchParams.get("edit")
+    const viewParam = searchParams.get("view")
+    const sportParam = searchParams.get("sport")
+    const remoteToken = editParam || viewParam
+
+    if (matchParam && remoteToken && !realtimeInitRef.current) {
+      realtimeInitRef.current = true
+      setRemoteLoading(true)
+      setLoadError(false)
+
+      // Sport vem pela URL (o servidor ainda não guarda) — setar ANTES do
+      // rebuildEngine para instanciar o módulo de scoring certo.
+      const resolvedSport = (sportParam || "tennis") as SportId
+      sportRef.current = resolvedSport
+      setSport(resolvedSport)
+
+      void (async () => {
+        try {
+          const remote = await getLiveMatchState(remoteToken)
+          if (!remote) {
+            setLoadError(true)
+            setRemoteLoading(false)
+            return
+          }
+
+          const rState: any = remote.state || {}
+          const rRules = rState.rules ?? defaultRulesFor(resolvedSport)
+          const rFirst: Side = rState.firstServer === "B" ? "B" : "A"
+          const rActions: Action[] = Array.isArray(rState.actions) ? rState.actions : []
+
+          // Config SINTÉTICO mínimo: suficiente p/ a tela renderizar. Não precisa
+          // espelhar o dono original (nomes/tema reais). Guardamos matchId/editToken
+          // para o envio de ações (Parte C) e o compartilhamento.
+          const synthetic: GameConfig = {
+            quadra,
+            sport: resolvedSport,
+            theme: "neutro",
+            gameType: "simples",
+            scoreType: "pontos",
+            players: { blue1: "Jogador 1", blue2: "Jogador 2", red1: "Jogador 3", red2: "Jogador 4" },
+            startTime: new Date().toISOString(),
+            maxSets: (rRules?.bestOf as number) || 3,
+            matchId: remote.id,
+            editToken: editParam || undefined,
+          }
+          setGameConfig(synthetic)
+          setTheme("neutro")
+          setClube(null)
+          setBluePlayerName("Jogador 1")
+          setRedPlayerName("Jogador 3")
+          setStartTime(new Date(synthetic.startTime))
+          setMaxSets(synthetic.maxSets || 3)
+
+          rebuildEngine(rRules, rFirst, rActions)
+          setRemoteLoading(false)
+
+          // Continua escutando o canal: editor (edit=) ou espectador (view=).
+          await rt.subscribe(remoteToken, remote.id, editParam ? "editor" : "viewer")
+        } catch (err) {
+          console.error("Carregamento remoto falhou:", err)
+          setLoadError(true)
+          setRemoteLoading(false)
+        }
+      })()
+      return
+    }
+
+    // --- Fluxo LOCAL (inalterado) ------------------------------------------
     // Load game configuration from localStorage
     const storedConfig = localStorage.getItem(`tennis_match_${quadra}`)
     if (storedConfig) {
@@ -285,6 +360,44 @@ export default function JogoPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [quadra, router])
 
+  // --- PARTE B: sincronização contínua (broadcast → engine) ----------------
+  // Observa rt.state (lista de actions vinda do servidor: leitura inicial +
+  // broadcasts). Reconstrói o engine SÓ quando o remoto traz novidade real de
+  // OUTRO editor — com dedup anti-eco para não reprocessar a própria ação nem
+  // regredir o placar local quando o remoto está atrás.
+  useEffect(() => {
+    const remoteActions = rt.state
+    if (!Array.isArray(remoteActions)) return
+
+    const local = actionsRef.current
+
+    // Eco: conteúdo idêntico ao local (nossa própria ação voltou) → ignora.
+    const sameContent =
+      remoteActions.length === local.length &&
+      remoteActions.every(
+        (a: any, i: number) => a?.kind === local[i]?.kind && a?.side === local[i]?.side,
+      )
+    if (sameContent) return
+
+    // Remoto ATRÁS do local (ex.: dono acabou de criar a sala vazia, ou lag) →
+    // não regride o placar deste device.
+    if (remoteActions.length < local.length) return
+
+    // Segurança: rebuildEngine só sabe reproduzir point/game. Se vier algo
+    // inesperado (undo/reset crus), NÃO adivinha — loga e ignora.
+    const onlyPointGame = remoteActions.every(
+      (a: any) => a && (a.kind === "point" || a.kind === "game"),
+    )
+    if (!onlyPointGame) {
+      console.error("state.actions remoto com kind inesperado (não point/game):", remoteActions)
+      return
+    }
+
+    // Novidade real (outro editor marcou) → adota o estado remoto.
+    rebuildEngine(rulesRef.current, firstServerRef.current, remoteActions as Action[])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rt.state])
+
   useEffect(() => {
     // Update elapsed time
     if (startTime) {
@@ -343,6 +456,20 @@ export default function JogoPage() {
     })
   }
 
+  // --- PARTE C: envio de ações à sala (fire-and-forget, offline-first) ------
+  // Resolve o edit_token/matchId disponível (dono via gameConfig OU editor
+  // convidado via URL). Sem eles (jogo local puro ou espectador) não envia nada.
+  // NUNCA aguardamos: marcar ponto é instantâneo; o Realtime é paralelo e pode
+  // falhar em silêncio.
+  const sendRealtimeAction = (action: { kind: string; side?: Side }) => {
+    const editToken = gameConfig?.editToken || searchParams.get("edit") || undefined
+    const matchId = gameConfig?.matchId || searchParams.get("match") || undefined
+    if (!editToken || !matchId) return
+    void Promise.resolve(rt.applyAction(editToken, matchId, action)).catch((err) => {
+      console.error("Envio de ação ao Supabase falhou (jogo segue local):", err)
+    })
+  }
+
   const handleScoreClick = (team: "blue" | "red") => {
     const engine = engineRef.current
     if (!engine) return
@@ -366,7 +493,8 @@ export default function JogoPage() {
     const side = sideOf(team)
 
     // Granularidade: modo "games" concede o game inteiro; senão, marca 1 ponto.
-    if (gameConfig?.scoreType === "games") {
+    const kind: "point" | "game" = gameConfig?.scoreType === "games" ? "game" : "point"
+    if (kind === "game") {
       engine.awardGameFor(side)
       actionsRef.current.push({ kind: "game", side })
     } else {
@@ -376,6 +504,8 @@ export default function JogoPage() {
 
     setGameState(engine.getState())
     persist()
+    // Espelha a ação na sala (paralelo; não bloqueia a marcação local).
+    sendRealtimeAction({ kind, side })
 
     // Arma o duplo-toque: registra este toque (que REALMENTE marcou) para que um
     // 2º toque rápido no mesmo lado seja reconhecido como "desfazer".
@@ -447,6 +577,8 @@ export default function JogoPage() {
     const state = engine.getState()
     setGameState(state)
     persist()
+    // Espelha na sala: um {kind:'undo'} por ponto desfeito (paralelo, best-effort).
+    for (let i = 0; i < undone; i++) sendRealtimeAction({ kind: "undo" })
 
     // Voz ao desfazer (se ligada): palavra curta de correção + placar corrigido
     // recantado, pelo MESMO caminho isolado (announcer + speaker).
@@ -535,6 +667,7 @@ export default function JogoPage() {
       localStorage.removeItem(`tennis_engine_${quadra}`)
       rebuildEngine(rulesRef.current, "A", [])
       persist()
+      sendRealtimeAction({ kind: "reset" }) // zera a sala também (best-effort)
     }
   }
 
@@ -547,6 +680,7 @@ export default function JogoPage() {
     localStorage.removeItem(`tennis_score_${quadra}`)
     rebuildEngine(rulesRef.current, "A", [])
     persist()
+    sendRealtimeAction({ kind: "reset" }) // zera a sala também (best-effort)
   }
 
   // COMPARTILHAR o resultado: captura a "arte" (finishArtRef — só o card visual,
@@ -669,8 +803,28 @@ export default function JogoPage() {
     }
   }
 
-  if (!gameConfig || !gameState) {
-    return <div className="flex items-center justify-center min-h-screen">Carregando...</div>
+  if (loadError) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen gap-3 p-6 text-center">
+        <p className="text-lg font-semibold">Não foi possível carregar esta partida</p>
+        <p className="text-sm opacity-70">O link pode ter expirado ou a sala não existe mais.</p>
+        <button
+          type="button"
+          onClick={() => router.push("/")}
+          className="mt-2 rounded-full bg-white px-5 py-2 text-sm font-bold text-neutral-900 active:scale-95 transition"
+        >
+          Voltar ao início
+        </button>
+      </div>
+    )
+  }
+
+  if (remoteLoading || !gameConfig || !gameState) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        {remoteLoading ? "Carregando partida ao vivo..." : "Carregando..."}
+      </div>
+    )
   }
 
   // --- Derivações de exibição a partir do GameState do motor (blue=A, red=B) ---
