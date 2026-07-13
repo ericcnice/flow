@@ -95,6 +95,9 @@ export default function JogoPage() {
   // Carregamento REMOTE-FIRST (aberto via link/QR com match=/edit=/view= na URL).
   const [remoteLoading, setRemoteLoading] = useState(false)
   const [loadError, setLoadError] = useState(false)
+  // Já vimos alguma ação de placar vinda do remoto? Usado para distinguir um
+  // RESET legítimo (remoto zera após ter tido ações) de dado inicial/atrasado.
+  const hadRemoteActionsRef = useRef(false)
 
   // Esporte da partida (do setup). Fica em estado (para o render decidir família
   // de placar) e em ref (para acesso estável dentro de rebuildEngine, sem closure
@@ -208,6 +211,8 @@ export default function JogoPage() {
     const editParam = searchParams.get("edit")
     const viewParam = searchParams.get("view")
     const sportParam = searchParams.get("sport")
+    const themeParam = searchParams.get("theme")
+    const scoreTypeParam = searchParams.get("scoreType")
     const remoteToken = editParam || viewParam
 
     if (matchParam && remoteToken && !realtimeInitRef.current) {
@@ -215,11 +220,12 @@ export default function JogoPage() {
       setRemoteLoading(true)
       setLoadError(false)
 
-      // Sport vem pela URL (o servidor ainda não guarda) — setar ANTES do
-      // rebuildEngine para instanciar o módulo de scoring certo.
+      // Sport/tema vêm pela URL (o servidor ainda não guarda) — setar ANTES do
+      // rebuildEngine para instanciar o módulo de scoring certo e o tema real.
       const resolvedSport = (sportParam || "tennis") as SportId
       sportRef.current = resolvedSport
       setSport(resolvedSport)
+      const resolvedTheme = (themeParam || "neutro") as ThemeId
 
       void (async () => {
         try {
@@ -233,17 +239,29 @@ export default function JogoPage() {
           const rState: any = remote.state || {}
           const rRules = rState.rules ?? defaultRulesFor(resolvedSport)
           const rFirst: Side = rState.firstServer === "B" ? "B" : "A"
-          const rActions: Action[] = Array.isArray(rState.actions) ? rState.actions : []
 
-          // Config SINTÉTICO mínimo: suficiente p/ a tela renderizar. Não precisa
-          // espelhar o dono original (nomes/tema reais). Guardamos matchId/editToken
-          // para o envio de ações (Parte C) e o compartilhamento.
+          // Filtra as actions da sala: separa o sinal de scoreType (set_score_type)
+          // das ações de placar (point/game) — rebuildEngine só entende point/game.
+          const rawActions: any[] = Array.isArray(rState.actions) ? rState.actions : []
+          let loadedScoreType: "pontos" | "games" =
+            scoreTypeParam === "games" ? "games" : "pontos"
+          const cleanActions: Action[] = []
+          for (const a of rawActions) {
+            if (a?.kind === "set_score_type") {
+              if (a.value === "pontos" || a.value === "games") loadedScoreType = a.value
+              continue
+            }
+            if (a?.kind === "point" || a?.kind === "game") cleanActions.push({ kind: a.kind, side: a.side })
+          }
+
+          // Config SINTÉTICO mínimo: suficiente p/ a tela renderizar. Tema e
+          // scoreType agora vêm da URL / histórico da sala, não mais fixos.
           const synthetic: GameConfig = {
             quadra,
             sport: resolvedSport,
-            theme: "neutro",
+            theme: resolvedTheme,
             gameType: "simples",
-            scoreType: "pontos",
+            scoreType: loadedScoreType,
             players: { blue1: "Jogador 1", blue2: "Jogador 2", red1: "Jogador 3", red2: "Jogador 4" },
             startTime: new Date().toISOString(),
             maxSets: (rRules?.bestOf as number) || 3,
@@ -251,14 +269,15 @@ export default function JogoPage() {
             editToken: editParam || undefined,
           }
           setGameConfig(synthetic)
-          setTheme("neutro")
+          setTheme(resolvedTheme)
           setClube(null)
           setBluePlayerName("Jogador 1")
           setRedPlayerName("Jogador 3")
           setStartTime(new Date(synthetic.startTime))
           setMaxSets(synthetic.maxSets || 3)
+          if (cleanActions.length > 0) hadRemoteActionsRef.current = true
 
-          rebuildEngine(rRules, rFirst, rActions)
+          rebuildEngine(rRules, rFirst, cleanActions)
           setRemoteLoading(false)
 
           // Continua escutando o canal: editor (edit=) ou espectador (view=).
@@ -362,39 +381,73 @@ export default function JogoPage() {
 
   // --- PARTE B: sincronização contínua (broadcast → engine) ----------------
   // Observa rt.state (lista de actions vinda do servidor: leitura inicial +
-  // broadcasts). Reconstrói o engine SÓ quando o remoto traz novidade real de
-  // OUTRO editor — com dedup anti-eco para não reprocessar a própria ação nem
-  // regredir o placar local quando o remoto está atrás.
+  // broadcasts). Faz duas coisas:
+  //   1) aplica o scoreType COMPARTILHADO (ações set_score_type) ao config local;
+  //   2) reconstrói o engine com as ações de placar (point/game), com dedup
+  //      anti-eco e um guard de RESET (remoto zera legitimamente).
   useEffect(() => {
-    const remoteActions = rt.state
-    if (!Array.isArray(remoteActions)) return
+    const remote = rt.state
+    if (!Array.isArray(remote)) return
+
+    // Separa: sinal de scoreType (última ocorrência), ações de placar, e o resto.
+    let remoteScoreType: "pontos" | "games" | null = null
+    const scoreActions: Action[] = []
+    let hasUnknown = false
+    for (const a of remote as any[]) {
+      if (a?.kind === "set_score_type") {
+        if (a.value === "pontos" || a.value === "games") remoteScoreType = a.value
+        continue
+      }
+      if (a?.kind === "point" || a?.kind === "game") {
+        scoreActions.push({ kind: a.kind, side: a.side })
+        continue
+      }
+      hasUnknown = true // undo/reset crus ou algo inesperado
+    }
+
+    // (1) scoreType compartilhado → aplica ao config local (sem re-propagar).
+    if (remoteScoreType) {
+      const value = remoteScoreType
+      setGameConfig((prev) => {
+        if (!prev || prev.scoreType === value) return prev // sem mudança → sem re-render
+        const updated = { ...prev, scoreType: value }
+        try {
+          localStorage.setItem(`tennis_match_${quadra}`, JSON.stringify(updated))
+        } catch {
+          // ignora
+        }
+        return updated
+      })
+    }
+
+    // Segurança: se sobrou kind inesperado (não point/game/set_score_type), NÃO
+    // reconstrói o engine — mantém o local seguro (não adivinha a correção).
+    if (hasUnknown) {
+      console.error("state.actions remoto com kind inesperado:", remote)
+      return
+    }
+
+    if (scoreActions.length > 0) hadRemoteActionsRef.current = true
 
     const local = actionsRef.current
 
     // Eco: conteúdo idêntico ao local (nossa própria ação voltou) → ignora.
     const sameContent =
-      remoteActions.length === local.length &&
-      remoteActions.every(
-        (a: any, i: number) => a?.kind === local[i]?.kind && a?.side === local[i]?.side,
-      )
+      scoreActions.length === local.length &&
+      scoreActions.every((a, i) => a.kind === local[i]?.kind && a.side === local[i]?.side)
     if (sameContent) return
 
-    // Remoto ATRÁS do local (ex.: dono acabou de criar a sala vazia, ou lag) →
-    // não regride o placar deste device.
-    if (remoteActions.length < local.length) return
-
-    // Segurança: rebuildEngine só sabe reproduzir point/game. Se vier algo
-    // inesperado (undo/reset crus), NÃO adivinha — loga e ignora.
-    const onlyPointGame = remoteActions.every(
-      (a: any) => a && (a.kind === "point" || a.kind === "game"),
-    )
-    if (!onlyPointGame) {
-      console.error("state.actions remoto com kind inesperado (não point/game):", remoteActions)
-      return
+    // Remoto MAIS CURTO que o local: por padrão é dado atrasado/out-of-order →
+    // protege. EXCEÇÃO (Problema 3): um RESET legítimo zera o array — aceito
+    // quando o remoto ficou VAZIO e já havíamos visto ações antes (não é o
+    // estado inicial de uma sala recém-criada).
+    if (scoreActions.length < local.length) {
+      const isReset = scoreActions.length === 0 && hadRemoteActionsRef.current
+      if (!isReset) return
     }
 
-    // Novidade real (outro editor marcou) → adota o estado remoto.
-    rebuildEngine(rulesRef.current, firstServerRef.current, remoteActions as Action[])
+    // Novidade real (outro editor marcou) ou reset → adota o estado remoto.
+    rebuildEngine(rulesRef.current, firstServerRef.current, scoreActions)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rt.state])
 
@@ -461,7 +514,7 @@ export default function JogoPage() {
   // convidado via URL). Sem eles (jogo local puro ou espectador) não envia nada.
   // NUNCA aguardamos: marcar ponto é instantâneo; o Realtime é paralelo e pode
   // falhar em silêncio.
-  const sendRealtimeAction = (action: { kind: string; side?: Side }) => {
+  const sendRealtimeAction = (action: { kind: string; side?: Side; value?: string }) => {
     const editToken = gameConfig?.editToken || searchParams.get("edit") || undefined
     const matchId = gameConfig?.matchId || searchParams.get("match") || undefined
     if (!editToken || !matchId) return
@@ -620,11 +673,15 @@ export default function JogoPage() {
   const toggleScoreType = () => {
     if (!gameConfig) return
 
-    const newConfig = { ...gameConfig }
-    newConfig.scoreType = newConfig.scoreType === "pontos" ? "games" : "pontos"
+    const next: "pontos" | "games" = gameConfig.scoreType === "pontos" ? "games" : "pontos"
+    const newConfig = { ...gameConfig, scoreType: next }
 
+    // (a) Efeito local imediato (como antes).
     setGameConfig(newConfig)
     localStorage.setItem(`tennis_match_${quadra}`, JSON.stringify(newConfig))
+    // (b) Propaga o modo para os OUTROS devices da sala (estado compartilhado).
+    // A escolha vale para todos: o próximo toque de qualquer um gera o kind certo.
+    sendRealtimeAction({ kind: "set_score_type", value: next })
   }
 
   const handleThirdSetChoice = (_playTiebreak: boolean) => {
@@ -1817,6 +1874,8 @@ export default function JogoPage() {
         onClose={() => setShareOpen(false)}
         quadra={quadra}
         sport={sport}
+        theme={theme}
+        scoreType={gameConfig.scoreType}
         matchId={gameConfig.matchId}
         viewToken={gameConfig.viewToken}
         editToken={gameConfig.editToken}

@@ -11,6 +11,12 @@ interface ShareModalProps {
   /** Esporte da partida — vai na URL (&sport=) p/ o device remoto instanciar o
    *  módulo de scoring certo (squash/padel/etc), já que o servidor não guarda. */
   sport?: string
+  /** Tema de cor — vai na URL (&theme=) para o device remoto nascer com o tema
+   *  real do dono, não mais "neutro" fixo. */
+  theme?: string
+  /** Modo de contagem no JOIN (&scoreType=). Ao vivo, a troca propaga via
+   *  Realtime (ação set_score_type); este param cobre o estado inicial. */
+  scoreType?: string
   matchId?: string
   viewToken?: string
   editToken?: string
@@ -36,6 +42,8 @@ export function ShareModal({
   onClose,
   quadra,
   sport,
+  theme,
+  scoreType,
   matchId,
   viewToken,
   editToken,
@@ -58,20 +66,25 @@ export function ShareModal({
   // sport (para o device remoto instanciar o módulo de scoring correto).
   //  - Editor  → /jogo   (tela de operação) com o edit_token (SEGREDO do dono).
   //  - Espectador → /placar (tela read-only) com o view_token (seguro de expor).
-  const sportParam = sport ? `&sport=${encodeURIComponent(sport)}` : ""
+  // Params que viajam na URL para o device remoto nascer coerente (sport, tema,
+  // e o modo de contagem inicial). O servidor não guarda esses campos.
+  const extraParams =
+    (sport ? `&sport=${encodeURIComponent(sport)}` : "") +
+    (theme ? `&theme=${encodeURIComponent(theme)}` : "") +
+    (scoreType ? `&scoreType=${encodeURIComponent(scoreType)}` : "")
   const editUrl = useMemo(
     () =>
       ready
-        ? `${origin}/jogo?quadra=${quadra}&match=${matchId}&edit=${editToken}${sportParam}`
+        ? `${origin}/jogo?quadra=${quadra}&match=${matchId}&edit=${editToken}${extraParams}`
         : "",
-    [ready, origin, quadra, matchId, editToken, sportParam],
+    [ready, origin, quadra, matchId, editToken, extraParams],
   )
   const viewUrl = useMemo(
     () =>
       ready
-        ? `${origin}/placar?quadra=${quadra}&match=${matchId}&view=${viewToken}${sportParam}`
+        ? `${origin}/placar?quadra=${quadra}&match=${matchId}&view=${viewToken}${extraParams}`
         : "",
-    [ready, origin, quadra, matchId, viewToken, sportParam],
+    [ready, origin, quadra, matchId, viewToken, extraParams],
   )
 
   // Reset do feedback "Copiado!" a cada abertura.
