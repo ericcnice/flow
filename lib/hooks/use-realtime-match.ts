@@ -71,6 +71,8 @@ export interface UseRealtimeMatch {
   remoteRules: any
   /** state.firstServer mais recente do remoto ('A'|'B'); null se ausente. */
   remoteFirstServer: string | null
+  /** state.players mais recente do remoto (raiz do state); null se ausente. */
+  remotePlayers: any
   /**
    * Total de conexões distintas ativas no canal (editores + espectadores).
    * COSMÉTICO: ver nota de "sem enforcement" na doc do hook abaixo.
@@ -112,6 +114,7 @@ export function useRealtimeMatch(options?: UseRealtimeMatchOptions): UseRealtime
   const [state, setState] = useState<any>(null)
   const [remoteRules, setRemoteRules] = useState<any>(null)
   const [remoteFirstServer, setRemoteFirstServer] = useState<string | null>(null)
+  const [remotePlayers, setRemotePlayers] = useState<any>(null)
   const [presenceCount, setPresenceCount] = useState(0)
   const [editorCount, setEditorCount] = useState(0)
 
@@ -129,6 +132,7 @@ export function useRealtimeMatch(options?: UseRealtimeMatchOptions): UseRealtime
     setState(newState?.actions ?? null)
     if (newState?.rules !== undefined) setRemoteRules(newState.rules ?? null)
     if (newState?.firstServer !== undefined) setRemoteFirstServer(newState.firstServer ?? null)
+    if (newState?.players !== undefined) setRemotePlayers(newState.players ?? null)
   }, [])
 
   // Recalcula a contagem de presença a partir do presenceState() atual.
@@ -330,6 +334,7 @@ export function useRealtimeMatch(options?: UseRealtimeMatchOptions): UseRealtime
     state,
     remoteRules,
     remoteFirstServer,
+    remotePlayers,
     presenceCount,
     editorCount,
     create,

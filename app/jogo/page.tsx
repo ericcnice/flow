@@ -582,6 +582,53 @@ export default function JogoPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rt.state])
 
+  // --- PARTE B2: config da RAIZ do state (players/firstServer/rules) ---------
+  // A RPC grava set_config na RAIZ do state (não em actions), então mudanças de
+  // config NÃO alteram rt.state.length — o effect acima (deps [rt.state]) nunca
+  // dispararia por elas. Aqui reagimos aos campos que o hook repassa da raiz:
+  // remotePlayers/remoteFirstServer/remoteRules. Cada um tem dedup anti-eco:
+  // só aplica se o valor remoto DIFERE do que este device já tem (o eco da
+  // própria ação já bate com o ref/config local e é ignorado).
+  useEffect(() => {
+    // players → gameConfig local. applyLocalConfig já deduplica por conteúdo
+    // (só muda se diferente do players atual) e atualiza os nomes exibidos.
+    if (rt.remotePlayers && typeof rt.remotePlayers === "object") {
+      applyLocalConfig({ players: rt.remotePlayers })
+    }
+
+    // firstServer e rules podem exigir rebuild do motor. Combinamos num único
+    // rebuild se qualquer um mudou (replay das ações atuais preserva o placar).
+    let nextFirstServer = firstServerRef.current
+    let nextRules = rulesRef.current
+    let needRebuild = false
+
+    if (
+      (rt.remoteFirstServer === "A" || rt.remoteFirstServer === "B") &&
+      rt.remoteFirstServer !== firstServerRef.current // dedup anti-eco
+    ) {
+      nextFirstServer = rt.remoteFirstServer
+      needRebuild = true
+    }
+
+    if (
+      rt.remoteRules &&
+      typeof rt.remoteRules === "object" &&
+      JSON.stringify(rt.remoteRules) !== JSON.stringify(rulesRef.current) // dedup anti-eco
+    ) {
+      nextRules = rt.remoteRules
+      needRebuild = true
+      const bo = (rt.remoteRules as any).bestOf
+      if (bo === 3 || bo === 5) applyLocalConfig({ maxSets: bo })
+    }
+
+    if (needRebuild) {
+      // Replay das ações ATUAIS com as novas regras/sacador — preserva o placar
+      // (mesmo mecanismo do onSetupConfirm/toggleServing locais).
+      rebuildEngine(nextRules, nextFirstServer, actionsRef.current)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rt.remotePlayers, rt.remoteFirstServer, rt.remoteRules])
+
   useEffect(() => {
     // Update elapsed time
     if (startTime) {
