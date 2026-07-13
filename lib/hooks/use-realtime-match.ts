@@ -15,25 +15,40 @@ import {
 
 export type RealtimeStatus = 'idle' | 'connecting' | 'connected' | 'error'
 
+/** Papel do client neste canal — usado apenas para a contagem de presença. */
+export type MatchRole = 'editor' | 'viewer'
+
 export interface UseRealtimeMatchOptions {
   viewToken?: string
   matchId?: string
+  /** Papel ao auto-conectar via options. Default: 'viewer'. */
+  role?: MatchRole
 }
 
 export interface UseRealtimeMatch {
   status: RealtimeStatus
   /** state.actions mais recente (via broadcast ou leitura inicial); null se ainda não há. */
   state: any
-  /** Cria uma sala nova e já começa a escutá-la. Retorna os tokens ou null em falha. */
-  create: (clubSlug?: string) => Promise<LiveMatchRoom | null>
+  /**
+   * Total de conexões distintas ativas no canal (editores + espectadores).
+   * COSMÉTICO: ver nota de "sem enforcement" na doc do hook abaixo.
+   */
+  presenceCount: number
+  /**
+   * Quantas dessas conexões se anunciaram como role:'editor'.
+   * COSMÉTICO: ver nota de "sem enforcement" na doc do hook abaixo.
+   */
+  editorCount: number
+  /** Cria uma sala nova e já começa a escutá-la (como 'editor'). Retorna os tokens ou null em falha. */
+  create: (clubSlug?: string, role?: MatchRole) => Promise<LiveMatchRoom | null>
   /** Aplica uma ação. O broadcast atualiza o state; também aplicamos o retorno de forma otimista. */
   applyAction: (
     editToken: string,
     matchId: string,
     action: LiveMatchAction,
   ) => Promise<LiveMatchState | null>
-  /** Lê o estado inicial e passa a escutar o canal de broadcast da sala. */
-  subscribe: (viewToken: string, matchId: string) => Promise<void>
+  /** Lê o estado inicial, entra no canal de broadcast e anuncia presença com o `role` dado. */
+  subscribe: (viewToken: string, matchId: string, role?: MatchRole) => Promise<void>
 }
 
 /**
@@ -42,14 +57,26 @@ export interface UseRealtimeMatch {
  * "Peça" isolada: não conhece nenhuma tela. Todas as chamadas são assíncronas
  * e falham graciosamente — nada aqui bloqueia o resto do app se o Supabase
  * estiver indisponível.
+ *
+ * ⚠️ PRESENCE É COSMÉTICO (UX), NÃO É SEGURANÇA/ENFORCEMENT.
+ * `presenceCount` / `editorCount` apenas *mostram* quantos clients estão no
+ * canal agora ("X editando"). Eles NÃO impedem ninguém de editar: quem tem o
+ * `edit_token` continua podendo aplicar ações via RPC independentemente da
+ * contagem, e nada aqui bloqueia de verdade um 4º editor. O enforcement real
+ * (bloqueio no servidor) é uma implementação futura, fora do escopo deste hook.
  */
 export function useRealtimeMatch(options?: UseRealtimeMatchOptions): UseRealtimeMatch {
   const [status, setStatus] = useState<RealtimeStatus>('idle')
   const [state, setState] = useState<any>(null)
+  const [presenceCount, setPresenceCount] = useState(0)
+  const [editorCount, setEditorCount] = useState(0)
 
   const channelRef = useRef<RealtimeChannel | null>(null)
   const wakeLockRef = useRef<any>(null)
   const mountedRef = useRef(true)
+  // ID único por sessão do navegador (gerado sob demanda, no client). Usado
+  // como presence key para deduplicar conexões e como identificador no track().
+  const sessionIdRef = useRef<string>('')
 
   // Aplica um novo state, expondo apenas state.actions (conforme contrato do hook).
   const applyState = useCallback((newState: any) => {
@@ -57,40 +84,88 @@ export function useRealtimeMatch(options?: UseRealtimeMatchOptions): UseRealtime
     setState(newState?.actions ?? null)
   }, [])
 
+  // Recalcula a contagem de presença a partir do presenceState() atual.
+  // presenceState() => { [presenceKey]: Array<meta> }, uma entrada por key.
+  const recomputePresence = useCallback(() => {
+    const channel = channelRef.current
+    if (!channel || !mountedRef.current) return
+    const presenceState = channel.presenceState() as Record<
+      string,
+      Array<{ role?: string }>
+    >
+    const keys = Object.keys(presenceState)
+    let editors = 0
+    for (const key of keys) {
+      const metas = presenceState[key]
+      if (metas?.some((m) => m.role === 'editor')) editors++
+    }
+    setPresenceCount(keys.length)
+    setEditorCount(editors)
+  }, [])
+
   const teardownChannel = useCallback(() => {
     if (channelRef.current) {
+      // Remove a própria presença antes de derrubar o canal.
+      try {
+        channelRef.current.untrack()
+      } catch {
+        // ignorar
+      }
       // removeChannel também faz unsubscribe.
       supabase.removeChannel(channelRef.current)
       channelRef.current = null
     }
+    setPresenceCount(0)
+    setEditorCount(0)
   }, [])
 
   const subscribe = useCallback(
-    async (viewToken: string, matchId: string) => {
+    async (viewToken: string, matchId: string, role: MatchRole = 'viewer') => {
       try {
         setStatus('connecting')
 
         // Troca de sala: derruba o canal anterior, se houver.
         teardownChannel()
 
+        // Garante um sessionId estável para esta sessão do navegador.
+        if (!sessionIdRef.current) sessionIdRef.current = crypto.randomUUID()
+        const sessionId = sessionIdRef.current
+
         // 1) Estado inicial (uma leitura) antes de escutar o broadcast.
         const initial = await getLiveMatchState(viewToken)
         if (!mountedRef.current) return
         if (initial) applyState(initial.state)
 
-        // 2) Calcula o topic e se inscreve no canal de broadcast.
+        // 2) Calcula o topic e se inscreve no MESMO canal (broadcast + presence).
         const topic = await getLiveMatchTopic(viewToken, matchId)
         if (!mountedRef.current) return
 
-        const channel = supabase.channel(topic)
+        const channel = supabase.channel(topic, {
+          config: { presence: { key: sessionId } },
+        })
+
+        // Broadcast (fluxo já existente).
         channel.on('broadcast', { event: 'match_state' }, (message) => {
           const payload = (message as any)?.payload
           if (payload?.state !== undefined) applyState(payload.state)
         })
-        channel.subscribe((channelStatus) => {
+
+        // Presence: 'sync' basta para recontar; join/leave só chamam o mesmo recálculo.
+        channel.on('presence', { event: 'sync' }, () => recomputePresence())
+        channel.on('presence', { event: 'join' }, () => recomputePresence())
+        channel.on('presence', { event: 'leave' }, () => recomputePresence())
+
+        channel.subscribe(async (channelStatus) => {
           if (!mountedRef.current) return
           if (channelStatus === 'SUBSCRIBED') {
             setStatus('connected')
+            // Anuncia a própria presença só depois de SUBSCRIBED (exigência da API).
+            try {
+              await channel.track({ role, sessionId, joinedAt: Date.now() })
+            } catch {
+              // Presence é cosmético: falhar aqui não quebra broadcast/estado.
+            }
+            recomputePresence()
           } else if (
             channelStatus === 'CHANNEL_ERROR' ||
             channelStatus === 'TIMED_OUT' ||
@@ -106,17 +181,17 @@ export function useRealtimeMatch(options?: UseRealtimeMatchOptions): UseRealtime
         if (mountedRef.current) setStatus('error')
       }
     },
-    [applyState, teardownChannel],
+    [applyState, teardownChannel, recomputePresence],
   )
 
   const create = useCallback(
-    async (clubSlug?: string): Promise<LiveMatchRoom | null> => {
+    async (clubSlug?: string, role: MatchRole = 'editor'): Promise<LiveMatchRoom | null> => {
       try {
         setStatus('connecting')
         const room = await createLiveMatch(clubSlug)
         if (!mountedRef.current) return null
-        // Já entra escutando a sala recém-criada.
-        await subscribe(room.viewToken, room.id)
+        // Já entra escutando a sala recém-criada (quem cria é editor por padrão).
+        await subscribe(room.viewToken, room.id, role)
         return room
       } catch (err) {
         console.error('useRealtimeMatch.create failed:', err)
@@ -144,10 +219,10 @@ export function useRealtimeMatch(options?: UseRealtimeMatchOptions): UseRealtime
   // Assinatura automática se o hook já nasce com uma sala conhecida.
   useEffect(() => {
     if (options?.viewToken && options?.matchId) {
-      subscribe(options.viewToken, options.matchId)
+      subscribe(options.viewToken, options.matchId, options.role ?? 'viewer')
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [options?.viewToken, options?.matchId])
+  }, [options?.viewToken, options?.matchId, options?.role])
 
   // Wake Lock: mantém a tela acesa enquanto conectado. Falha em silêncio
   // onde não há suporte (Safari/iOS antigos etc.).
@@ -201,5 +276,5 @@ export function useRealtimeMatch(options?: UseRealtimeMatchOptions): UseRealtime
     }
   }, [teardownChannel])
 
-  return { status, state, create, applyAction, subscribe }
+  return { status, state, presenceCount, editorCount, create, applyAction, subscribe }
 }
