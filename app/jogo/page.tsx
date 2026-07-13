@@ -377,13 +377,18 @@ export default function JogoPage() {
               // Config inicial: a sala nasce já com scoreType/sacador/regras/
               // jogadores atuais (gravados no `state` pela RPC), sem depender de
               // set_config depois. O sport também viaja pela URL (&sport=).
-              const room = await createLiveMatch(config.clube, {
+              // Objeto em VARIÁVEL (não literal) para incluir `theme` sem exigir
+              // que ele esteja na interface LiveMatchInitialState — o campo viaja
+              // no jsonb e a RPC grava tudo na raiz do `state` da sala.
+              const initialConfig = {
                 scoreType: config.scoreType,
                 firstServer: firstServerRef.current,
                 rules: rulesRef.current,
                 players: config.players,
+                theme: config.theme ?? theme,
                 sport: config.sport ?? sportRef.current,
-              })
+              }
+              const room = await createLiveMatch(config.clube, initialConfig)
               if (!room) return
               const updated: GameConfig = {
                 ...config,
@@ -433,12 +438,13 @@ export default function JogoPage() {
   }, [gameConfig])
 
   // Aplica ao gameConfig LOCAL um patch de campos de configuração vindos do
-  // remoto (scoreType, players, maxSets). Atualiza também os nomes exibidos
-  // (derivados de players) e persiste. "último patch vence" (sem acumular).
+  // remoto (scoreType, players, maxSets, theme). Atualiza também os nomes
+  // exibidos (derivados de players) e o tema. "último patch vence" (sem acumular).
   const applyLocalConfig = (patch: {
     scoreType?: "pontos" | "games"
     players?: Partial<GameConfig["players"]>
     maxSets?: number
+    theme?: ThemeId
   }) => {
     const prev = gameConfigRef.current
     if (!prev) return
@@ -464,6 +470,12 @@ export default function JogoPage() {
       changed = true
       maxSetsChanged = true
     }
+    let themeChanged = false
+    if (patch.theme && prev.theme !== patch.theme) {
+      updated.theme = patch.theme
+      changed = true
+      themeChanged = true
+    }
     if (!changed) return
 
     gameConfigRef.current = updated
@@ -479,6 +491,7 @@ export default function JogoPage() {
       setRedPlayerName(updated.gameType === "simples" ? p.red1 : `${p.red1}/${p.red2}`)
     }
     if (maxSetsChanged) setMaxSets(updated.maxSets || 3)
+    if (themeChanged) setTheme(updated.theme as ThemeId)
   }
 
   // --- PARTE B: sincronização contínua (broadcast → engine) ----------------
@@ -586,14 +599,20 @@ export default function JogoPage() {
   // A RPC grava set_config na RAIZ do state (não em actions), então mudanças de
   // config NÃO alteram rt.state.length — o effect acima (deps [rt.state]) nunca
   // dispararia por elas. Aqui reagimos aos campos que o hook repassa da raiz:
-  // remotePlayers/remoteFirstServer/remoteRules. Cada um tem dedup anti-eco:
-  // só aplica se o valor remoto DIFERE do que este device já tem (o eco da
-  // própria ação já bate com o ref/config local e é ignorado).
+  // remotePlayers/remoteFirstServer/remoteRules/remoteTheme. Cada um tem dedup
+  // anti-eco: só aplica se o valor remoto DIFERE do que este device já tem (o
+  // eco da própria ação já bate com o ref/config local e é ignorado).
   useEffect(() => {
     // players → gameConfig local. applyLocalConfig já deduplica por conteúdo
     // (só muda se diferente do players atual) e atualiza os nomes exibidos.
     if (rt.remotePlayers && typeof rt.remotePlayers === "object") {
       applyLocalConfig({ players: rt.remotePlayers })
+    }
+
+    // theme → aplica setTheme + gameConfig via applyLocalConfig (dedup por
+    // conteúdo: só muda se diferente do tema atual). Não afeta o motor.
+    if (rt.remoteTheme) {
+      applyLocalConfig({ theme: rt.remoteTheme as ThemeId })
     }
 
     // firstServer e rules podem exigir rebuild do motor. Combinamos num único
@@ -627,7 +646,7 @@ export default function JogoPage() {
       rebuildEngine(nextRules, nextFirstServer, actionsRef.current)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rt.remotePlayers, rt.remoteFirstServer, rt.remoteRules])
+  }, [rt.remotePlayers, rt.remoteFirstServer, rt.remoteRules, rt.remoteTheme])
 
   useEffect(() => {
     // Update elapsed time
@@ -1040,8 +1059,8 @@ export default function JogoPage() {
       }
       setMaxSets(nextRules.bestOf ?? maxSets)
       persist()
-      // Propaga as REGRAS (bestOf/tiebreak/vantagem) para os outros devices.
-      sendRealtimeAction({ kind: "set_config", patch: { rules: nextRules } })
+      // Propaga REGRAS (bestOf/tiebreak/vantagem) e TEMA para os outros devices.
+      sendRealtimeAction({ kind: "set_config", patch: { rules: nextRules, theme: nextTheme } })
       setSetupOpen(false)
       return
     }
