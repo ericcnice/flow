@@ -15,6 +15,44 @@ import {
 
 export type RealtimeStatus = 'idle' | 'connecting' | 'connected' | 'error'
 
+/**
+ * Gera um id de sessão único para usar como presence key.
+ *
+ * `crypto.randomUUID()` só existe em contexto SEGURO (HTTPS ou localhost). Ao
+ * acessar por HTTP puro (ex.: IP da rede local) ela é `undefined` e quebra. Este
+ * helper tenta, em ordem: randomUUID → getRandomValues → Math.random+timestamp.
+ * Não precisa ser um UUID perfeito, só único o bastante para esta sessão.
+ */
+function generateSessionId(): string {
+  const c: Crypto | undefined = typeof crypto !== 'undefined' ? crypto : undefined
+
+  if (c?.randomUUID) {
+    try {
+      return c.randomUUID()
+    } catch {
+      // cai para os fallbacks abaixo
+    }
+  }
+
+  if (c?.getRandomValues) {
+    try {
+      const bytes = new Uint8Array(16)
+      c.getRandomValues(bytes)
+      const hex = Array.from(bytes)
+        .map((b) => b.toString(16).padStart(2, '0'))
+        .join('')
+      return `sess-${hex}`
+    } catch {
+      // cai para o fallback final
+    }
+  }
+
+  // Último recurso: sem Web Crypto (contexto não seguro e antigo).
+  return `sess-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}${Math.random()
+    .toString(36)
+    .slice(2)}`
+}
+
 /** Papel do client neste canal — usado apenas para a contagem de presença. */
 export type MatchRole = 'editor' | 'viewer'
 
@@ -128,7 +166,9 @@ export function useRealtimeMatch(options?: UseRealtimeMatchOptions): UseRealtime
         teardownChannel()
 
         // Garante um sessionId estável para esta sessão do navegador.
-        if (!sessionIdRef.current) sessionIdRef.current = crypto.randomUUID()
+        // generateSessionId tem fallback p/ contexto não seguro (HTTP puro),
+        // onde crypto.randomUUID não existe.
+        if (!sessionIdRef.current) sessionIdRef.current = generateSessionId()
         const sessionId = sessionIdRef.current
 
         // 1) Estado inicial (uma leitura) antes de escutar o broadcast.
