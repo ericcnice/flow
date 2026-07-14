@@ -259,7 +259,15 @@ export function announce(
     case "ADVANTAGE":
       return { cue: `advantage:${ev.side ?? ""}`, text: vocab.advantage }
     case "DEUCE":
-      return { cue: "deuce", text: vocab.deuce }
+      // "Deuce = quarenta iguais" é EXCLUSIVO da família tênis (tennis/beach/
+      // padel), onde o empate acontece em 40-40. Nos esportes de rally
+      // (squash/ping pong/pickleball) o empate alto é 10-10, 11-11, 12-12… e
+      // deve cantar os NÚMEROS REAIS — o evento já carrega o placar em `detail`,
+      // então reusamos o anúncio de placar corrido. Mesma checagem de família
+      // usada em pointAnnouncement/announceUndo, para não inventar uma nova.
+      return TENNIS_FAMILY.has(sport)
+        ? { cue: "deuce", text: vocab.deuce }
+        : pointAnnouncement(ev, sport, vocab, state.server)
     case "SIDE_OUT":
       return { cue: "sideout", text: vocab.sideOut }
     case "POINT":
