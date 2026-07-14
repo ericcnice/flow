@@ -27,7 +27,7 @@ import { createSpeechSynthesisSpeaker, type Speaker } from "@/lib/voice/speaker"
 // pong/pickleball). O "catálogo" (lib/sports-catalog) é a cola entre a UI e os
 // módulos — ele NÃO altera lib/scoring, só o consome.
 import { ScoringEngine } from "@/lib/scoring/engine"
-import { sportById, familyOf, formatPoint, defaultRulesFor, buildScoreCols, type SportId } from "@/lib/sports-catalog"
+import { sportById, familyOf, formatPoint, defaultRulesFor, buildScoreCols, concededUnitFlags, type SportId } from "@/lib/sports-catalog"
 import { themeClassName, type ThemeId } from "@/lib/themes"
 import { clubBySlug, adBySlug } from "@/lib/clubs-config"
 import type { GameState, Side } from "@/lib/scoring/types"
@@ -1138,6 +1138,26 @@ export default function JogoPage() {
   // Fonte de verdade ÚNICA (lib/sports-catalog.buildScoreCols) compartilhada
   // entre o PLACAR GERAL (tabela horizontal) e a TRILHA da chip central.
   const broadcastCols = buildScoreCols(gs, { bestOf: totalUnits, isTennisFamily, finished, isTiebreak })
+  // Quais unidades foram fechadas por CONCESSÃO (replay das ações no motor real).
+  // Nessas, a pílula/broadcast mostra só o indicador de vitória (●/○), nunca o
+  // placar de pontos fictício da concessão.
+  const concededUnits = concededUnitFlags(
+    sportById(sport).module,
+    rulesRef.current,
+    firstServerRef.current,
+    actionsRef.current,
+  )
+  // Conteúdo de uma célula de unidade na pílula: número real quando disputada;
+  // ●/○ (venceu/não venceu) quando concedida; "–" quando futura. O game EM
+  // ANDAMENTO (current) nunca é concedido → mantém o número parcial ao vivo.
+  const pillCell = (c: (typeof broadcastCols)[number], sideKey: "a" | "b") => {
+    if (!c.played) return "–"
+    const mine = sideKey === "a" ? c.a : c.b
+    const theirs = sideKey === "a" ? c.b : c.a
+    if (c.current || !concededUnits[c.setNum - 1]) return mine
+    const won = (mine ?? 0) > (theirs ?? 0)
+    return <span style={{ opacity: won ? 1 : 0.35 }}>{won ? "●" : "○"}</span>
+  }
 
   // --- Dados da TELA DE FIM DE JOGO (só usados quando finished) -------------
   // Lado vencedor → letra p/ selecionar quem venceu (A/B). O recap por unidade
@@ -1529,11 +1549,11 @@ export default function JogoPage() {
                 className="grid grid-cols-[1fr_auto_1fr] items-baseline gap-x-2.5 leading-none tabular-nums font-bold text-sm md:text-base"
               >
                 <span className="text-right" style={{ color }}>
-                  {c.played ? c.a : "–"}
+                  {pillCell(c, "a")}
                 </span>
                 <span className="text-center text-white/40">-</span>
                 <span className="text-left" style={{ color }}>
-                  {c.played ? c.b : "–"}
+                  {pillCell(c, "b")}
                 </span>
               </span>
             )
@@ -1592,7 +1612,7 @@ export default function JogoPage() {
                 className="text-center leading-none tabular-nums font-bold text-sm"
                 style={{ color }}
               >
-                {c.played ? c.a : "–"}
+                {pillCell(c, "a")}
               </span>
             )
           })}
@@ -1608,7 +1628,7 @@ export default function JogoPage() {
                 className="text-center leading-none tabular-nums font-bold text-sm"
                 style={{ color }}
               >
-                {c.played ? c.b : "–"}
+                {pillCell(c, "b")}
               </span>
             )
           })}
@@ -1765,6 +1785,7 @@ export default function JogoPage() {
                 winner={gs.winner ?? null}
                 names={{ A: bluePlayerName, B: redPlayerName }}
                 points={{ A: pointOf("A"), B: pointOf("B") }}
+                conceded={concededUnits}
               />
             </div>
 

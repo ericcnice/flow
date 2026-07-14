@@ -23,7 +23,7 @@ import Image from "next/image"
 import { useRouter, useSearchParams } from "next/navigation"
 
 import { ScoringEngine } from "@/lib/scoring/engine"
-import { sportById, familyOf, formatPoint, defaultRulesFor, buildScoreCols, type SportId } from "@/lib/sports-catalog"
+import { sportById, familyOf, formatPoint, defaultRulesFor, buildScoreCols, concededUnitFlags, type SportId } from "@/lib/sports-catalog"
 import { themeClassName, type ThemeId } from "@/lib/themes"
 import { clubBySlug, adBySlug } from "@/lib/clubs-config"
 import type { GameState, Side } from "@/lib/scoring/types"
@@ -45,6 +45,7 @@ export function BroadcastScoreboard({
   winner,
   names,
   points,
+  conceded = [],
 }: {
   cols: ReturnType<typeof buildScoreCols>
   isTennisFamily: boolean
@@ -53,6 +54,9 @@ export function BroadcastScoreboard({
   winner: Side | null
   names: { A: string; B: string }
   points: { A: string; B: string }
+  /** Por UNIDADE (índice = setNum-1): true se foi fechada por CONCESSÃO. Nessas,
+   *  mostramos só um indicador de vitória (●/○), nunca o placar de pontos. */
+  conceded?: boolean[]
 }) {
   return (
     <table className="scoreboard-broadcast">
@@ -88,14 +92,33 @@ export function BroadcastScoreboard({
                 <span>{name}</span>
               </td>
               {cols.map((c) => {
-                const games = side === "A" ? c.a : c.b
+                const mine = side === "A" ? c.a : c.b
+                const theirs = side === "A" ? c.b : c.a
+                // Unidade fechada por CONCESSÃO: o número seria fictício (placar
+                // padrão de concessão). Mostra só ●/○ = venceu/não venceu.
+                const isConceded = c.played && !c.current && !!conceded[c.setNum - 1]
+                const won = (mine ?? 0) > (theirs ?? 0)
                 return (
                   <td
                     key={c.setNum}
                     className={`sb-set ${c.current ? "sb-current sb-live" : ""} ${!c.played ? "sb-future" : ""}`}
-                    title={c.current ? "Parcial — game em andamento (ainda não fechado)" : undefined}
+                    title={
+                      c.current
+                        ? "Parcial — game em andamento (ainda não fechado)"
+                        : isConceded
+                          ? "Game concedido (sem disputa de pontos)"
+                          : undefined
+                    }
                   >
-                    {c.played ? games : "–"}
+                    {!c.played ? (
+                      "–"
+                    ) : isConceded ? (
+                      <span className="sb-award" style={{ opacity: won ? 1 : 0.35 }} aria-label={won ? "venceu" : "não venceu"}>
+                        {won ? "●" : "○"}
+                      </span>
+                    ) : (
+                      mine
+                    )}
                     {c.tb && !c.current ? <sup className="sb-tb">tb</sup> : null}
                   </td>
                 )
@@ -330,6 +353,14 @@ export function BroadcastView() {
   const unitLabel = isTennisFamily ? "Set" : "Game"
   const totalUnits = (rulesRef.current?.bestOf as number) || 3
   const cols = buildScoreCols(gs, { bestOf: totalUnits, isTennisFamily, finished, isTiebreak })
+  // Quais unidades foram concedidas (replay das ações no motor): nelas a tabela
+  // mostra só o indicador de vitória, nunca o placar de pontos fictício.
+  const conceded = concededUnitFlags(
+    sportById(sport).module,
+    rulesRef.current,
+    firstServerRef.current,
+    actionsRef.current,
+  )
   const pointOf = (side: Side): string => (finished ? "" : formatPoint(sport, gs[side], isTiebreak))
   const viewClub = clube ? clubBySlug(clube) : null
   const viewAd = adBySlug(adSlug)
@@ -372,6 +403,7 @@ export function BroadcastView() {
               winner={gs.winner ?? null}
               names={{ A: nameA, B: nameB }}
               points={{ A: pointOf("A"), B: pointOf("B") }}
+              conceded={conceded}
             />
           </div>
 

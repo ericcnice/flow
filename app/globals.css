@@ -515,6 +515,14 @@
   font-style: italic;
   font-weight: 500;
 }
+/* Indicador de unidade CONCEDIDA (●/○): vitória sem disputa de pontos. Um pouco
+   menor que os números para ler como marcador, não como placar. */
+.sb-award {
+  display: inline-block;
+  font-size: 0.62em;
+  line-height: 1;
+  vertical-align: middle;
+}
 .sb-tb {
   font-size: 0.5em;
   opacity: 0.6;

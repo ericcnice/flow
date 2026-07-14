@@ -14,6 +14,7 @@
  */
 
 import type { GameState, Side, SideState, SportModule } from "./scoring/types"
+import { ScoringEngine } from "./scoring/engine"
 import { tennisModule } from "./scoring/sports/tennis"
 import { beachModule } from "./scoring/sports/beach"
 import { padelModule } from "./scoring/sports/padel"
@@ -129,6 +130,44 @@ export function buildScoreCols(
     }
     return { setNum: i + 1, played: false, current: false, a: null as number | null, b: null as number | null, tb: false }
   })
+}
+
+/** Ação de placar reconstruível: ponto real (`point`) ou game concedido (`game`). */
+export type ScoreAction = { kind: "point" | "game"; side: Side }
+
+/**
+ * Para cada UNIDADE já encerrada (set no tênis; game no rally/side-out), diz se
+ * ela foi fechada por CONCESSÃO (ação `kind:"game"` → awardGameFor) ou por
+ * DISPUTA real (sequência de `kind:"point"` até o alvo do esporte).
+ *
+ * NÃO é heurística e NÃO olha o placar: reexecuta as MESMAS ações no MOTOR real
+ * (ScoringEngine + módulo do esporte) e observa em QUAL ação o `completedSets`
+ * cresceu — a ação que fechou a unidade define a origem. Assim, um game vencido
+ * genuinamente por 11-0 (só pontos) fica `false`, e um game concedido fica
+ * `true`, sem ambiguidade. O índice acompanha `state.completedSets` (0-based),
+ * alinhado ao `setNum - 1` das colunas de {@link buildScoreCols}.
+ *
+ * Só LÊ o motor (não o altera). Fonte da verdade única de "como" cada unidade
+ * foi fechada, já que o próprio GameState não guarda essa proveniência.
+ */
+export function concededUnitFlags(
+  module: SportModule<any>,
+  rules: any,
+  firstServer: Side,
+  actions: ScoreAction[],
+): boolean[] {
+  const engine = new ScoringEngine(module, rules, firstServer)
+  const conceded: boolean[] = []
+  let prev = engine.getState().completedSets.length // começa em 0
+  for (const a of actions) {
+    if (a.kind === "game") engine.awardGameFor(a.side)
+    else engine.pointFor(a.side)
+    const now = engine.getState().completedSets.length
+    // Toda unidade fechada NESTA ação herda o kind dela (game → concedida).
+    for (let k = prev; k < now; k++) conceded[k] = a.kind === "game"
+    prev = now
+  }
+  return conceded
 }
 
 /* ------------------------------------------------------------------------- */
