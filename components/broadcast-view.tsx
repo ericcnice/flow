@@ -61,7 +61,16 @@ export function BroadcastScoreboard({
           <th className="text-left font-normal">Jogador</th>
           {cols.map((c) => (
             <th key={c.setNum} className="font-normal">
-              {c.current ? (isTennisFamily ? "Game" : "Pts") : `${unitLabel} ${c.setNum}`}
+              {c.current ? (
+                // Coluna do game EM ANDAMENTO: ponto vermelho pulsante = "ao vivo",
+                // sinalizando que o número abaixo é parcial, não um resultado.
+                <span className="inline-flex items-center justify-center gap-1">
+                  <span className="inline-block h-1.5 w-1.5 rounded-full bg-red-500 animate-pulse" aria-hidden />
+                  {isTennisFamily ? "Game" : "Pts"}
+                </span>
+              ) : (
+                `${unitLabel} ${c.setNum}`
+              )}
             </th>
           ))}
           <th className="font-normal">Ponto</th>
@@ -83,7 +92,8 @@ export function BroadcastScoreboard({
                 return (
                   <td
                     key={c.setNum}
-                    className={`sb-set ${c.current ? "sb-current" : ""} ${!c.played ? "sb-future" : ""}`}
+                    className={`sb-set ${c.current ? "sb-current sb-live" : ""} ${!c.played ? "sb-future" : ""}`}
+                    title={c.current ? "Parcial — game em andamento (ainda não fechado)" : undefined}
                   >
                     {c.played ? games : "–"}
                     {c.tb && !c.current ? <sup className="sb-tb">tb</sup> : null}
@@ -99,11 +109,13 @@ export function BroadcastScoreboard({
   )
 }
 
-// Nome exibido de um lado a partir do `players` da raiz do state (dupla → "A/B").
-function teamName(players: any, side: "blue" | "red"): string {
+// Nome exibido de um lado a partir do `players` da raiz do state, respeitando o
+// gameType: SÓ em "duplas" mostra o par "A/B"; em "simples" (ou ausente/default)
+// mostra apenas o jogador principal (blue1/red1) — nada de "/Jogador 2".
+function teamName(players: any, side: "blue" | "red", gameType?: string | null): string {
   const one = side === "blue" ? players?.blue1 : players?.red1
   const two = side === "blue" ? players?.blue2 : players?.red2
-  if (two) return `${one}/${two}`
+  if (gameType === "duplas" && two) return `${one}/${two}`
   return one || (side === "blue" ? "Jogador 1" : "Jogador 2")
 }
 
@@ -122,6 +134,9 @@ export function BroadcastView() {
   const [clube, setClube] = useState<string | null>(null)
   const [adSlug, setAdSlug] = useState<string | null>(null)
   const [quadra, setQuadra] = useState("1")
+  // Simples vs. duplas: define se a linha mostra 1 nome ou o par. Vem da URL
+  // (&gameType=); ausente = simples (default seguro). O servidor não guarda.
+  const [gameType, setGameType] = useState<string | null>(null)
 
   const [nameA, setNameA] = useState("Jogador 1")
   const [nameB, setNameB] = useState("Jogador 2")
@@ -168,6 +183,8 @@ export function BroadcastView() {
     setQuadra(q)
     setClube(searchParams.get("clube"))
     setAdSlug(searchParams.get("ad"))
+    const gt = searchParams.get("gameType")
+    setGameType(gt)
 
     // Sem sala (link antigo /placar?quadra=X ou token ausente): estado de erro
     // simples, sem quebrar. A tela de transmissão exige um view_token.
@@ -204,8 +221,8 @@ export function BroadcastView() {
         }
 
         if (rState.players && typeof rState.players === "object") {
-          setNameA(teamName(rState.players, "blue"))
-          setNameB(teamName(rState.players, "red"))
+          setNameA(teamName(rState.players, "blue", gt))
+          setNameB(teamName(rState.players, "red", gt))
         }
 
         rebuildEngine(rRules, rFirst, cleanActions)
@@ -245,8 +262,8 @@ export function BroadcastView() {
   // o placar; nomes e tema são só exibição.
   useEffect(() => {
     if (rt.remotePlayers && typeof rt.remotePlayers === "object") {
-      setNameA(teamName(rt.remotePlayers, "blue"))
-      setNameB(teamName(rt.remotePlayers, "red"))
+      setNameA(teamName(rt.remotePlayers, "blue", gameType))
+      setNameB(teamName(rt.remotePlayers, "red", gameType))
     }
     if (rt.remoteTheme) setTheme(rt.remoteTheme as ThemeId)
 
@@ -267,7 +284,7 @@ export function BroadcastView() {
     }
     if (needRebuild) rebuildEngine(nextRules, nextFirst, actionsRef.current)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rt.remotePlayers, rt.remoteFirstServer, rt.remoteRules, rt.remoteTheme])
+  }, [rt.remotePlayers, rt.remoteFirstServer, rt.remoteRules, rt.remoteTheme, gameType])
 
   // Cronômetro (mesmo padrão do /jogo).
   useEffect(() => {

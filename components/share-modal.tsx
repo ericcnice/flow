@@ -23,6 +23,9 @@ interface ShareModalProps {
   /** Patrocinador/ad da abertura (&ad=) — idem: vai na URL para o /placar
    *  resolver o logo do patrocinador (adBySlug). */
   ad?: string
+  /** Simples/duplas (&gameType=) — o servidor não guarda; vai na URL para a tela
+   *  de espectador montar o nome certo (1 jogador em simples, par em duplas). */
+  gameType?: string
   matchId?: string
   viewToken?: string
   editToken?: string
@@ -52,6 +55,7 @@ export function ShareModal({
   scoreType,
   clube,
   ad,
+  gameType,
   matchId,
   viewToken,
   editToken,
@@ -81,7 +85,8 @@ export function ShareModal({
     (theme ? `&theme=${encodeURIComponent(theme)}` : "") +
     (scoreType ? `&scoreType=${encodeURIComponent(scoreType)}` : "") +
     (clube ? `&clube=${encodeURIComponent(clube)}` : "") +
-    (ad ? `&ad=${encodeURIComponent(ad)}` : "")
+    (ad ? `&ad=${encodeURIComponent(ad)}` : "") +
+    (gameType ? `&gameType=${encodeURIComponent(gameType)}` : "")
   // O link de EDITOR carrega o edit_token (permissão de escrita) E o view_token
   // como &v= — este último é OBRIGATÓRIO para o convidado calcular o mesmo nome
   // de canal (getLiveMatchTopic usa o view_token) que o servidor usa ao

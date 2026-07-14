@@ -2030,6 +2030,7 @@ export default function JogoPage() {
         scoreType={gameConfig.scoreType}
         clube={clube ?? undefined}
         ad={gameConfig.ad}
+        gameType={gameConfig.gameType}
         matchId={gameConfig.matchId}
         viewToken={gameConfig.viewToken}
         editToken={gameConfig.editToken}

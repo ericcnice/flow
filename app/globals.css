@@ -507,6 +507,14 @@
     color-mix(in srgb, currentColor 16%, transparent)
   );
 }
+/* Game EM ANDAMENTO (coluna corrente): a contagem é PARCIAL/ao vivo e NUNCA deve
+   ser lida como resultado final. Itálico + peso menor a distinguem do resultado
+   sólido e reto dos games já fechados (que mantêm o peso 600 de .sb-set). Vem
+   DEPOIS de .sb-set/.sb-current p/ vencer o font-weight por ordem de fonte. */
+.sb-live {
+  font-style: italic;
+  font-weight: 500;
+}
 .sb-tb {
   font-size: 0.5em;
   opacity: 0.6;
