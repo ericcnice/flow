@@ -1150,11 +1150,15 @@ export default function JogoPage() {
   // Conteúdo de uma célula de unidade na pílula: número real quando disputada;
   // ●/○ (venceu/não venceu) quando concedida; "–" quando futura. O game EM
   // ANDAMENTO (current) nunca é concedido → mantém o número parcial ao vivo.
+  // O indicador de concessão vale SÓ na família rally (squash/ping pong/
+  // pickleball): lá um game concedido grava um placar de PONTOS fictício. No
+  // tênis/beach/padel o número é a contagem REAL de games (verdadeira mesmo em
+  // games-mode), então mostramos SEMPRE o placar — nunca a bolinha.
   const pillCell = (c: (typeof broadcastCols)[number], sideKey: "a" | "b") => {
     if (!c.played) return "–"
     const mine = sideKey === "a" ? c.a : c.b
     const theirs = sideKey === "a" ? c.b : c.a
-    if (c.current || !concededUnits[c.setNum - 1]) return mine
+    if (isTennisFamily || c.current || !concededUnits[c.setNum - 1]) return mine
     const won = (mine ?? 0) > (theirs ?? 0)
     return <span style={{ opacity: won ? 1 : 0.35 }}>{won ? "●" : "○"}</span>
   }

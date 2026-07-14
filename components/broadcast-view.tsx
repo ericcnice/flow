@@ -94,9 +94,12 @@ export function BroadcastScoreboard({
               {cols.map((c) => {
                 const mine = side === "A" ? c.a : c.b
                 const theirs = side === "A" ? c.b : c.a
-                // Unidade fechada por CONCESSÃO: o número seria fictício (placar
-                // padrão de concessão). Mostra só ●/○ = venceu/não venceu.
-                const isConceded = c.played && !c.current && !!conceded[c.setNum - 1]
+                // Indicador de concessão SÓ na família rally (squash/ping pong/
+                // pickleball), onde um game concedido grava um placar de PONTOS
+                // fictício. No tênis/beach/padel o número é a contagem REAL de
+                // games (verdadeira mesmo em games-mode), então nunca esconde.
+                const isConceded =
+                  !isTennisFamily && c.played && !c.current && !!conceded[c.setNum - 1]
                 const won = (mine ?? 0) > (theirs ?? 0)
                 return (
                   <td
