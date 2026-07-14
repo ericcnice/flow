@@ -11,6 +11,9 @@ import { ShareModal } from "@/components/share-modal"
 // aberta agora também DE DENTRO do jogo pelo botão de config (aposenta o GameMenu
 // antigo neste fluxo).
 import { SportSetup } from "@/components/sport-setup"
+// Layout do placar de transmissão, compartilhado com a tela /placar (espectador):
+// o overlay "placar geral" e a tela read-only renderizam a MESMA tabela.
+import { BroadcastScoreboard } from "@/components/broadcast-view"
 
 // >>> Voz "placeholder" (preto e branco): reage aos eventos do motor e fala o
 // placar com a voz nativa do navegador. announce() = lógica evento→texto;
@@ -1751,49 +1754,18 @@ export default function JogoPage() {
             </div>
 
             {/* Tabela broadcast: NOME → SETS (uma coluna por set possível) →
-                GAME (set corrente destacado) → PONTO (ponta direita, grande). */}
+                GAME (set corrente destacado) → PONTO (ponta direita, grande).
+                Mesmo componente que a tela /placar (espectador) — layout ÚNICO. */}
             <div className="w-full overflow-x-auto">
-              <table className="scoreboard-broadcast">
-                <thead>
-                  <tr className="text-[9px] md:text-xs uppercase tracking-widest opacity-45">
-                    <th className="text-left font-normal">Jogador</th>
-                    {broadcastCols.map((c) => (
-                      <th key={c.setNum} className="font-normal">
-                        {c.current ? (isTennisFamily ? "Game" : "Pts") : `${unitLabel} ${c.setNum}`}
-                      </th>
-                    ))}
-                    <th className="font-normal">Ponto</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {(["A", "B"] as Side[]).map((side) => {
-                    const name = side === "A" ? bluePlayerName : redPlayerName
-                    const isServing = gs.server === side
-                    const isWinner = gs.winner === side
-                    return (
-                      <tr key={side} data-side={side.toLowerCase()} className={isWinner ? "sb-winner" : ""}>
-                        <td className="sb-name">
-                          <span className={`sb-dot ${isServing ? "on" : ""}`} aria-hidden />
-                          <span>{name}</span>
-                        </td>
-                        {broadcastCols.map((c) => {
-                          const games = side === "A" ? c.a : c.b
-                          return (
-                            <td
-                              key={c.setNum}
-                              className={`sb-set ${c.current ? "sb-current" : ""} ${!c.played ? "sb-future" : ""}`}
-                            >
-                              {c.played ? games : "–"}
-                              {c.tb && !c.current ? <sup className="sb-tb">tb</sup> : null}
-                            </td>
-                          )
-                        })}
-                        <td className="sb-point">{pointOf(side)}</td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
+              <BroadcastScoreboard
+                cols={broadcastCols}
+                isTennisFamily={isTennisFamily}
+                unitLabel={unitLabel}
+                server={gs.server}
+                winner={gs.winner ?? null}
+                names={{ A: bluePlayerName, B: redPlayerName }}
+                points={{ A: pointOf("A"), B: pointOf("B") }}
+              />
             </div>
 
             {/* Rodapé: vencedor (se encerrada) + dica de fechar. */}
@@ -2056,6 +2028,8 @@ export default function JogoPage() {
         sport={sport}
         theme={theme}
         scoreType={gameConfig.scoreType}
+        clube={clube ?? undefined}
+        ad={gameConfig.ad}
         matchId={gameConfig.matchId}
         viewToken={gameConfig.viewToken}
         editToken={gameConfig.editToken}

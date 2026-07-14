@@ -17,6 +17,12 @@ interface ShareModalProps {
   /** Modo de contagem no JOIN (&scoreType=). Ao vivo, a troca propaga via
    *  Realtime (ação set_score_type); este param cobre o estado inicial. */
   scoreType?: string
+  /** Clube de contexto (&clube=) — o servidor não guarda; vai na URL para a tela
+   *  de espectador (/placar) resolver o logo do clube (clubBySlug). */
+  clube?: string
+  /** Patrocinador/ad da abertura (&ad=) — idem: vai na URL para o /placar
+   *  resolver o logo do patrocinador (adBySlug). */
+  ad?: string
   matchId?: string
   viewToken?: string
   editToken?: string
@@ -44,6 +50,8 @@ export function ShareModal({
   sport,
   theme,
   scoreType,
+  clube,
+  ad,
   matchId,
   viewToken,
   editToken,
@@ -71,7 +79,9 @@ export function ShareModal({
   const extraParams =
     (sport ? `&sport=${encodeURIComponent(sport)}` : "") +
     (theme ? `&theme=${encodeURIComponent(theme)}` : "") +
-    (scoreType ? `&scoreType=${encodeURIComponent(scoreType)}` : "")
+    (scoreType ? `&scoreType=${encodeURIComponent(scoreType)}` : "") +
+    (clube ? `&clube=${encodeURIComponent(clube)}` : "") +
+    (ad ? `&ad=${encodeURIComponent(ad)}` : "")
   // O link de EDITOR carrega o edit_token (permissão de escrita) E o view_token
   // como &v= — este último é OBRIGATÓRIO para o convidado calcular o mesmo nome
   // de canal (getLiveMatchTopic usa o view_token) que o servidor usa ao
