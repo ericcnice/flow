@@ -186,6 +186,19 @@ export function useRealtimeMatch(options?: UseRealtimeMatchOptions): UseRealtime
         // Troca de sala: derruba o canal anterior, se houver.
         teardownChannel()
 
+        // Limpa o estado remoto da sala ANTERIOR para não vazar config entre
+        // salas (ex.: regras de squash sobrevivendo numa sala de tênis). Sem
+        // isso, um patch obsoleto poderia ser aplicado antes da 1ª leitura da
+        // nova sala. Consumidores tratam null com segurança (só ignoram).
+        if (mountedRef.current) {
+          setState(null)
+          setRemoteRules(null)
+          setRemoteFirstServer(null)
+          setRemotePlayers(null)
+          setRemoteTheme(null)
+          setRemoteScoreType(null)
+        }
+
         // Garante um sessionId estável para esta sessão do navegador.
         // generateSessionId tem fallback p/ contexto não seguro (HTTP puro),
         // onde crypto.randomUUID não existe.

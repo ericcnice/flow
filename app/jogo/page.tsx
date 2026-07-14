@@ -73,6 +73,27 @@ type Action = { kind: "point" | "game"; side: Side }
 // Mapa de lados: a tela usa blue/red; o motor usa A/B.
 const sideOf = (team: "blue" | "red"): Side => (team === "blue" ? "A" : "B")
 
+// Guarda DEFENSIVA: um objeto de regras é do FORMATO esperado pela família do
+// esporte atual da tela? Usado antes de aplicar rules remotas (set_config) e ao
+// abrir o setup — regras de outra família (ex.: squash {target,winBy} chegando
+// numa tela de tênis, que espera {gamesPerSet, tiebreak:{...}}) quebrariam o
+// motor/RULE_SPECS. Só checa a PRESENÇA dos campos discriminantes; não valida
+// valores (o motor tolera valores fora do range, só não tolera campo ausente).
+function rulesMatchFamily(rules: any, family: "tennis" | "rally" | "sideout"): boolean {
+  if (!rules || typeof rules !== "object") return false
+  if (family === "tennis") {
+    // tênis/beach/padel: bloco de tiebreak (lido pelo motor e pelo RULE_SPECS)
+    // + gamesPerSet. É exatamente o que falta nas regras de rally.
+    return (
+      typeof rules.tiebreak === "object" &&
+      rules.tiebreak !== null &&
+      typeof rules.gamesPerSet === "number"
+    )
+  }
+  // rally/sideout (squash/ping pong/pickleball): contagem corrida por alvo.
+  return typeof rules.target === "number" && typeof rules.winBy === "number"
+}
+
 // Janela do DUPLO-TOQUE (desfazer por gesto). Curta o bastante para não colidir
 // com dois pontos legítimos consecutivos no mesmo lado (que, na marcação real,
 // nunca acontecem em <300ms).
@@ -189,18 +210,33 @@ export default function JogoPage() {
   // (Re)constrói o engine aplicando as ações por replay e reflete no estado.
   // Usa o MÓDULO do esporte atual (sportRef) — é aqui que "vira" squash, padel,
   // etc. em vez de tênis fixo.
-  const rebuildEngine = (rules: any, firstServer: Side, actions: Action[]) => {
-    const module = sportById(sportRef.current).module
-    const engine = new ScoringEngine(module, rules, firstServer)
-    for (const a of actions) {
-      if (a.kind === "game") engine.awardGameFor(a.side)
-      else engine.pointFor(a.side)
+  // TRANSACIONAL + PROTEGIDO: constrói o motor num engine LOCAL e só COMMITA nos
+  // refs/estado se todo o replay passar. Qualquer exceção (ex.: regras de outra
+  // família chegando por sync) é capturada e logada — mantém o ÚLTIMO ESTADO
+  // VÁLIDO em vez de derrubar a tela (não há error boundary acima). Retorna
+  // true/false para o chamador saber se aplicou.
+  const rebuildEngine = (rules: any, firstServer: Side, actions: Action[]): boolean => {
+    try {
+      const module = sportById(sportRef.current).module
+      const engine = new ScoringEngine(module, rules, firstServer)
+      for (const a of actions) {
+        if (a.kind === "game") engine.awardGameFor(a.side)
+        else engine.pointFor(a.side)
+      }
+      // Commit só após sucesso — evita refs meio-atualizados/estado corrompido.
+      engineRef.current = engine
+      actionsRef.current = [...actions]
+      rulesRef.current = rules
+      firstServerRef.current = firstServer
+      setGameState(engine.getState())
+      return true
+    } catch (err) {
+      console.error(
+        "[scoring] rebuildEngine falhou — mantendo o último estado válido (nada aplicado).",
+        { err, sport: sportRef.current, rules },
+      )
+      return false
     }
-    engineRef.current = engine
-    actionsRef.current = [...actions]
-    rulesRef.current = rules
-    firstServerRef.current = firstServer
-    setGameState(engine.getState())
   }
 
   // Persiste o suficiente para reconstruir o motor por quadra.
@@ -267,7 +303,12 @@ export default function JogoPage() {
           }
 
           const rState: any = remote.state || {}
-          const rRules = rState.rules ?? defaultRulesFor(resolvedSport)
+          // Regras da sala só são aceitas se forem do FORMATO do esporte resolvido
+          // (o mesmo da URL/motor). Sala com regras de outra família cairia no
+          // default válido em vez de quebrar o motor no primeiro replay.
+          const rRules = rulesMatchFamily(rState.rules, familyOf(resolvedSport))
+            ? rState.rules
+            : defaultRulesFor(resolvedSport)
           const rFirst: Side = rState.firstServer === "B" ? "B" : "A"
 
           // scoreType agora vive na RAIZ do state (padrão unificado set_config);
@@ -569,6 +610,7 @@ export default function JogoPage() {
   // um tem dedup anti-eco: só aplica se o valor remoto DIFERE do que já temos (o
   // eco da própria ação já bate com o ref/config local e é ignorado).
   useEffect(() => {
+   try {
     // players → gameConfig local. applyLocalConfig já deduplica por conteúdo
     // (só muda se diferente do players atual) e atualiza os nomes exibidos.
     if (rt.remotePlayers && typeof rt.remotePlayers === "object") {
@@ -601,22 +643,37 @@ export default function JogoPage() {
       needRebuild = true
     }
 
-    if (
-      rt.remoteRules &&
-      typeof rt.remoteRules === "object" &&
-      JSON.stringify(rt.remoteRules) !== JSON.stringify(rulesRef.current) // dedup anti-eco
+    // VALIDAÇÃO DE COMPATIBILIDADE (correção do crash): só adota rules remotas se
+    // forem do FORMATO do esporte ATUAL da tela. Regras de outra família (ex.:
+    // squash chegando por sync numa tela de tênis) quebrariam rebuildEngine/UI —
+    // aqui IGNORAMOS o patch, avisamos, e mantemos as regras locais válidas.
+    const remoteRulesObj =
+      rt.remoteRules && typeof rt.remoteRules === "object" ? rt.remoteRules : null
+    if (remoteRulesObj && !rulesMatchFamily(remoteRulesObj, familyOf(sportRef.current))) {
+      console.warn(
+        "[realtime] Regras remotas INCOMPATÍVEIS com o esporte atual — patch de set_config ignorado (mantendo regras locais).",
+        { sportAtual: sportRef.current, familiaAtual: familyOf(sportRef.current), regrasRemotas: remoteRulesObj },
+      )
+    } else if (
+      remoteRulesObj &&
+      JSON.stringify(remoteRulesObj) !== JSON.stringify(rulesRef.current) // dedup anti-eco
     ) {
-      nextRules = rt.remoteRules
+      nextRules = remoteRulesObj
       needRebuild = true
-      const bo = (rt.remoteRules as any).bestOf
+      const bo = (remoteRulesObj as any).bestOf
       if (bo === 3 || bo === 5) applyLocalConfig({ maxSets: bo })
     }
 
     if (needRebuild) {
       // Replay das ações ATUAIS com as novas regras/sacador — preserva o placar
-      // (mesmo mecanismo do onSetupConfirm/toggleServing locais).
+      // (mesmo mecanismo do onSetupConfirm/toggleServing locais). rebuildEngine
+      // já é protegido internamente (mantém o último estado válido em falha).
       rebuildEngine(nextRules, nextFirstServer, actionsRef.current)
     }
+   } catch (err) {
+     // Rede de segurança: nenhum dado remoto malformado deve derrubar a tela.
+     console.error("[realtime] Falha ao aplicar config remota (set_config) — ignorado, estado local preservado.", err)
+   }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rt.remotePlayers, rt.remoteFirstServer, rt.remoteRules, rt.remoteTheme, rt.remoteScoreType])
 
@@ -1820,7 +1877,13 @@ export default function JogoPage() {
         <div className="fixed inset-0 z-50">
           <SportSetup
             initialSport={sport}
-            initialRules={rulesRef.current}
+            // Defesa contra o 2º crash: se as regras atuais estiverem
+            // incompatíveis com o esporte (ex.: estado herdado corrompido de
+            // outra sala), o RULE_SPECS do setup leria r.tiebreak.enabled e
+            // quebraria. Cai num default VÁLIDO do esporte em vez de estourar.
+            initialRules={
+              rulesMatchFamily(rulesRef.current, familyOf(sport)) ? rulesRef.current : defaultRulesFor(sport)
+            }
             initialTheme={theme}
             context="ingame"
             onClose={() => setSetupOpen(false)}
