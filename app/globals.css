@@ -293,6 +293,51 @@
   --palco-divisor: #0abf63;
 }
 
+/* --- Landing da raiz (/) ---------------------------------------------
+   Paleta própria da landing (preto + amarelo), gerada no v0 em Tailwind v4
+   com cores em hex. Aqui elas viram triplas HSL porque o tailwind.config
+   deste projeto consome as variáveis como hsl(var(--x)) — colar os hex do
+   v0 direto no :root emitiria hsl(#08090b), CSS inválido, e derrubaria o
+   tema de TODAS as telas do app, não só da landing.
+   Namespace separado do palco (--lado-a-*, --palco-*): os dois convivem.
+   Escopado na classe: só vale dentro de .tema-landing, aplicada no wrapper
+   de app/page.tsx. Fora dela o app segue com o :root neutro.
+   Fica FORA do @layer base de propósito (regra sem camada vence a camada),
+   mesma razão das classes .tema-* do palco acima. */
+.tema-landing {
+  --background: 220 16% 4%; /* #08090b */
+  --foreground: 220 16% 96%; /* #f4f5f7 */
+
+  --card: 220 16% 7%; /* #101216 */
+  --card-foreground: 220 16% 96%;
+
+  --popover: 220 16% 7%;
+  --popover-foreground: 220 16% 96%;
+
+  --primary: 53 100% 50%; /* #fee100 amarelo vibrante */
+  --primary-foreground: 220 16% 4%;
+
+  --secondary: 225 54% 19%; /* #16234a azul-marinho */
+  --secondary-foreground: 220 16% 96%;
+
+  --muted: 223 14% 10%; /* #16181d */
+  --muted-foreground: 228 5% 62%; /* #9a9ca4 */
+
+  --accent: 225 54% 19%;
+  --accent-foreground: 220 16% 96%;
+
+  /* No v0 estes dois eram branco translúcido (0.09 / 0.14). Como o app usa
+     border-border/60, um valor com alpha embutido geraria hsl(... / .09 / .6)
+     — inválido. Ficam opacos, já compostos sobre o fundo #08090b: o resultado
+     na tela é idêntico, e o modificador /60 volta a funcionar. */
+  --border: 220 5% 12%;
+  --input: 221 3% 17%;
+
+  --ring: 53 100% 50%;
+
+  --radius: 0.75rem;
+}
+
 /* --- Tela de jogo "palco" (ScoreBot) ---------------------------------- */
 
 /* Fonte monoespaçada para o número não "tremer" ao trocar de valor.
