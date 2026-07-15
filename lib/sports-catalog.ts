@@ -132,6 +132,28 @@ export function buildScoreCols(
   })
 }
 
+/**
+ * Sacador a EXIBIR para o ponto ATUAL (bola de saque / indicador). Igual a
+ * `state.server` FORA do tiebreak.
+ *
+ * DURANTE o tiebreak, o motor (racket-core) só rotaciona o saque por GAME —
+ * `scoreTiebreakPoint` NÃO mexe em `state.server`, então ele fica congelado no
+ * PRIMEIRO sacador do tiebreak (S0). A regra real do tiebreak é o padrão 1-2-2:
+ * S0 saca 1 ponto, depois o saque alterna a cada 2 pontos (S0 · opp opp · S0 S0
+ * · opp opp · …). Derivamos o sacador real de S0 (= o `state.server` congelado)
+ * + o total de pontos já jogados no tiebreak:
+ *   trocas de saque até aqui = floor((T + 1) / 2);  par → S0, ímpar → oponente.
+ *
+ * Só LÊ o estado exposto pelo motor — NÃO altera lib/scoring. Fora do tiebreak
+ * (e em esportes sem tiebreak) devolve `state.server` inalterado.
+ */
+export function displayServer(state: GameState): Side {
+  if (!state.isTiebreak) return state.server
+  const s0 = state.server
+  const t = state.A.tiebreakPoints + state.B.tiebreakPoints // pontos ANTES do atual
+  return Math.floor((t + 1) / 2) % 2 === 0 ? s0 : s0 === "A" ? "B" : "A"
+}
+
 /** Ação de placar reconstruível: ponto real (`point`) ou game concedido (`game`). */
 export type ScoreAction = { kind: "point" | "game"; side: Side }
 

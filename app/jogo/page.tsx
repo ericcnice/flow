@@ -27,7 +27,7 @@ import { createSpeechSynthesisSpeaker, type Speaker } from "@/lib/voice/speaker"
 // pong/pickleball). O "catálogo" (lib/sports-catalog) é a cola entre a UI e os
 // módulos — ele NÃO altera lib/scoring, só o consome.
 import { ScoringEngine } from "@/lib/scoring/engine"
-import { sportById, familyOf, formatPoint, defaultRulesFor, buildScoreCols, concededUnitFlags, type SportId } from "@/lib/sports-catalog"
+import { sportById, familyOf, formatPoint, defaultRulesFor, buildScoreCols, concededUnitFlags, displayServer, type SportId } from "@/lib/sports-catalog"
 import { themeClassName, type ThemeId } from "@/lib/themes"
 import { clubBySlug, adBySlug } from "@/lib/clubs-config"
 import type { GameState, Side } from "@/lib/scoring/types"
@@ -1129,7 +1129,12 @@ export default function JogoPage() {
   const finished = gs.finished
   const blueWinner = gs.winner === "A"
   const redWinner = gs.winner === "B"
-  const blueServing = gs.server === "A"
+  // Sacador a EXIBIR: fora do tiebreak = gs.server; DURANTE o tiebreak, o motor
+  // congela state.server no 1º sacador (só roda por game), então derivamos a
+  // alternância 1-2-2 ponto a ponto via displayServer (lê o estado, não altera
+  // o motor). É isto que posiciona a bola de saque no jogador certo.
+  const server = displayServer(gs)
+  const blueServing = server === "A"
   const isTiebreak = gs.isTiebreak
   // "início da partida" = nenhum ponto/game/set jogado ainda.
   const started =
@@ -1842,7 +1847,7 @@ export default function JogoPage() {
                 cols={broadcastCols}
                 isTennisFamily={isTennisFamily}
                 unitLabel={unitLabel}
-                server={gs.server}
+                server={server}
                 winner={gs.winner ?? null}
                 names={{ A: bluePlayerName, B: redPlayerName }}
                 points={{ A: pointOf("A"), B: pointOf("B") }}

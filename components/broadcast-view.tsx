@@ -23,7 +23,7 @@ import Image from "next/image"
 import { useRouter, useSearchParams } from "next/navigation"
 
 import { ScoringEngine } from "@/lib/scoring/engine"
-import { sportById, familyOf, formatPoint, defaultRulesFor, buildScoreCols, concededUnitFlags, type SportId } from "@/lib/sports-catalog"
+import { sportById, familyOf, formatPoint, defaultRulesFor, buildScoreCols, concededUnitFlags, displayServer, type SportId } from "@/lib/sports-catalog"
 import { themeClassName, type ThemeId } from "@/lib/themes"
 import { clubBySlug, adBySlug } from "@/lib/clubs-config"
 import type { GameState, Side } from "@/lib/scoring/types"
@@ -402,7 +402,7 @@ export function BroadcastView() {
               cols={cols}
               isTennisFamily={isTennisFamily}
               unitLabel={unitLabel}
-              server={gs.server}
+              server={displayServer(gs)}
               winner={gs.winner ?? null}
               names={{ A: nameA, B: nameB }}
               points={{ A: pointOf("A"), B: pointOf("B") }}
