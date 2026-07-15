@@ -20,6 +20,8 @@ import { SLUG_REGEX } from './constants'
 
 export type FormState = { ok: boolean; erro?: string }
 
+const vazioParaNulo = (v: unknown) => (typeof v === 'string' && v.trim() === '' ? null : v)
+
 const venueSchema = z.object({
   name: z.string().trim().min(1, 'Nome é obrigatório.'),
   // Slug é obrigatório aqui (ao contrário do de members): ele é a URL pública
@@ -30,6 +32,14 @@ const venueSchema = z.object({
     .min(1, 'Slug é obrigatório.')
     .regex(SLUG_REGEX, 'Slug: use só minúsculas, números e hífen.'),
   type: z.enum(['club', 'condominio', 'publica'], { message: 'Tipo inválido.' }),
+  // URLs de imagens já hospedadas (não há upload). Campo vazio precisa virar
+  // NULL, não '': a listagem decide se mostra o avatar por "tem valor?", e ''
+  // passaria no teste e renderizaria um <img src=""> quebrado.
+  //
+  // Sem validação de formato de propósito (decisão registrada junto com o SQL):
+  // o banco não tem CHECK, e o preview no formulário é quem dá o feedback.
+  logo_url: z.preprocess(vazioParaNulo, z.string().trim().nullable()),
+  photo_url: z.preprocess(vazioParaNulo, z.string().trim().nullable()),
 })
 
 /** Lê e valida o formulário. Compartilhado por addVenue e updateVenue. */
@@ -38,6 +48,8 @@ function lerFormulario(formData: FormData) {
     name: formData.get('name'),
     slug: formData.get('slug'),
     type: formData.get('type'),
+    logo_url: formData.get('logo_url'),
+    photo_url: formData.get('photo_url'),
   })
 }
 

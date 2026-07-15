@@ -16,6 +16,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { AddressFields, type Endereco } from '../address-fields'
+import { ImageUrlField } from './image-url-field'
 import { addVenue, updateVenue, type FormState } from './actions'
 import { SLUG_REGEX, TIPOS } from './constants'
 
@@ -30,6 +31,8 @@ export type VenueFormData = {
   slug: string
   type: string
   address: Endereco | null
+  logo_url: string | null
+  photo_url: string | null
 }
 
 export function VenueFormModal({
@@ -148,6 +151,26 @@ export function VenueFormModal({
               ))}
             </select>
           </div>
+
+          <fieldset className="mt-1 rounded-lg border border-border p-4">
+            <legend className="px-1.5 text-xs uppercase tracking-widest text-muted-foreground">
+              Imagens
+            </legend>
+            <div className="flex flex-col gap-4">
+              <ImageUrlField
+                id="logo_url"
+                label="Logo do local"
+                valorInicial={venue?.logo_url}
+                formato="quadrado"
+              />
+              <ImageUrlField
+                id="photo_url"
+                label="Foto do espaço/quadra"
+                valorInicial={venue?.photo_url}
+                formato="panorama"
+              />
+            </div>
+          </fieldset>
 
           <AddressFields valorInicial={venue?.address ?? null} />
 

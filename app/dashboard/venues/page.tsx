@@ -21,11 +21,12 @@ export default async function VenuesPage() {
   await requireSuperAdmin()
 
   const supabase = await createServerSupabaseClient()
-  // `address` entra no select porque o modal de EDIÇÃO precisa pré-preencher o
-  // endereço — sem ele, editar um local apagaria o endereço já cadastrado.
+  // `address`, `logo_url` e `photo_url` entram no select porque o modal de
+  // EDIÇÃO precisa pré-preenchê-los — sem eles, editar um local apagaria o
+  // endereço e as imagens já cadastrados. `logo_url` também alimenta o avatar.
   const { data, error } = await supabase
     .from('venues')
-    .select('id, name, slug, type, address, active')
+    .select('id, name, slug, type, address, logo_url, photo_url, active')
     .order('active', { ascending: false })
     .order('created_at', { ascending: false })
 

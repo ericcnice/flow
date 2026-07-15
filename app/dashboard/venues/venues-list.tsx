@@ -54,11 +54,43 @@ function Status({ active }: { active: boolean }) {
   )
 }
 
+/**
+ * Avatar do local. A maioria dos locais não tem logo_url — o fallback (inicial
+ * do nome) é o caso NORMAL, não a exceção. Se a URL existir mas não carregar,
+ * cai no mesmo fallback via onError, então um link quebrado nunca vira imagem
+ * rasgada na tabela.
+ */
+function Avatar({ v }: { v: Venue }) {
+  const [falhou, setFalhou] = useState(false)
+  const mostraImagem = Boolean(v.logo_url) && !falhou
+
+  return (
+    <div className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full border border-border bg-background">
+      {mostraImagem ? (
+        /* eslint-disable-next-line @next/next/no-img-element */
+        <img
+          src={v.logo_url as string}
+          alt=""
+          className="h-full w-full object-cover"
+          onError={() => setFalhou(true)}
+        />
+      ) : (
+        <span className="text-xs font-semibold text-muted-foreground">
+          {v.name.trim().charAt(0).toUpperCase() || '?'}
+        </span>
+      )}
+    </div>
+  )
+}
+
 function Nome({ v }: { v: Venue }) {
   return (
-    <div className="flex flex-col">
-      <span className="font-medium">{v.name}</span>
-      <span className="font-mono text-xs text-muted-foreground">/c/{v.slug}</span>
+    <div className="flex items-center gap-3">
+      <Avatar v={v} />
+      <div className="flex flex-col">
+        <span className="font-medium">{v.name}</span>
+        <span className="font-mono text-xs text-muted-foreground">/c/{v.slug}</span>
+      </div>
     </div>
   )
 }
