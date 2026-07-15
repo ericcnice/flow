@@ -51,10 +51,9 @@ function montarEndereco(formData: FormData): Record<string, string> | null {
   return Object.keys(endereco).length > 0 ? endereco : null
 }
 
-export async function addMember(_prev: FormState, formData: FormData): Promise<FormState> {
-  await requireSuperAdmin() // ← autorização ANTES de qualquer leitura do input
-
-  const parsed = memberSchema.safeParse({
+/** Lê e valida o formulário. Compartilhado por addMember e updateMember. */
+function lerFormulario(formData: FormData) {
+  return memberSchema.safeParse({
     name: formData.get('name'),
     last_name: formData.get('last_name'),
     slug: formData.get('slug'),
@@ -63,7 +62,19 @@ export async function addMember(_prev: FormState, formData: FormData): Promise<F
     role: formData.get('role'),
     club_slug: formData.get('club_slug'),
   })
+}
 
+/** Traduz o erro do Postgres em algo acionável para quem preencheu o form. */
+function traduzirErro(error: { code?: string; message: string }): string {
+  // 23505 = unique_violation. O slug é o único campo único de members.
+  if (error.code === '23505') return 'Esse slug já está em uso. Escolha outro.'
+  return error.message
+}
+
+export async function addMember(_prev: FormState, formData: FormData): Promise<FormState> {
+  await requireSuperAdmin() // ← autorização ANTES de qualquer leitura do input
+
+  const parsed = lerFormulario(formData)
   if (!parsed.success) {
     return { ok: false, erro: parsed.error.issues[0]?.message ?? 'Dados inválidos.' }
   }
@@ -75,14 +86,47 @@ export async function addMember(_prev: FormState, formData: FormData): Promise<F
     active: true,
   })
 
-  if (error) {
-    // 23505 = unique_violation. O slug é o único campo único aqui, então a
-    // mensagem genérica do Postgres vira algo acionável para quem preencheu.
-    if (error.code === '23505') {
-      return { ok: false, erro: 'Esse slug já está em uso. Escolha outro.' }
-    }
-    return { ok: false, erro: error.message }
+  if (error) return { ok: false, erro: traduzirErro(error) }
+
+  revalidatePath('/dashboard/players')
+  return { ok: true }
+}
+
+/**
+ * Edita uma pessoa existente. Mesma validação do cadastro — o modal é o mesmo,
+ * então as regras precisam ser as mesmas.
+ *
+ * `id` vem via .bind() no client, NÃO de um campo do formulário: um hidden
+ * input seria editável pelo DevTools, e o alvo do UPDATE é exatamente o que
+ * não pode ser escolhido pelo cliente sem checagem.
+ *
+ * `active` fica de fora de propósito: quem manda nele é o botão Remover/
+ * Reativar (setMemberActive). Salvar uma edição não deve ressuscitar
+ * silenciosamente alguém que foi removido da lista.
+ */
+export async function updateMember(
+  id: string,
+  _prev: FormState,
+  formData: FormData,
+): Promise<FormState> {
+  await requireSuperAdmin() // ← idem: endpoint público, recheca sempre
+
+  if (!z.string().uuid().safeParse(id).success) {
+    return { ok: false, erro: 'Id inválido.' }
   }
+
+  const parsed = lerFormulario(formData)
+  if (!parsed.success) {
+    return { ok: false, erro: parsed.error.issues[0]?.message ?? 'Dados inválidos.' }
+  }
+
+  const supabase = await createServerSupabaseClient()
+  const { error } = await supabase
+    .from('members')
+    .update({ ...parsed.data, address: montarEndereco(formData) })
+    .eq('id', id)
+
+  if (error) return { ok: false, erro: traduzirErro(error) }
 
   revalidatePath('/dashboard/players')
   return { ok: true }
