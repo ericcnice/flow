@@ -16,7 +16,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { AddressFields, type Endereco } from '../address-fields'
-import { ImageUrlField } from './image-url-field'
+import { ImageUrlField } from '../image-url-field'
 import { addVenue, updateVenue, type FormState } from './actions'
 import { SLUG_REGEX, TIPOS } from './constants'
 

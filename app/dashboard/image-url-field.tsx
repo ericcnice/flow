@@ -1,8 +1,9 @@
 'use client'
 
 /**
- * Campo de URL de imagem com preview ao vivo. Usado pelos dois campos de
- * imagem do local (logo e foto do espaço).
+ * Campo de URL de imagem com preview ao vivo. Componente COMPARTILHADO do
+ * dashboard: usado pelo cadastro de locais (logo e foto do espaço) e pelo de
+ * pessoas (foto de perfil e logo de patrocinador).
  *
  * Não há upload: o super_admin cola uma URL já hospedada (ex.: Supabase
  * Storage). O preview existe justamente porque não validamos o formato no

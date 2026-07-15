@@ -18,6 +18,7 @@ import { X, Loader2, Check } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { ImageUrlField } from '../image-url-field'
 import { addMember, updateMember, type FormState } from './actions'
 
 const estadoInicial: FormState = { ok: false }
@@ -32,6 +33,8 @@ export type MemberFormData = {
   role: string
   club_slug: string | null
   address: Record<string, string> | null
+  avatar_url: string | null
+  sponsor_logo_url: string | null
 }
 
 type CepStatus = 'idle' | 'buscando' | 'ok' | 'nao-encontrado' | 'erro'
@@ -71,6 +74,11 @@ export function MemberFormModal({
   // O resto do form é não-controlado (defaultValue) — mais simples.
   const [endereco, setEndereco] = useState<Record<string, string>>(member?.address ?? {})
   const [cepStatus, setCepStatus] = useState<CepStatus>('idle')
+
+  // `role` é controlado porque o campo de patrocinador aparece/some conforme
+  // ele, sem precisar salvar. Os demais seguem não-controlados.
+  const [role, setRole] = useState(member?.role ?? 'player')
+  const ehCoach = role === 'coach'
 
   // Só busca quando o usuário MEXE no CEP. Sem isto, abrir a edição de alguém
   // que já tem CEP dispararia uma busca no mount e sobrescreveria um endereço
@@ -218,7 +226,8 @@ export function MemberFormModal({
                 id="role"
                 name="role"
                 required
-                defaultValue={member?.role ?? 'player'}
+                value={role}
+                onChange={(e) => setRole(e.target.value)}
                 className="h-10 rounded-md border border-border bg-background px-3 text-sm"
               >
                 <option value="player">Player</option>
@@ -245,6 +254,32 @@ export function MemberFormModal({
               </select>
             </div>
           </div>
+
+          <fieldset className="mt-1 rounded-lg border border-border p-4">
+            <legend className="px-1.5 text-xs uppercase tracking-widest text-muted-foreground">
+              Imagens
+            </legend>
+            <div className="flex flex-col gap-4">
+              <ImageUrlField
+                id="avatar_url"
+                label="Foto de perfil"
+                valorInicial={member?.avatar_url}
+                formato="quadrado"
+              />
+              {/* Só faz sentido para coach. Desmontado (não escondido com CSS)
+                  quando o papel é player: assim o input some do FormData e a
+                  action recebe null, em vez de gravar um valor invisível na
+                  tela. Ver a nota sobre troca de papel em actions.ts. */}
+              {ehCoach && (
+                <ImageUrlField
+                  id="sponsor_logo_url"
+                  label="Logo de patrocinador"
+                  valorInicial={member?.sponsor_logo_url}
+                  formato="panorama"
+                />
+              )}
+            </div>
+          </fieldset>
 
           <fieldset className="mt-1 rounded-lg border border-border p-4">
             <legend className="px-1.5 text-xs uppercase tracking-widest text-muted-foreground">

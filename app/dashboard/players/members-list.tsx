@@ -26,11 +26,43 @@ export type Member = MemberFormData & { active: boolean }
 /** Estado do modal: fechado | novo cadastro | editando alguém. */
 type Modal = { tipo: 'fechado' } | { tipo: 'novo' } | { tipo: 'editar'; member: Member }
 
+/**
+ * Avatar da pessoa. A maioria não tem avatar_url — o fallback (inicial do nome)
+ * é o caso NORMAL, não a exceção. URL presente mas quebrada cai no mesmo
+ * fallback via onError, então link morto nunca vira imagem rasgada na tabela.
+ * Mesmo padrão do avatar de /dashboard/venues.
+ */
+function Avatar({ m }: { m: Member }) {
+  const [falhou, setFalhou] = useState(false)
+  const mostraImagem = Boolean(m.avatar_url) && !falhou
+
+  return (
+    <div className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full border border-border bg-background">
+      {mostraImagem ? (
+        /* eslint-disable-next-line @next/next/no-img-element */
+        <img
+          src={m.avatar_url as string}
+          alt=""
+          className="h-full w-full object-cover"
+          onError={() => setFalhou(true)}
+        />
+      ) : (
+        <span className="text-xs font-semibold text-muted-foreground">
+          {m.name.trim().charAt(0).toUpperCase() || '?'}
+        </span>
+      )}
+    </div>
+  )
+}
+
 function NomeCompleto({ m }: { m: Member }) {
   return (
-    <div className="flex flex-col">
-      <span className="font-medium">{[m.name, m.last_name].filter(Boolean).join(' ')}</span>
-      {m.slug && <span className="font-mono text-xs text-muted-foreground">@{m.slug}</span>}
+    <div className="flex items-center gap-3">
+      <Avatar m={m} />
+      <div className="flex flex-col">
+        <span className="font-medium">{[m.name, m.last_name].filter(Boolean).join(' ')}</span>
+        {m.slug && <span className="font-mono text-xs text-muted-foreground">@{m.slug}</span>}
+      </div>
     </div>
   )
 }

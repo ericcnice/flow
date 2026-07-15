@@ -20,11 +20,14 @@ export default async function PlayersPage() {
   await requireSuperAdmin()
 
   const supabase = await createServerSupabaseClient()
-  // `address` entra no select porque o modal de EDIÇÃO precisa pré-preencher o
-  // endereço — sem ele, editar alguém apagaria o endereço já cadastrado.
+  // `address`, `avatar_url` e `sponsor_logo_url` entram no select porque o modal
+  // de EDIÇÃO precisa pré-preenchê-los — sem eles, editar alguém apagaria o
+  // endereço e as imagens já cadastrados. `avatar_url` também alimenta o avatar.
   const { data, error } = await supabase
     .from('members')
-    .select('id, name, last_name, slug, email, phone, role, club_slug, address, active')
+    .select(
+      'id, name, last_name, slug, email, phone, role, club_slug, address, avatar_url, sponsor_logo_url, active',
+    )
     .order('active', { ascending: false })
     .order('created_at', { ascending: false })
 
