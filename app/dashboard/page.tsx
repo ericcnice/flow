@@ -29,8 +29,9 @@ const AREAS: CardArea[] = [
     forma: 'h-20 w-20 rounded-full bg-blue-500',
   },
   {
-    titulo: 'Courts',
-    descricao: 'Quadras, superfícies e disponibilidade por clube.',
+    titulo: 'Locais',
+    descricao: 'Clubes, condomínios e quadras públicas — cadastro e URL pública.',
+    href: '/dashboard/venues',
     forma: 'h-16 w-24 rounded-lg bg-primary',
   },
   {
