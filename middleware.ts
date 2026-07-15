@@ -70,6 +70,26 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(url)
   }
 
+  // Estar logado NÃO basta: /dashboard é exclusivo de super_admin. Sem isto,
+  // qualquer player autenticado abriria o painel administrativo.
+  //
+  // Esta é uma checagem OTIMISTA (redireciona cedo, boa UX). A autorização de
+  // verdade está em requireSuperAdmin() (layout/páginas/Server Actions) e na
+  // RLS de members — o Next.js recomenda não deixar o middleware ser a única
+  // tranca, e middleware já teve bypass por header no passado.
+  const { data: papel, error } = await supabase
+    .from('user_roles')
+    .select('role')
+    .eq('user_id', user.sub)
+    .maybeSingle()
+
+  // Falha fechada: erro de leitura ou papel ausente ⇒ manda para a home.
+  if (error || papel?.role !== 'super_admin') {
+    const url = request.nextUrl.clone()
+    url.pathname = '/'
+    return NextResponse.redirect(url)
+  }
+
   // Devolver o supabaseResponse como está — trocá-lo por outra resposta sem
   // copiar os cookies dessincroniza browser e servidor e encerra a sessão.
   return supabaseResponse
