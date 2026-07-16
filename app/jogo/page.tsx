@@ -29,7 +29,8 @@ import { createSpeechSynthesisSpeaker, type Speaker } from "@/lib/voice/speaker"
 import { ScoringEngine } from "@/lib/scoring/engine"
 import { sportById, familyOf, formatPoint, defaultRulesFor, buildScoreCols, concededUnitFlags, displayServer, type SportId } from "@/lib/sports-catalog"
 import { themeClassName, type ThemeId } from "@/lib/themes"
-import { clubBySlug, adBySlug } from "@/lib/clubs-config"
+import { clubBySlug } from "@/lib/clubs-config"
+import { resolveSponsor, type Sponsor } from "@/lib/supabase/sponsors"
 import type { GameState, Side } from "@/lib/scoring/types"
 
 // Realtime (bônus, offline-first): cria/assina a sala ao vivo. O jogo NUNCA
@@ -715,6 +716,29 @@ export default function JogoPage() {
     }
   }, [])
 
+  // Patrocinador da tela de FIM, resolvido por resolveSponsor (ADS estático →
+  // cache → RPC). Fica aqui em cima, e não junto do resto dos dados de fim de
+  // jogo lá embaixo, porque entre um ponto e outro existe um `return` antecipado
+  // (o estado de carregando/erro): hook depois dele quebraria a ordem dos hooks.
+  // null enquanto resolve e null quando não há patrocinador — a guarda de render
+  // (`finishAd?.logoUrl`) já trata os dois como "não desenha o cartão", que é o
+  // mesmo fallback gracioso de antes.
+  //
+  // Resolve no MOUNT do /jogo (o dep é a config, que carrega no início), não ao
+  // fim da partida: quando a tela de fim aparece, minutos depois, já resolveu há
+  // muito. Por isso o cartão não "pisca" e o PNG de compartilhamento nunca sai
+  // sem o logo por corrida de tempo.
+  const [finishAd, setFinishAd] = useState<Sponsor | null>(null)
+  useEffect(() => {
+    let alive = true
+    resolveSponsor(gameConfig?.ad).then((s) => {
+      if (alive) setFinishAd(s)
+    })
+    return () => {
+      alive = false
+    }
+  }, [gameConfig?.ad])
+
   // Voz (client-only): instancia o speaker e restaura a preferência salva.
   // Default DESLIGADO (não surpreender o usuário com som — precisa optar).
   useEffect(() => {
@@ -1232,9 +1256,9 @@ export default function JogoPage() {
   const winnerLetter = gs.winner === "B" ? "b" : "a"
   const winnerName = gs.winner === "B" ? redPlayerName : bluePlayerName
   const loserName = gs.winner === "B" ? bluePlayerName : redPlayerName
-  // Logos: clube SEMPRE que houver clube; patrocinador só se o campo `ad` existir.
+  // Logo do clube: SEMPRE que houver clube. O do patrocinador vem do estado
+  // `finishAd` (resolvido no effect lá em cima — ver comentário de lá).
   const finishClub = clube ? clubBySlug(clube) : null
-  const finishAd = adBySlug(gameConfig.ad)
 
   // --- Dados extra da ARTE de fim de jogo (design azul-marinho FIXO) ---------
   // Nome AMIGÁVEL do esporte (dinâmico p/ o título da arte): "Tênis", "Beach
@@ -2047,17 +2071,20 @@ export default function JogoPage() {
             </div>
 
             {/* 9 + 10. Oferecimento: divisor + "OFERECIMENTO" à esquerda e o logo
-                   do patrocinador em CARTÃO PRETO grande à direita (só se `ad`). */}
-            {finishAd?.logo && (
+                   do patrocinador em CARTÃO CLARO à direita (só se houver `ad`
+                   resolvido). Cartão claro — e não preto como antes — porque o
+                   logo vem de fora e pode ter arte escura, que sumia no preto;
+                   é o mesmo tratamento da Tela 2 da abertura e do /placar. */}
+            {finishAd?.logoUrl && (
               <>
                 <div className="h-px w-full bg-white/15" />
                 <div className="w-full flex items-center justify-between gap-3">
                   <span className="text-[11px] md:text-xs font-bold uppercase tracking-[0.2em] text-white/70">
                     Oferecimento
                   </span>
-                  <div className="rounded-xl bg-black p-2.5 shadow-md">
+                  <div className="rounded-xl bg-white p-2.5 shadow-md ring-1 ring-black/5">
                     <div className="relative h-12 md:h-14 w-32 md:w-36">
-                      <Image src={finishAd.logo} alt={finishAd.nome} fill sizes="160px" className="object-contain" />
+                      <Image src={finishAd.logoUrl} alt={finishAd.name} fill sizes="160px" className="object-contain" />
                     </div>
                   </div>
                 </div>

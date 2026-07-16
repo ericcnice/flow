@@ -25,7 +25,8 @@ import { useRouter, useSearchParams } from "next/navigation"
 import { ScoringEngine } from "@/lib/scoring/engine"
 import { sportById, familyOf, formatPoint, defaultRulesFor, buildScoreCols, concededUnitFlags, displayServer, type SportId } from "@/lib/sports-catalog"
 import { themeClassName, type ThemeId } from "@/lib/themes"
-import { clubBySlug, adBySlug } from "@/lib/clubs-config"
+import { clubBySlug } from "@/lib/clubs-config"
+import { resolveSponsor, type Sponsor } from "@/lib/supabase/sponsors"
 import type { GameState, Side } from "@/lib/scoring/types"
 import { getLiveMatchState } from "@/lib/supabase/live-match"
 import { useRealtimeMatch } from "@/lib/hooks/use-realtime-match"
@@ -159,6 +160,12 @@ export function BroadcastView() {
   const [theme, setTheme] = useState<ThemeId>("neutro")
   const [clube, setClube] = useState<string | null>(null)
   const [adSlug, setAdSlug] = useState<string | null>(null)
+  // Patrocinador resolvido a partir do `&ad=` da URL (ADS estático → cache →
+  // RPC). Fica aqui em cima porque há um `return` antecipado (carregando/erro)
+  // antes do ponto onde o logo é usado — hook depois dele quebraria a ordem.
+  // Este device é o de QUEM ASSISTE: cache próprio, tipicamente vazio, então é
+  // aqui que a RPC mais roda de verdade.
+  const [viewAd, setViewAd] = useState<Sponsor | null>(null)
   const [quadra, setQuadra] = useState("1")
   // Simples vs. duplas: define se a linha mostra 1 nome ou o par. Vem da URL
   // (&gameType=); ausente = simples (default seguro). O servidor não guarda.
@@ -327,6 +334,19 @@ export function BroadcastView() {
     return () => clearInterval(timer)
   }, [startTime])
 
+  // Resolve o patrocinador quando o `&ad=` da URL chega (o effect de carga o
+  // preenche). null enquanto resolve e null quando não há — a guarda de render
+  // trata os dois como "não desenha a marca d'água", igual a antes.
+  useEffect(() => {
+    let alive = true
+    resolveSponsor(adSlug).then((s) => {
+      if (alive) setViewAd(s)
+    })
+    return () => {
+      alive = false
+    }
+  }, [adSlug])
+
   // --- Estados de erro / carregamento (mesma UX do /jogo) ------------------
   if (loadError) {
     return (
@@ -366,7 +386,6 @@ export function BroadcastView() {
   )
   const pointOf = (side: Side): string => (finished ? "" : formatPoint(sport, gs[side], isTiebreak))
   const viewClub = clube ? clubBySlug(clube) : null
-  const viewAd = adBySlug(adSlug)
   const winnerName = gs.winner === "B" ? nameB : gs.winner === "A" ? nameA : ""
 
   return (
@@ -428,15 +447,17 @@ export function BroadcastView() {
       </div>
 
       {/* Logo do PATROCINADOR: marca d'água discreta no rodapé-direito, com
-          "Oferecimento" (mesmo padrão da tela de fim de jogo). */}
-      {viewAd?.logo && (
+          "Oferecimento" (mesmo padrão da tela de fim de jogo). Cartão CLARO —
+          antes era preto translúcido — pelo mesmo motivo das outras duas telas:
+          o logo vem de fora e pode ter arte escura, que sumiria no preto. */}
+      {viewAd?.logoUrl && (
         <div className="pointer-events-none absolute bottom-3 right-3 z-10 flex items-center gap-2">
           <span className="text-[9px] md:text-[10px] font-bold uppercase tracking-[0.2em] opacity-55">
             Oferecimento
           </span>
-          <div className="rounded-lg bg-black/85 p-1.5 shadow-md">
+          <div className="rounded-lg bg-white p-1.5 shadow-md ring-1 ring-black/5">
             <div className="relative h-8 md:h-10 w-24 md:w-28">
-              <Image src={viewAd.logo} alt={viewAd.nome} fill sizes="120px" className="object-contain" />
+              <Image src={viewAd.logoUrl} alt={viewAd.name} fill sizes="120px" className="object-contain" />
             </div>
           </div>
         </div>

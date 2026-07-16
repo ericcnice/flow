@@ -9,9 +9,10 @@
  *  (retrato = empilhadas, paisagem = lado a lado — ver .palco-main). Metade A:
  *  logo do clube. Metade B: nome do esporte em cima + "Quadra N" grande embaixo.
  *
- *  TELA 2 (só quando a rota tem /ad): logo do Nicholas centralizado ~2,5s; depois
- *  ENCOLHE para uma metade (via transição de flex-basis) e na outra metade entra
- *  o botão redondo "JOGAR". Sem /ad, a Tela 1 vai direto para o jogo.
+ *  TELA 2 (só quando a rota tem /ad E o slug resolve para um patrocinador): logo
+ *  em cartão claro centralizado ~2,5s; depois ENCOLHE para uma metade (via
+ *  transição de flex-basis) e na outra metade entra o botão redondo "JOGAR".
+ *  Sem /ad — ou com /ad que não resolve —, a Tela 1 vai direto para o jogo.
  *
  * Ao final, grava a config no MESMO formato do /setup (tennis_match_${quadra} +
  * tennis_engine_${quadra}) — acrescentando `clube` — e navega para /jogo. NÃO
@@ -21,7 +22,8 @@
 import { useEffect, useMemo, useState } from "react"
 import { useParams, useRouter } from "next/navigation"
 import Image from "next/image"
-import { resolveClubContext, adBySlug } from "@/lib/clubs-config"
+import { resolveClubContext } from "@/lib/clubs-config"
+import { resolveSponsor, type Sponsor } from "@/lib/supabase/sponsors"
 import { defaultRulesFor } from "@/lib/sports-catalog"
 import { DEFAULT_THEME } from "@/lib/themes"
 
@@ -38,21 +40,39 @@ export function ClubOpening({ hasAd, ad }: { hasAd: boolean; ad?: string }) {
     [params?.clube, params?.esporte, params?.quadra],
   )
 
-  // Patrocinador da abertura resolvido DO MAPA ADS (mesma fonte da tela de fim de
-  // jogo, via adBySlug) — não mais hardcoded. null se a rota não tem /[ad] ou se
-  // o slug não existe no mapa. Adicionar um novo anúncio passa a ser só uma
-  // entrada em ADS: o logo aparece aqui e na tela de fim sem mexer em mais nada.
-  const adCfg = useMemo(() => (hasAd ? adBySlug(ad) : null), [hasAd, ad])
-  // Só há Tela 2 (patrocinador) quando o slug resolve para um anúncio VÁLIDO.
-  // Se `hasAd` mas o slug é desconhecido, tratamos como "sem anúncio": pula a
-  // Tela 2 e vai direto ao jogo (graceful), em vez de mostrar um logo fantasma.
+  // Patrocinador da abertura, resolvido por resolveSponsor (ADS estático → cache
+  // → RPC). null se a rota não tem /[ad], se o slug é desconhecido ou se a busca
+  // falhou. Adicionar patrocinador é cadastrar um coach com logo — ou, para um QR
+  // já impresso, uma entrada em ADS.
+  const [adCfg, setAdCfg] = useState<Sponsor | null>(null)
+  // `adResolved` separa "ainda não sei" de "sei que não tem" — distinção que não
+  // existia quando adBySlug respondia na hora, e sem a qual os timers das telas
+  // decidiriam com base num null que é só "a RPC não voltou ainda".
+  // Sem /[ad] nasce true: o caminho sem patrocinador não espera por nada e
+  // continua idêntico ao de antes, sem nem tocar em resolveSponsor.
+  const [adResolved, setAdResolved] = useState(!hasAd)
+
+  useEffect(() => {
+    if (!hasAd) {
+      setAdResolved(true)
+      return
+    }
+    let alive = true
+    resolveSponsor(ad).then((s) => {
+      if (!alive) return
+      setAdCfg(s)
+      setAdResolved(true)
+    })
+    return () => {
+      alive = false
+    }
+  }, [hasAd, ad])
+
+  // Só há Tela 2 (patrocinador) quando o slug resolve para um patrocinador
+  // VÁLIDO. Se `hasAd` mas o slug é desconhecido (ou a busca falhou), tratamos
+  // como "sem anúncio": pula a Tela 2 e vai direto ao jogo (graceful), em vez de
+  // mostrar um logo fantasma.
   const showAdScreen = adCfg !== null
-  // Logo na Tela 2 sobre fundo PRETO (var(--palco-fundo)). O mapa guarda a versão
-  // de fundo BRANCO (usada no cartão claro da tela de fim); aqui, sobre a tela
-  // preta, usamos a variante de fundo ESCURO pela convenção de nome do projeto
-  // "-light"→"-dark" (ex.: /nicholas-light.png → /nicholas-dark.png), evitando o
-  // retângulo branco. Sem "-light" no nome, cai no próprio logo do mapa.
-  const adLogoDark = adCfg ? adCfg.logo.replace("-light", "-dark") : null
 
   // "one" = Tela 1; "two" = Tela 2 (com `split` controlando o encolhimento).
   const [phase, setPhase] = useState<"one" | "two">("one")
@@ -68,10 +88,11 @@ export function ClubOpening({ hasAd, ad }: { hasAd: boolean; ad?: string }) {
       sport: sportId,
       theme: DEFAULT_THEME,
       clube: club.id,
-      // Patrocinador/anúncio da abertura (ex.: "ad1"). Só entra quando o slug
-      // resolve para um anúncio VÁLIDO do mapa ADS; grava o id canônico. Sem ele
-      // (ou slug desconhecido) o campo nem aparece na config (retrocompatível).
-      ...(adCfg ? { ad: adCfg.id } : {}),
+      // Patrocinador da abertura (ex.: "ad1" ou o slug do coach). Só entra
+      // quando resolveu para um patrocinador VÁLIDO; grava o SLUG DE URL, que é
+      // o que o /placar precisa para reresolver o mesmo logo no aparelho de quem
+      // assiste. Sem patrocinador o campo nem aparece (retrocompatível).
+      ...(adCfg ? { ad: adCfg.slug } : {}),
       gameType: "simples",
       scoreType: "pontos",
       players: { blue1: "Jogador 1", blue2: "Jogador 2", red1: "Jogador 3", red2: "Jogador 4" },
@@ -93,6 +114,15 @@ export function ClubOpening({ hasAd, ad }: { hasAd: boolean; ad?: string }) {
       router.replace("/")
       return
     }
+    // Só arma o relógio DEPOIS de saber se há patrocinador. Sem esta guarda, o
+    // timer nasceria com adCfg=null (rumo a startGame), a RPC responderia no
+    // meio, showAdScreen viraria true, o effect re-rodaria e o cleanup trocaria
+    // o timer por outro de 4s — esticando a Tela 1 sem que ninguém pedisse.
+    // Custo: a Tela 1 dura 4s + latência da RPC, e só para slug vindo do banco
+    // (ADS resolve num microtask). Sobre 4s, imperceptível — e o timeout de 2s
+    // do resolveSponsor é o teto dessa espera.
+    if (!adResolved) return
+
     const timers: ReturnType<typeof setTimeout>[] = []
     // Fim da Tela 1: sem anúncio válido → joga; com anúncio → Tela 2 (centralizada
     // → encolhe).
@@ -108,12 +138,12 @@ export function ClubOpening({ hasAd, ad }: { hasAd: boolean; ad?: string }) {
     )
     return () => timers.forEach(clearTimeout)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ctx, showAdScreen])
+  }, [ctx, showAdScreen, adResolved])
 
   if (!ctx) return null
 
   // ---------------------------------------------------------------- TELA 2 (ad)
-  if (phase === "two" && adCfg && adLogoDark) {
+  if (phase === "two" && adCfg) {
     return (
       <div
         className="tema-neutro palco-main flex h-[100dvh] w-screen overflow-hidden"
@@ -122,12 +152,21 @@ export function ClubOpening({ hasAd, ad }: { hasAd: boolean; ad?: string }) {
         {/* Metade do LOGO: sempre presente; encolhe quando `split` abre a outra
             metade (o container do logo é % da metade, então acompanha o tamanho). */}
         <div className="flex-1 basis-0 flex items-center justify-center min-w-0 min-h-0">
-          {/* Container do logo em % da METADE: centralizado (metade = tela cheia)
-              fica grande/presente; ao encolher (metade = ~50%) acompanha, mas com
-              % maior preenche melhor a metade esquerda mantendo margem. object-
-              contain garante que nunca estoura. */}
-          <div className="relative w-[86%] h-[72%]">
-            <Image src={adLogoDark} alt={adCfg.nome} fill sizes="70vw" priority className="object-contain" />
+          {/* CARTÃO CLARO. O logo do patrocinador é UM só (sponsor_logo_url), sem
+              variante escura, e vem de fora: pode ter fundo transparente, branco
+              ou colorido. Sobre o preto do palco, um logo de arte escura sumiria
+              e um de fundo branco viraria um retângulo solto. O cartão claro
+              resolve os dois de uma vez — vira o "papel" onde qualquer logo
+              assenta, com o mesmo contraste sempre.
+
+              As medidas (% da METADE) são as de antes, então o encolhimento
+              quando `split` abre a outra metade continua igual; o cartão só
+              troca o que existe DENTRO da caixa. object-contain garante que
+              nunca estoura. */}
+          <div className="w-[86%] h-[72%] rounded-3xl bg-white p-[5%] shadow-2xl ring-1 ring-black/5 flex items-center justify-center">
+            <div className="relative w-full h-full">
+              <Image src={adCfg.logoUrl} alt={adCfg.name} fill sizes="70vw" priority className="object-contain" />
+            </div>
           </div>
         </div>
 
