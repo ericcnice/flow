@@ -10,8 +10,8 @@ import { useParams } from "next/navigation"
 import { ClubOpening } from "@/components/club-opening"
 
 export default function ClubQuadraAdPage() {
-  // Passa o VALOR real do anúncio (ex.: "ad1") — não só o booleano — para que
-  // ele seja persistido na config e usado depois (tela de fim de jogo).
+  // Passa o VALOR real do anúncio (ex.: "ad1"): a presença de `ad` faz o
+  // ClubOpening resolver por SLUG (legado, cartaz impresso), não por quadra.
   const params = useParams<{ ad: string }>()
-  return <ClubOpening hasAd ad={params?.ad} />
+  return <ClubOpening ad={params?.ad} />
 }

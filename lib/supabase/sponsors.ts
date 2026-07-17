@@ -61,6 +61,17 @@ const CACHE_VERSION = 1
 const cacheKey = (slug: string) => `sponsor_${slug}`
 
 /**
+ * TTL do cache quadra→patrocinador. Diferente do cache de identidade
+ * (sponsor_${slug}, sem expiração): a associação de uma quadra é TEMPORAL —
+ * "quem está ali agora" — então um valor velho precisa envelhecer. É aqui que o
+ * campo `at`, gravado desde a peça D e até agora decorativo, passa a ser lido.
+ */
+const COURT_CACHE_TTL_MS = 10 * 60 * 1000
+
+const courtCacheKey = (venue: string, sport: string, court: string) =>
+  `court_sponsor_${venue}_${sport}_${court}`
+
+/**
  * Leitura DEFENSIVA: entrada corrompida, de outra versão ou sem logo é tratada
  * como "não tem cache" e cai para a RPC. Um JSON.parse solto aqui derrubaria a
  * abertura inteira por causa de uma string estragada no localStorage.
@@ -91,6 +102,36 @@ function writeCache(sponsor: Sponsor): void {
     localStorage.setItem(
       cacheKey(sponsor.slug),
       JSON.stringify({ v: CACHE_VERSION, ...sponsor, at: Date.now() }),
+    )
+  } catch {
+    // Cota estourada / aba privada: seguir sem cache é degradação aceitável.
+  }
+}
+
+/**
+ * Cache quadra→slug: guarda SÓ o slug do patrocinador (a identidade completa
+ * mora no cache sponsor_${slug}). Leitura defensiva e com TTL — entrada de outra
+ * versão, sem slug ou VENCIDA vira "não tem cache" e cai para a RPC de quadra.
+ */
+function readCourtCache(venue: string, sport: string, court: string): string | null {
+  try {
+    const raw = localStorage.getItem(courtCacheKey(venue, sport, court))
+    if (!raw) return null
+    const parsed = JSON.parse(raw)
+    if (parsed?.v !== CACHE_VERSION) return null
+    if (typeof parsed.slug !== "string" || !parsed.slug) return null
+    if (typeof parsed.at !== "number" || Date.now() - parsed.at >= COURT_CACHE_TTL_MS) return null
+    return parsed.slug
+  } catch {
+    return null
+  }
+}
+
+function writeCourtCache(venue: string, sport: string, court: string, slug: string): void {
+  try {
+    localStorage.setItem(
+      courtCacheKey(venue, sport, court),
+      JSON.stringify({ v: CACHE_VERSION, slug, at: Date.now() }),
     )
   } catch {
     // Cota estourada / aba privada: seguir sem cache é degradação aceitável.
@@ -186,6 +227,77 @@ export async function resolveSponsor(slug: string | null | undefined): Promise<S
     return sponsor
   } catch {
     // Rede caída / abort que escape como exceção: mesmo fallback gracioso.
+    return null
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+/**
+ * Resolve o patrocinador de uma QUADRA (venue+esporte+quadra) — o caminho da
+ * rota base, sem /[ad] na URL. Precedência (no banco): associação da quadra em
+ * court_sponsors → patrocinador geral do clube (venues.default_sponsor_id).
+ *
+ * Devolve o MESMO `Sponsor { name, slug, logoUrl }` da resolveSponsor: o `slug`
+ * é a amarra do round-trip — o startGame o grava na config, e /jogo e /placar o
+ * re-resolvem por slug depois. Nunca lança e nunca trava: qualquer falha vira
+ * null (sem patrocinador), exatamente como a resolveSponsor.
+ *
+ * Cache em DUAS camadas:
+ *  - quadra→slug (TTL de 10min): a associação muda com o tempo, então expira.
+ *  - identidade slug→Sponsor (sem TTL): estável, reaproveita o cache existente.
+ * No hit de quadra, resolvemos o slug pelo caminho de identidade (resolveSponsor
+ * → ADS/cache/RPC por slug), que volta offline se a identidade já foi cacheada.
+ */
+export async function resolveSponsorForCourt(
+  venueSlug: string,
+  sportId: string,
+  courtSlug: string,
+): Promise<Sponsor | null> {
+  if (!venueSlug || !sportId || !courtSlug) return null
+  // Minúsculas em todo o caminho: mesma quadra nunca vira duas chaves de cache.
+  const venue = venueSlug.toLowerCase()
+  const sport = sportId.toLowerCase()
+  const court = courtSlug.toLowerCase()
+
+  // Cache de quadra dentro do TTL → resolve o slug pela IDENTIDADE. Se a
+  // identidade sumiu (cache limpo E RPC por slug falhou), não trava: segue para
+  // a RPC de quadra abaixo, que reidrata tudo.
+  const cachedSlug = readCourtCache(venue, sport, court)
+  if (cachedSlug) {
+    const viaIdentidade = await resolveSponsor(cachedSlug)
+    if (viaIdentidade) return viaIdentidade
+  }
+
+  // Miss/expirado → RPC de quadra, uma vez, com o mesmo teto de 2s.
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), RPC_TIMEOUT_MS)
+  try {
+    const { data, error } = await supabase
+      .rpc("get_sponsor_for_court", {
+        p_venue_slug: venue,
+        p_sport: sport,
+        p_court_slug: court,
+      })
+      .abortSignal(controller.signal)
+
+    // Erro, timeout, quadra sem patrocinador ou linha sem slug/logo: null e NÃO
+    // cacheia (nem quadra nem identidade). Cachear "não tem" esconderia por 10min
+    // um patrocinador recém-associado.
+    if (error) return null
+    const row = data?.[0]
+    if (!row?.slug || !row?.sponsor_logo_url) return null
+
+    const sponsor: Sponsor = {
+      name: row.name,
+      slug: row.slug,
+      logoUrl: row.sponsor_logo_url,
+    }
+    warnIfNotSupabaseStorage(sponsor.logoUrl, sponsor.slug)
+    writeCourtCache(venue, sport, court, sponsor.slug) // quadra → slug (TTL curto)
+    writeCache(sponsor) // identidade slug → Sponsor, de brinde (aquece /jogo e /placar)
+    return sponsor
+  } catch {
     return null
   } finally {
     clearTimeout(timer)

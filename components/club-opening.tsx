@@ -9,21 +9,21 @@
  *  (retrato = empilhadas, paisagem = lado a lado — ver .palco-main). Metade A:
  *  logo do clube. Metade B: nome do esporte em cima + "Quadra N" grande embaixo.
  *
- *  TELA 2 (só quando a rota tem /ad E o slug resolve para um patrocinador): logo
- *  em cartão claro centralizado ~2,5s; depois ENCOLHE para uma metade (via
- *  transição de flex-basis) e na outra metade entra o botão redondo "JOGAR".
- *  Sem /ad — ou com /ad que não resolve —, a Tela 1 vai direto para o jogo.
+ *  TELA 2 (quando um patrocinador RESOLVE — por /ad na URL, ou por associação
+ *  da quadra no banco): logo em cartão claro centralizado ~2,5s; depois ENCOLHE
+ *  para uma metade (via transição de flex-basis) e na outra metade entra o botão
+ *  redondo "JOGAR". Sem patrocinador, a Tela 1 vai direto para o jogo.
  *
  * Ao final, grava a config no MESMO formato do /setup (tennis_match_${quadra} +
  * tennis_engine_${quadra}) — acrescentando `clube` — e navega para /jogo. NÃO
  * passa pela tela de /setup e NÃO altera lib/scoring.
  */
 
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { useParams, useRouter } from "next/navigation"
 import Image from "next/image"
 import { resolveClubContext } from "@/lib/clubs-config"
-import { resolveSponsor, type Sponsor } from "@/lib/supabase/sponsors"
+import { resolveSponsor, resolveSponsorForCourt, type Sponsor } from "@/lib/supabase/sponsors"
 import { supabase } from "@/lib/supabase/client"
 import { defaultRulesFor } from "@/lib/sports-catalog"
 import { DEFAULT_THEME } from "@/lib/themes"
@@ -81,7 +81,7 @@ function logCourtVisit(
     )
 }
 
-export function ClubOpening({ hasAd, ad }: { hasAd: boolean; ad?: string }) {
+export function ClubOpening({ ad }: { ad?: string }) {
   const router = useRouter()
   const params = useParams<{ clube: string; esporte: string; quadra: string }>()
 
@@ -90,25 +90,28 @@ export function ClubOpening({ hasAd, ad }: { hasAd: boolean; ad?: string }) {
     [params?.clube, params?.esporte, params?.quadra],
   )
 
-  // Patrocinador da abertura, resolvido por resolveSponsor (ADS estático → cache
-  // → RPC). null se a rota não tem /[ad], se o slug é desconhecido ou se a busca
-  // falhou. Adicionar patrocinador é cadastrar um coach com logo — ou, para um QR
-  // já impresso, uma entrada em ADS.
+  // Patrocinador da abertura. DUAS fontes, escolhidas pela presença de `ad`:
+  //  - `ad` presente (rota /[ad], cartaz impresso legado): resolve por SLUG, com
+  //    ADS estático primeiro — o QR do Nicholas nunca toca rede.
+  //  - `ad` ausente (rota base): resolve POR QUADRA (venue+esporte+quadra) em
+  //    court_sponsors, com o patrocinador geral do clube como fallback.
+  // Ambas devolvem o mesmo Sponsor { name, slug, logoUrl }; `slug` é o que o
+  // startGame grava na config para /jogo e /placar re-resolverem depois.
   const [adCfg, setAdCfg] = useState<Sponsor | null>(null)
-  // `adResolved` separa "ainda não sei" de "sei que não tem" — distinção que não
-  // existia quando adBySlug respondia na hora, e sem a qual os timers das telas
-  // decidiriam com base num null que é só "a RPC não voltou ainda".
-  // Sem /[ad] nasce true: o caminho sem patrocinador não espera por nada e
-  // continua idêntico ao de antes, sem nem tocar em resolveSponsor.
-  const [adResolved, setAdResolved] = useState(!hasAd)
+  // `adResolved` = "já sei se tem patrocinador". Hoje é gate SÓ do log (peça D);
+  // o timer NÃO depende mais dele (ver o effect do timer). Nasce false: mesmo a
+  // rota base agora consulta o banco antes de saber o patrocinador.
+  const [adResolved, setAdResolved] = useState(false)
 
   useEffect(() => {
-    if (!hasAd) {
-      setAdResolved(true)
-      return
-    }
+    // Espera o ctx: o caminho por quadra precisa de club/esporte/quadra dele.
+    if (!ctx) return
     let alive = true
-    resolveSponsor(ad).then((s) => {
+    const pendente =
+      ad !== undefined
+        ? resolveSponsor(ad)
+        : resolveSponsorForCourt(ctx.club.id, ctx.sportId, ctx.quadra)
+    pendente.then((s) => {
       if (!alive) return
       setAdCfg(s)
       setAdResolved(true)
@@ -116,14 +119,14 @@ export function ClubOpening({ hasAd, ad }: { hasAd: boolean; ad?: string }) {
     return () => {
       alive = false
     }
-  }, [hasAd, ad])
+  }, [ctx, ad])
 
   // Log de acesso da quadra (peça D). Fire-and-forget: não atrasa nem quebra a
   // jornada (ver logCourtVisit). Espera `adResolved` para registrar o
-  // patrocinador que foi DE FATO mostrado — na rota base adResolved já nasce
-  // true e adCfg é null; na rota /[ad], adCfg já tem o valor final quando
-  // adResolved vira true (os dois são setados no mesmo .then). Logamos venue +
-  // esporte + quadra da chave já validada por resolveClubContext.
+  // patrocinador que foi DE FATO mostrado: quando adResolved vira true, adCfg já
+  // tem o valor final (os dois saem do mesmo .then), seja da resolução por slug
+  // (/[ad]) ou por quadra (rota base). Logamos venue + esporte + quadra da chave
+  // já validada por resolveClubContext.
   useEffect(() => {
     if (!ctx || !adResolved) return
     logCourtVisit(ctx.club.id, ctx.sportId, ctx.quadra, adCfg?.slug ?? null)
@@ -133,11 +136,15 @@ export function ClubOpening({ hasAd, ad }: { hasAd: boolean; ad?: string }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ctx, adResolved])
 
-  // Só há Tela 2 (patrocinador) quando o slug resolve para um patrocinador
-  // VÁLIDO. Se `hasAd` mas o slug é desconhecido (ou a busca falhou), tratamos
-  // como "sem anúncio": pula a Tela 2 e vai direto ao jogo (graceful), em vez de
-  // mostrar um logo fantasma.
-  const showAdScreen = adCfg !== null
+  // Espelho do adCfg mais recente para o CALLBACK DO TIMER. O timer arma em t=0
+  // e dispara em t+4s com a closure de quando armou (adCfg=null naquele
+  // instante); sem este ref ele leria o null congelado e nunca abriria a Tela 2.
+  // O antigo `showAdScreen` colapsou aqui: "há patrocinador a mostrar" é
+  // exatamente adCfgRef.current !== null (adCfg só é não-nulo quando resolveu).
+  const adCfgRef = useRef<Sponsor | null>(null)
+  useEffect(() => {
+    adCfgRef.current = adCfg
+  }, [adCfg])
 
   // "one" = Tela 1; "two" = Tela 2 (com `split` controlando o encolhimento).
   const [phase, setPhase] = useState<"one" | "two">("one")
@@ -153,11 +160,11 @@ export function ClubOpening({ hasAd, ad }: { hasAd: boolean; ad?: string }) {
       sport: sportId,
       theme: DEFAULT_THEME,
       clube: club.id,
-      // Patrocinador da abertura (ex.: "ad1" ou o slug do coach). Só entra
-      // quando resolveu para um patrocinador VÁLIDO; grava o SLUG DE URL, que é
-      // o que o /placar precisa para reresolver o mesmo logo no aparelho de quem
-      // assiste. Sem patrocinador o campo nem aparece (retrocompatível).
-      ...(adCfg ? { ad: adCfg.slug } : {}),
+      // Patrocinador da abertura (slug: "ad1", ou o slug do coach). Lê do REF,
+      // não do estado: o startGame chamado pelo callback do timer roda numa
+      // closure antiga, e só o ref tem o adCfg final. Grava o SLUG, que é o que
+      // /jogo e /placar re-resolvem depois. Sem patrocinador o campo nem aparece.
+      ...(adCfgRef.current ? { ad: adCfgRef.current.slug } : {}),
       gameType: "simples",
       scoreType: "pontos",
       players: { blue1: "Jogador 1", blue2: "Jogador 2", red1: "Jogador 3", red2: "Jogador 4" },
@@ -179,31 +186,27 @@ export function ClubOpening({ hasAd, ad }: { hasAd: boolean; ad?: string }) {
       router.replace("/")
       return
     }
-    // Só arma o relógio DEPOIS de saber se há patrocinador. Sem esta guarda, o
-    // timer nasceria com adCfg=null (rumo a startGame), a RPC responderia no
-    // meio, showAdScreen viraria true, o effect re-rodaria e o cleanup trocaria
-    // o timer por outro de 4s — esticando a Tela 1 sem que ninguém pedisse.
-    // Custo: a Tela 1 dura 4s + latência da RPC, e só para slug vindo do banco
-    // (ADS resolve num microtask). Sobre 4s, imperceptível — e o timeout de 2s
-    // do resolveSponsor é o teto dessa espera.
-    if (!adResolved) return
-
+    // O relógio arma SEMPRE em t=0, sem esperar a resolução do patrocinador — é
+    // isso que mantém a jornada instantânea (a rota base não ganha nenhuma
+    // latência de rede antes da Tela 1 começar). A decisão fica para o FIM dos
+    // 4s, lida via adCfgRef para a closure não congelar um adCfg velho.
     const timers: ReturnType<typeof setTimeout>[] = []
-    // Fim da Tela 1: sem anúncio válido → joga; com anúncio → Tela 2 (centralizada
-    // → encolhe).
     timers.push(
       setTimeout(() => {
-        if (!showAdScreen) {
+        // t+4s: a resolução (teto de 2s nas resolveSponsor*) já terminou no
+        // caminho normal. Se uma rede patológica passou dos 4s, adCfgRef ainda é
+        // null → joga sem patrocinador. NUNCA segura o jogador esperando rede.
+        if (adCfgRef.current) {
+          setPhase("two")
+          timers.push(setTimeout(() => setSplit(true), SCREEN_MS))
+        } else {
           startGame()
-          return
         }
-        setPhase("two")
-        timers.push(setTimeout(() => setSplit(true), SCREEN_MS))
       }, SCREEN_MS),
     )
     return () => timers.forEach(clearTimeout)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ctx, showAdScreen, adResolved])
+  }, [ctx])
 
   if (!ctx) return null
 
