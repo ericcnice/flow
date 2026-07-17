@@ -11,6 +11,13 @@
 /** Espelha o CHECK `venues_slug_formato` do banco. Os dois têm que concordar. */
 export const SLUG_REGEX = /^[a-z0-9-]+$/
 
+/**
+ * Domínio público usado para MONTAR e EXIBIR URLs (preview do slug no formulário
+ * e links de compartilhamento na página de detalhe). Não vem de env porque é
+ * texto de UI, não configuração de runtime — nada aqui faz request para ele.
+ */
+export const DOMINIO_PUBLICO = 'flow.pwer.com.br'
+
 /** Espelha o CHECK de `type` do banco. */
 export const TIPOS = [
   { valor: 'club', rotulo: 'Clube' },

@@ -10,7 +10,8 @@
  */
 
 import { useMemo, useState } from 'react'
-import { MapPin, Pencil, Plus, Search } from 'lucide-react'
+import Link from 'next/link'
+import { ArrowUpRight, MapPin, Pencil, Plus, Search } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { TIPOS } from './constants'
@@ -109,6 +110,25 @@ function BotaoEditar({ onClick }: { onClick: () => void }) {
   )
 }
 
+/**
+ * Navega para a página de detalhe. É um <Link> e não um botão de propósito: a
+ * edição continua sendo modal AQUI (a listagem segue dona dela), então este é o
+ * único ponto da linha que troca de rota — e como Link ele ganha abrir em nova
+ * aba, copiar endereço e o prefetch do Next de graça.
+ */
+function LinkDetalhes({ slug }: { slug: string }) {
+  return (
+    <Link
+      href={`/dashboard/venues/${slug}`}
+      className="inline-flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-background hover:text-foreground"
+      title="Ver detalhes do local"
+    >
+      <ArrowUpRight className="h-3.5 w-3.5" />
+      Ver detalhes
+    </Link>
+  )
+}
+
 export function VenuesList({ venues }: { venues: Venue[] }) {
   const [busca, setBusca] = useState('')
   const [tipoFiltro, setTipoFiltro] = useState('todos')
@@ -132,7 +152,10 @@ export function VenuesList({ venues }: { venues: Venue[] }) {
     <>
       <div className="mt-4 flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Locais</h1>
+          {/* Rótulo da SEÇÃO em inglês (igual ao card do hub e a Players); a
+              prosa abaixo segue em português, como "Adicionar Pessoa" em
+              /players. A rota continua /dashboard/venues. */}
+          <h1 className="text-2xl font-semibold tracking-tight">Courts</h1>
           <p className="mt-1 text-sm text-muted-foreground">
             {filtrados.length === venues.length
               ? `${venues.length} ${venues.length === 1 ? 'local cadastrado' : 'locais cadastrados'}`
@@ -226,6 +249,7 @@ export function VenuesList({ venues }: { venues: Venue[] }) {
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex justify-end gap-2">
+                        <LinkDetalhes slug={v.slug} />
                         <BotaoEditar onClick={() => setModal({ tipo: 'editar', venue: v })} />
                         <VenueActiveToggle id={v.id} active={v.active} />
                       </div>
@@ -253,6 +277,7 @@ export function VenuesList({ venues }: { venues: Venue[] }) {
                     <span className="text-xs text-muted-foreground">{cidadeDe(v)}</span>
                   </div>
                   <div className="flex gap-2">
+                    <LinkDetalhes slug={v.slug} />
                     <BotaoEditar onClick={() => setModal({ tipo: 'editar', venue: v })} />
                     <VenueActiveToggle id={v.id} active={v.active} />
                   </div>

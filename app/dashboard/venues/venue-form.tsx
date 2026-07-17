@@ -18,12 +18,12 @@ import { Label } from '@/components/ui/label'
 import { AddressFields, type Endereco } from '../address-fields'
 import { ImageUrlField } from '../image-url-field'
 import { addVenue, updateVenue, type FormState } from './actions'
-import { SLUG_REGEX, TIPOS } from './constants'
+// DOMINIO_PUBLICO saiu daqui para constants.ts quando a página de detalhe
+// passou a montar URLs com ele também. Segue valendo: é só para o PREVIEW —
+// a rota /c/[slug] ainda não existe.
+import { DOMINIO_PUBLICO, SLUG_REGEX, TIPOS } from './constants'
 
 const estadoInicial: FormState = { ok: false }
-
-/** Domínio só para o PREVIEW da URL. A rota /c/[slug] ainda não existe. */
-const DOMINIO_PUBLICO = 'flow.pwer.com.br'
 
 /**
  * Snapshot do que o formulário ENVIARIA agora — a régua para saber se mudou algo.

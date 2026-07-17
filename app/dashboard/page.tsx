@@ -29,7 +29,10 @@ const AREAS: CardArea[] = [
     forma: 'h-20 w-20 rounded-full bg-blue-500',
   },
   {
-    titulo: 'Locais',
+    // Rótulo da SEÇÃO em inglês, como Players/Queue/Tournaments/Settings — a
+    // prosa segue em português ("Adicionar Local"), igual a Players/"Pessoa".
+    // A rota continua /dashboard/venues: só o texto visível mudou.
+    titulo: 'Courts',
     descricao: 'Clubes, condomínios e quadras públicas — cadastro e URL pública.',
     href: '/dashboard/venues',
     forma: 'h-16 w-24 rounded-lg bg-primary',
