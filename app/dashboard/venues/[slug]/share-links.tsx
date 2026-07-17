@@ -14,8 +14,17 @@
  */
 
 import { useState } from 'react'
-import { Check, Copy, TriangleAlert } from 'lucide-react'
+import { Check, Copy, QrCode, TriangleAlert } from 'lucide-react'
 import { DOMINIO_PUBLICO } from '../constants'
+import { QrModal } from './qr-modal'
+
+/** Coach elegível a patrocinador — já filtrado e achatado no Server Component. */
+export type Coach = {
+  /** Slug do coach = o segmento /[ad] da URL. Nunca nulo (a query filtra). */
+  slug: string
+  nome: string
+  temLogo: boolean
+}
 
 /**
  * Esporte × quadras. Os slugs de esporte são os que a URL aceita (ver
@@ -54,7 +63,7 @@ const GRADE = [
   // condomínio de uma quadra só).
 ]
 
-function LinhaLink({ url }: { url: string }) {
+function LinhaLink({ url, onVerQr }: { url: string; onVerQr: () => void }) {
   const [copiado, setCopiado] = useState(false)
 
   const copiar = async () => {
@@ -76,6 +85,15 @@ function LinhaLink({ url }: { url: string }) {
       </span>
       <button
         type="button"
+        onClick={onVerQr}
+        aria-label={`Ver QR code de ${url}`}
+        className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-border px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-card hover:text-foreground"
+      >
+        <QrCode className="h-3.5 w-3.5" />
+        <span className="hidden sm:inline">Ver QR</span>
+      </button>
+      <button
+        type="button"
         onClick={copiar}
         aria-label={`Copiar ${url}`}
         className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-border px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-card hover:text-foreground"
@@ -87,8 +105,29 @@ function LinhaLink({ url }: { url: string }) {
   )
 }
 
-export function ShareLinks({ slug, naJornada }: { slug: string; naJornada: boolean }) {
+export function ShareLinks({
+  slug,
+  naJornada,
+  coaches,
+}: {
+  slug: string
+  naJornada: boolean
+  coaches: Coach[]
+}) {
+  // '' = "— nenhum —". O patrocinador é só um SUFIXO da URL: trocar o select
+  // re-renderiza e cada linha remonta sua própria URL a partir dele. Não há
+  // lista duplicada em estado para sincronizar — a URL é derivada, não guardada.
+  const [patrocinador, setPatrocinador] = useState('')
+  // URL cujo QR está aberto. null = modal fechado.
+  const [qrAberto, setQrAberto] = useState<string | null>(null)
+
   const total = GRADE.reduce((n, g) => n + g.quadras.length, 0)
+  const coachSelecionado = coaches.find((c) => c.slug === patrocinador) ?? null
+
+  /** O /[ad] da jornada é o último segmento — daí sufixo, não interpolação. */
+  const sufixo = patrocinador ? `/${patrocinador}` : ''
+  const montarUrl = (esporte: string, quadra: string) =>
+    `${DOMINIO_PUBLICO}/${slug}/${esporte}/${quadra}${sufixo}`
 
   return (
     <section className="mt-10">
@@ -96,6 +135,40 @@ export function ShareLinks({ slug, naJornada }: { slug: string; naJornada: boole
       <p className="mt-1 text-sm text-muted-foreground">
         {total} combinações de esporte e quadra, pela convenção padrão.
       </p>
+
+      <div className="mt-4 flex flex-col gap-1.5">
+        <label htmlFor="patrocinador" className="text-xs text-muted-foreground">
+          Patrocinador (opcional)
+        </label>
+        <select
+          id="patrocinador"
+          value={patrocinador}
+          onChange={(e) => setPatrocinador(e.target.value)}
+          className="h-10 rounded-md border border-border bg-card px-3 text-sm sm:max-w-xs"
+        >
+          <option value="">— nenhum —</option>
+          {coaches.map((c) => (
+            <option key={c.slug} value={c.slug}>
+              {c.nome}
+              {c.temLogo ? '' : ' (sem logo)'}
+            </option>
+          ))}
+        </select>
+
+        {coaches.length === 0 && (
+          <p className="text-xs text-muted-foreground">
+            Nenhum coach ativo com slug cadastrado. O slug é o que vira o último
+            segmento da URL.
+          </p>
+        )}
+
+        {coachSelecionado && !coachSelecionado.temLogo && (
+          <p className="text-xs text-muted-foreground">
+            {coachSelecionado.nome} não tem logo de patrocinador cadastrado — os links
+            funcionam, mas a tela de patrocinador será pulada na abertura.
+          </p>
+        )}
+      </div>
 
       {/* Um QR impresso a partir de um link morto é o pior desfecho possível
           deste painel — por isso o aviso é forte e não um rodapé discreto.
@@ -133,13 +206,26 @@ export function ShareLinks({ slug, naJornada }: { slug: string; naJornada: boole
               </span>
             </h3>
             <div className="mt-2 flex flex-col gap-2">
-              {g.quadras.map((q) => (
-                <LinhaLink key={q} url={`${DOMINIO_PUBLICO}/${slug}/${g.esporte}/${q}`} />
-              ))}
+              {g.quadras.map((q) => {
+                const url = montarUrl(g.esporte, q)
+                return <LinhaLink key={q} url={url} onVerQr={() => setQrAberto(url)} />
+              })}
             </div>
           </div>
         ))}
       </div>
+
+      {/* Nome do arquivo a partir da própria URL, sem o domínio:
+          flow.pwer.com.br/spac/tenis/q1-saibro/nicholas
+          → qr-spac-tenis-q1-saibro-nicholas.png — assim o PNG baixado se
+          identifica sozinho na pasta de downloads, patrocinador incluído. */}
+      {qrAberto && (
+        <QrModal
+          url={qrAberto}
+          nomeArquivo={`qr-${qrAberto.split('/').slice(1).join('-')}.png`}
+          onFechar={() => setQrAberto(null)}
+        />
+      )}
     </section>
   )
 }

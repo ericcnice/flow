@@ -22,7 +22,7 @@ import { clubBySlug } from '@/lib/clubs-config'
 import { requireSuperAdmin } from '../../guard'
 import { TIPOS } from '../constants'
 import { type Endereco } from '../../address-fields'
-import { ShareLinks } from './share-links'
+import { ShareLinks, type Coach } from './share-links'
 import { VenueImage } from './venue-image'
 
 type VenueDetalhe = {
@@ -82,6 +82,30 @@ export default async function VenueDetailPage({
 
   if (!data) notFound()
   const venue = data as VenueDetalhe
+
+  // Coaches para o seletor de patrocinador. Roda com a sessão do usuário, e a
+  // RLS de `members` só libera super_admin — que é exatamente quem chega aqui.
+  //
+  // Os filtros espelham os da RPC get_sponsor_by_slug (role='coach' + active),
+  // que é quem a jornada de fato consulta: listar alguém que a RPC não devolve
+  // seria oferecer uma URL que não resolve. O `slug not null` é estrutural — o
+  // slug É o segmento /[ad] da URL; sem ele não há o que montar.
+  const { data: coachesData } = await supabase
+    .from('members')
+    .select('slug, name, last_name, sponsor_logo_url')
+    .eq('role', 'coach')
+    .eq('active', true)
+    .not('slug', 'is', null)
+    .order('name')
+
+  const coaches: Coach[] = (coachesData ?? []).map((c) => ({
+    slug: c.slug as string,
+    nome: [c.name, c.last_name].filter(Boolean).join(' '),
+    // Sem logo a URL monta e a jornada NÃO quebra — o resolveSponsor devolve
+    // null e a Tela 2 é pulada. Mas o QR fica sem propósito, então o seletor
+    // avisa em vez de deixar imprimir um patrocínio que não aparece.
+    temLogo: Boolean(c.sponsor_logo_url),
+  }))
 
   // Quem serve a jornada de QR é o CLUBS estático, não esta tabela — os dois
   // coexistem (ver a nota em ../page.tsx). Se o slug não estiver lá, os links
@@ -184,7 +208,7 @@ export default async function VenueDetailPage({
         </div>
       </section>
 
-      <ShareLinks slug={venue.slug} naJornada={naJornada} />
+      <ShareLinks slug={venue.slug} naJornada={naJornada} coaches={coaches} />
     </main>
   )
 }
