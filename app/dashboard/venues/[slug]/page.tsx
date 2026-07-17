@@ -24,6 +24,7 @@ import { TIPOS } from '../constants'
 import { type Endereco } from '../../address-fields'
 import { ShareLinks, type Coach } from './share-links'
 import { VenueImage } from './venue-image'
+import { VisitStats, type VisitRow } from './visit-stats'
 
 type VenueDetalhe = {
   id: string
@@ -112,6 +113,18 @@ export default async function VenueDetailPage({
   // montam mas morrem; o ShareLinks avisa em vez de deixar imprimir QR morto.
   const naJornada = clubBySlug(venue.slug) !== null
 
+  // Contadores de acesso (peça E). Duas janelas no mesmo request: "total" (teto
+  // de 3650 dias) e "últimos 7 dias". A RPC é restrita a super_admin no banco.
+  // Erro (ex.: migração ainda não rodada) → data null → listas vazias, e a
+  // página renderiza tudo 0 sem quebrar. Nunca faz throw (supabase-js devolve
+  // { data, error }, não lança).
+  const [statsTotal, stats7d] = await Promise.all([
+    supabase.rpc('get_venue_visit_stats', { p_venue_slug: venue.slug, p_days: 3650 }),
+    supabase.rpc('get_venue_visit_stats', { p_venue_slug: venue.slug, p_days: 7 }),
+  ])
+  const rowsTotal = (statsTotal.data ?? []) as VisitRow[]
+  const rows7d = (stats7d.data ?? []) as VisitRow[]
+
   const endereco = linhasEndereco(venue.address)
   const cadastradoEm = new Date(venue.created_at).toLocaleDateString('pt-BR')
 
@@ -178,6 +191,8 @@ export default async function VenueDetailPage({
           </div>
         </div>
       </header>
+
+      <VisitStats rowsTotal={rowsTotal} rows7d={rows7d} coaches={coaches} />
 
       <section className="mt-8 grid gap-4 sm:grid-cols-2">
         <div className="rounded-xl border border-border bg-card p-4">
