@@ -24,12 +24,62 @@ import { useParams, useRouter } from "next/navigation"
 import Image from "next/image"
 import { resolveClubContext } from "@/lib/clubs-config"
 import { resolveSponsor, type Sponsor } from "@/lib/supabase/sponsors"
+import { supabase } from "@/lib/supabase/client"
 import { defaultRulesFor } from "@/lib/sports-catalog"
 import { DEFAULT_THEME } from "@/lib/themes"
 
 // Duração de cada tela da abertura: Tela 1 (logo do clube + esporte/quadra) e o
 // "logo do patrocinador sozinho" da Tela 2 antes de encolher e mostrar o JOGAR.
 const SCREEN_MS = 4000
+
+// Janela de deduplicação do log de acesso: a mesma quadra não é logada de novo
+// dentro deste intervalo. Também neutraliza o double-fire do StrictMode em dev
+// (o segundo disparo cai dentro da janela e é ignorado).
+const VISIT_THROTTLE_MS = 30 * 60 * 1000
+
+/**
+ * Registra um acesso à quadra (peça D) — FIRE-AND-FORGET, por decisão:
+ *  - NUNCA await no caminho da Tela 1: telemetria não pode adicionar latência à
+ *    jornada, que é offline-first e precisa continuar instantânea;
+ *  - erro é engolido nos DOIS canais da promise (resolve/reject) para não virar
+ *    unhandledrejection nem quebrar o jogo se a rede/RPC falhar;
+ *  - throttle no localStorage evita inflar a contagem por refresh/StrictMode.
+ *
+ * `sponsorSlug` é o que foi DE FATO mostrado (adCfg.slug), ou null na rota base.
+ * O timestamp é gravado ANTES do envio: um log que falhou não retenta por 30min
+ * — para telemetria, perder um acesso esporádico é melhor que martelar a RPC.
+ */
+function logCourtVisit(
+  venueSlug: string,
+  sport: string,
+  courtSlug: string,
+  sponsorSlug: string | null,
+): void {
+  try {
+    const chave = `court_visit_${venueSlug}_${sport}_${courtSlug}`
+    const anterior = localStorage.getItem(chave)
+    if (anterior) {
+      const ts = Number(anterior)
+      if (Number.isFinite(ts) && Date.now() - ts < VISIT_THROTTLE_MS) return
+    }
+    localStorage.setItem(chave, String(Date.now()))
+  } catch {
+    // localStorage indisponível (aba privada): segue sem throttle. No pior caso
+    // conta um acesso a mais — não vale travar a telemetria por isso.
+  }
+
+  void supabase
+    .rpc("log_court_visit", {
+      p_venue_slug: venueSlug,
+      p_sport: sport,
+      p_court_slug: courtSlug,
+      p_sponsor_slug: sponsorSlug,
+    })
+    .then(
+      () => {},
+      () => {},
+    )
+}
 
 export function ClubOpening({ hasAd, ad }: { hasAd: boolean; ad?: string }) {
   const router = useRouter()
@@ -67,6 +117,21 @@ export function ClubOpening({ hasAd, ad }: { hasAd: boolean; ad?: string }) {
       alive = false
     }
   }, [hasAd, ad])
+
+  // Log de acesso da quadra (peça D). Fire-and-forget: não atrasa nem quebra a
+  // jornada (ver logCourtVisit). Espera `adResolved` para registrar o
+  // patrocinador que foi DE FATO mostrado — na rota base adResolved já nasce
+  // true e adCfg é null; na rota /[ad], adCfg já tem o valor final quando
+  // adResolved vira true (os dois são setados no mesmo .then). Logamos venue +
+  // esporte + quadra da chave já validada por resolveClubContext.
+  useEffect(() => {
+    if (!ctx || !adResolved) return
+    logCourtVisit(ctx.club.id, ctx.sportId, ctx.quadra, adCfg?.slug ?? null)
+    // adCfg fica fora das deps de propósito: ele é setado junto de adResolved,
+    // então quando este effect roda o slug já é o final. O throttle protege
+    // contra qualquer disparo extra.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ctx, adResolved])
 
   // Só há Tela 2 (patrocinador) quando o slug resolve para um patrocinador
   // VÁLIDO. Se `hasAd` mas o slug é desconhecido (ou a busca falhou), tratamos
