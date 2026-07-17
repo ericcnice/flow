@@ -39,6 +39,25 @@ export type MemberFormData = {
 
 type CepStatus = 'idle' | 'buscando' | 'ok' | 'nao-encontrado' | 'erro'
 
+/**
+ * Snapshot do que o formulário ENVIARIA agora — a régua para saber se mudou algo.
+ *
+ * Lê do FormData, e não de estado React, porque os valores não moram todos aqui:
+ * o ImageUrlField é self-contained e guarda a própria url. Como todo campo emite
+ * <input name=...>, o DOM do form é o único lugar onde tudo converge — e é
+ * exatamente o que a Server Action recebe. Assim a comparação enxerga o VALOR do
+ * campo de imagem sem depender do estado de preview dele.
+ *
+ * A comparação é de valores CRUS; o servidor ainda normaliza depois (trim,
+ * '' → null, montarEndereco). Isso erra só para o lado seguro: cru-igual implica
+ * payload-igual, então nunca escondemos uma mudança real. O inverso não vale — um
+ * espaço no fim habilita o botão para algo que normaliza em nada, e aí acontece
+ * exatamente o que acontece hoje.
+ */
+function serializarForm(form: HTMLFormElement): string {
+  return JSON.stringify([...new FormData(form).entries()].map(([k, v]) => [k, String(v)]))
+}
+
 function Campo({
   id,
   label,
@@ -79,6 +98,39 @@ export function MemberFormModal({
   // ele, sem precisar salvar. Os demais seguem não-controlados.
   const [role, setRole] = useState(member?.role ?? 'player')
   const ehCoach = role === 'coach'
+
+  // --- "Salvar alterações" só quando há mudança de verdade (só na EDIÇÃO) ---
+  const formRef = useRef<HTMLFormElement>(null)
+  const snapshotInicial = useRef<string | null>(null)
+  const [sujo, setSujo] = useState(false)
+
+  const recalcularSujo = () => {
+    if (!formRef.current) return
+    const atual = serializarForm(formRef.current)
+    // 1º render: os defaultValue já estão no DOM, então este É o original.
+    if (snapshotInicial.current === null) {
+      snapshotInicial.current = atual
+      return
+    }
+    setSujo(atual !== snapshotInicial.current)
+  }
+
+  // DOIS gatilhos, porque nenhum sozinho cobre tudo:
+  //
+  //  - onChange no <form> (abaixo): eventos de digitação borbulham de QUALQUER
+  //    input descendente, inclusive os que vivem dentro do ImageUrlField. É o
+  //    único jeito de saber que a url mudou: quando o estado INTERNO dele muda,
+  //    este componente não re-renderiza, então nenhum effect daqui rodaria.
+  //
+  //  - este effect SEM array de deps: roda após todo render deste componente e
+  //    pega escrita PROGRAMÁTICA no estado local — o autocomplete de CEP
+  //    preenche rua/bairro/cidade/uf por setState, e setState não dispara evento
+  //    de DOM, então o onChange passaria batido.
+  //
+  // setSujo com o mesmo valor não re-renderiza (React faz bail out): sem loop.
+  useEffect(() => {
+    recalcularSujo()
+  })
 
   // Só busca quando o usuário MEXE no CEP. Sem isto, abrir a edição de alguém
   // que já tem CEP dispararia uma busca no mount e sobrescreveria um endereço
@@ -174,7 +226,12 @@ export function MemberFormModal({
           </button>
         </div>
 
-        <form action={formAction} className="flex flex-col gap-4">
+        <form
+          ref={formRef}
+          action={formAction}
+          onChange={recalcularSujo}
+          className="flex flex-col gap-4"
+        >
           <div className="grid gap-4 sm:grid-cols-2">
             <Campo
               id="name"
@@ -373,9 +430,14 @@ export function MemberFormModal({
             >
               Cancelar
             </Button>
+            {/* Na EDIÇÃO, sem mudança não há o que salvar: o botão desabilita
+                (o Button já dima em `disabled:opacity-50`) e a Server Action
+                nem é chamada — economiza a ida à rede, não só a escrita.
+                No CADASTRO o `editando` desliga a regra: `sujo` nasce false e
+                travaria o "Salvar" de um registro novo. */}
             <Button
               type="submit"
-              disabled={pendente}
+              disabled={pendente || (editando && !sujo)}
               className="bg-primary font-medium text-primary-foreground hover:bg-primary/90"
             >
               {pendente && <Loader2 className="h-4 w-4 animate-spin" />}
