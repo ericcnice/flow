@@ -27,7 +27,7 @@ import { createSpeechSynthesisSpeaker, type Speaker } from "@/lib/voice/speaker"
 // pong/pickleball). O "catálogo" (lib/sports-catalog) é a cola entre a UI e os
 // módulos — ele NÃO altera lib/scoring, só o consome.
 import { ScoringEngine } from "@/lib/scoring/engine"
-import { sportById, familyOf, formatPoint, defaultRulesFor, buildScoreCols, concededUnitFlags, displayServer, type SportId } from "@/lib/sports-catalog"
+import { sportById, familyOf, formatPoint, defaultRulesFor, buildScoreCols, concededUnitFlags, displayServer, sideChangeOf, type SideChangeMode, type SportId } from "@/lib/sports-catalog"
 import { themeClassName, type ThemeId } from "@/lib/themes"
 import { clubBySlug } from "@/lib/clubs-config"
 import { resolveSponsor, type Sponsor } from "@/lib/supabase/sponsors"
@@ -99,6 +99,59 @@ function rulesMatchFamily(rules: any, family: "tennis" | "rally" | "sideout"): b
 // com dois pontos legítimos consecutivos no mesmo lado (que, na marcação real,
 // nunca acontecem em <300ms).
 const DOUBLE_TAP_MS = 300
+
+// Quanto tempo o aviso "TROCA DE LADO" fica na tela antes de sumir sozinho.
+const SIDE_CHANGE_MS = 6000
+
+/**
+ * A jogada que ACABOU de ser marcada disparou uma troca de lado? Função PURA que
+ * compara o estado ANTES e DEPOIS do ponto/game — só LÊ o GameState, NÃO altera
+ * lib/scoring. Dispara na TRANSIÇÃO (a jogada que causou a condição), nunca em
+ * re-render; e nunca no undo (o undo não passa por aqui). Regras por `mode`:
+ *
+ *  - "tennis-odd-games": total de games do set corrente ACABOU de virar ímpar
+ *    (um game foi vencido e o set não fechou); no tiebreak, o total de pontos
+ *    do tiebreak acabou de atingir um múltiplo de 6.
+ *  - "each-game": um game ACABOU de fechar; e, no game DECISIVO (currentSet ===
+ *    bestOf), quando o 1º lado atinge 5 pontos (regra do ping pong).
+ *  - "none": nunca.
+ *
+ * Nunca avisa quando a partida acabou (não há próximo lado a trocar).
+ */
+function crossedSideChange(
+  mode: SideChangeMode,
+  before: GameState,
+  after: GameState,
+  bestOf: number,
+): boolean {
+  if (mode === "none" || after.finished) return false
+
+  if (mode === "tennis-odd-games") {
+    // Tiebreak: total de pontos acabou de bater múltiplo de 6.
+    if (before.isTiebreak && after.isTiebreak) {
+      const tb = after.A.tiebreakPoints + after.B.tiebreakPoints
+      const tbBefore = before.A.tiebreakPoints + before.B.tiebreakPoints
+      if (tb > 0 && tb % 6 === 0 && tb !== tbBefore) return true
+    }
+    // Games: total do set corrente subiu 1 (game vencido, set não fechou) e é ímpar.
+    const gAfter = after.A.games + after.B.games
+    const gBefore = before.A.games + before.B.games
+    return gAfter === gBefore + 1 && gAfter % 2 === 1
+  }
+
+  if (mode === "each-game") {
+    // Um game (unidade) acabou de fechar.
+    if (after.completedSets.length > before.completedSets.length) return true
+    // Game decisivo: primeiro lado a atingir 5 pontos.
+    if (after.currentSet === bestOf) {
+      if (after.A.points === 5 && before.A.points < 5) return true
+      if (after.B.points === 5 && before.B.points < 5) return true
+    }
+    return false
+  }
+
+  return false
+}
 
 // Botão COMPARTILHAR: visual destacado (fundo sólido branco), diferente dos
 // demais botões glass. Centralizado aqui para ajuste fácil de cor/efeito.
@@ -189,6 +242,12 @@ export default function JogoPage() {
   // Último toque de marcação (lado + instante), para reconhecer o DUPLO-TOQUE
   // que desfaz. Não dispara re-render (é só detecção de gesto) → fica em ref.
   const lastTapRef = useRef<{ team: "blue" | "red"; time: number } | null>(null)
+
+  // Aviso "TROCA DE LADO" (A2): disparado na TRANSIÇÃO por handleScoreClick,
+  // some sozinho após SIDE_CHANGE_MS ou ao próximo toque. Só avisa — não troca
+  // nada (o espelhamento é o gesto manual do juiz, fatia A1).
+  const [showSideChange, setShowSideChange] = useState(false)
+  const sideChangeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const openScoreboard = () => {
     // Garantir que a URL tenha o parâmetro quadra corretamente
@@ -746,6 +805,7 @@ export default function JogoPage() {
     if (localStorage.getItem("voice_enabled") === "1") setVoiceEnabled(true)
     return () => {
       if (undoSpeakTimerRef.current) clearTimeout(undoSpeakTimerRef.current)
+      if (sideChangeTimerRef.current) clearTimeout(sideChangeTimerRef.current)
       speakerRef.current?.cancel()
     }
   }, [])
@@ -778,9 +838,32 @@ export default function JogoPage() {
     })
   }
 
+  // Esconde o aviso de troca de lado (e cancela o timer de auto-hide).
+  const hideSideChange = () => {
+    if (sideChangeTimerRef.current) {
+      clearTimeout(sideChangeTimerRef.current)
+      sideChangeTimerRef.current = null
+    }
+    setShowSideChange(false)
+  }
+
+  // Mostra o aviso e agenda o auto-hide. Chamado só na transição (ver crossedSideChange).
+  const flashSideChange = () => {
+    if (sideChangeTimerRef.current) clearTimeout(sideChangeTimerRef.current)
+    setShowSideChange(true)
+    sideChangeTimerRef.current = setTimeout(() => {
+      sideChangeTimerRef.current = null
+      setShowSideChange(false)
+    }, SIDE_CHANGE_MS)
+  }
+
   const handleScoreClick = (team: "blue" | "red") => {
     const engine = engineRef.current
     if (!engine) return
+
+    // Qualquer toque some com o aviso de troca de lado (some "ao próximo toque").
+    // Se ESTE mesmo toque disparar uma nova troca, o flash reabre logo abaixo.
+    hideSideChange()
 
     // DUPLO-TOQUE (2 toques rápidos no MESMO lado, ≤300ms) = DESFAZER. Como
     // marcar é INSTANTÂNEO (o toque simples nunca espera), o 1º toque do gesto já
@@ -800,6 +883,9 @@ export default function JogoPage() {
 
     const side = sideOf(team)
 
+    // Snapshot ANTES da jogada — base da detecção de troca de lado (transição).
+    const before = engine.getState()
+
     // Granularidade: modo "games" concede o game inteiro; senão, marca 1 ponto.
     const kind: "point" | "game" = gameConfig?.scoreType === "games" ? "game" : "point"
     if (kind === "game") {
@@ -810,8 +896,14 @@ export default function JogoPage() {
       actionsRef.current.push({ kind: "point", side })
     }
 
-    setGameState(engine.getState())
+    const after = engine.getState()
+    setGameState(after)
     persist()
+
+    // Aviso de troca de lado (A2): só na TRANSIÇÃO, conforme a regra do esporte.
+    if (crossedSideChange(sideChangeOf(sport), before, after, (rulesRef.current?.bestOf as number) || 3)) {
+      flashSideChange()
+    }
     // Espelha a ação na sala (paralelo; não bloqueia a marcação local).
     sendRealtimeAction({ kind, side })
 
@@ -1574,6 +1666,25 @@ export default function JogoPage() {
         {renderBlock("blue")}
         {renderBlock("red")}
       </main>
+
+      {/* AVISO "TROCA DE LADO" (A2): banner não-bloqueante, alto contraste (amarelo
+          de destaque #FEE100 + texto preto — legível sob sol e igual em qualquer
+          tema), disparado só na TRANSIÇÃO. pointer-events-none: nunca rouba toque;
+          some sozinho (SIDE_CHANGE_MS) ou ao próximo toque. Ancorado no topo (abaixo
+          do placar/chip), longe dos números gigantes. */}
+      {showSideChange && !finished && (
+        <div
+          aria-live="polite"
+          className="pointer-events-none absolute left-1/2 top-[18%] z-40 -translate-x-1/2"
+        >
+          <div className="side-change-banner flex items-center gap-2 rounded-full bg-[#FEE100] px-5 py-2.5 shadow-xl ring-1 ring-black/20">
+            <ArrowLeftRight className="h-5 w-5 text-black" />
+            <span className="text-sm font-black uppercase tracking-[0.18em] text-black md:text-base">
+              Troca de lado
+            </span>
+          </div>
+        </div>
+      )}
 
       {/* Controles nas BORDAS (topo + rodapé), NUNCA no meio: o miolo da tela —
           onde vivem os números gigantes dos dois blocos — fica LIVRE de controle

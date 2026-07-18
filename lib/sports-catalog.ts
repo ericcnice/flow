@@ -35,6 +35,18 @@ export type SportId = "tennis" | "beach" | "padel" | "squash" | "tabletennis" | 
  */
 export type ScoreFamily = "tennis" | "rally" | "sideout"
 
+/**
+ * Regra de TROCA DE LADO do esporte — descritor DECLARATIVO consumido pela UI
+ * para AVISAR (não troca nada sozinho; o espelhamento é gesto manual do juiz):
+ *  - "tennis-odd-games": tênis/beach/padel — troca quando o total de games do
+ *    set corrente vira ímpar (1º, 3º, 5º…) e, no tiebreak, a cada 6 pontos;
+ *  - "each-game": ping pong — troca ao fim de CADA game e, no game decisivo,
+ *    quando o 1º lado atinge 5 pontos;
+ *  - "none": squash, pickleball — sem troca de lado.
+ * A DERIVAÇÃO (quando avisar) vive na tela de jogo; aqui só declaramos a regra.
+ */
+export type SideChangeMode = "tennis-odd-games" | "each-game" | "none"
+
 /** Um metadado de esporte: o suficiente para instanciar o motor e rotular a UI. */
 export type SportMeta = {
   id: SportId
@@ -43,16 +55,18 @@ export type SportMeta = {
    * de propósito: cada esporte tem seu próprio formato de regras. */
   module: SportModule<any>
   family: ScoreFamily
+  /** Como/quando o esporte troca de lado (para o aviso automático na UI). */
+  sideChange: SideChangeMode
 }
 
 /** Ordem do carrossel na tela de setup. */
 export const SPORTS: SportMeta[] = [
-  { id: "tennis", name: "Tênis", module: tennisModule, family: "tennis" },
-  { id: "beach", name: "Beach Tennis", module: beachModule, family: "tennis" },
-  { id: "padel", name: "Padel", module: padelModule, family: "tennis" },
-  { id: "squash", name: "Squash", module: squashModule, family: "rally" },
-  { id: "tabletennis", name: "Ping Pong", module: tableTennisModule, family: "rally" },
-  { id: "pickleball", name: "Pickleball", module: pickleballModule, family: "sideout" },
+  { id: "tennis", name: "Tênis", module: tennisModule, family: "tennis", sideChange: "tennis-odd-games" },
+  { id: "beach", name: "Beach Tennis", module: beachModule, family: "tennis", sideChange: "tennis-odd-games" },
+  { id: "padel", name: "Padel", module: padelModule, family: "tennis", sideChange: "tennis-odd-games" },
+  { id: "squash", name: "Squash", module: squashModule, family: "rally", sideChange: "none" },
+  { id: "tabletennis", name: "Ping Pong", module: tableTennisModule, family: "rally", sideChange: "each-game" },
+  { id: "pickleball", name: "Pickleball", module: pickleballModule, family: "sideout", sideChange: "none" },
 ]
 
 /** Índice por id (fallback: tênis) — não quebra com id desconhecido. */
@@ -63,6 +77,11 @@ export function sportById(id: string | null | undefined): SportMeta {
 /** Família de placar de um esporte. */
 export function familyOf(id: string | null | undefined): ScoreFamily {
   return sportById(id).family
+}
+
+/** Regra de troca de lado de um esporte (para o aviso automático na UI). */
+export function sideChangeOf(id: string | null | undefined): SideChangeMode {
+  return sportById(id).sideChange
 }
 
 /** Regras padrão do esporte (delegadas ao módulo). */

@@ -458,6 +458,23 @@
     transform: translate(-50%, -50%) scale(1);
   }
 }
+/* Aviso "TROCA DE LADO" (A2): pop de entrada — o elemento externo já centraliza
+   (-translate-x-1/2); este é o filho, então o transform é só dele (sem conflito).
+   Um leve pulo + escala chamam o olho sem piscar agressivamente. */
+@keyframes sideChangePop {
+  from {
+    opacity: 0;
+    transform: translateY(-8px) scale(0.92);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+.side-change-banner {
+  animation: sideChangePop 0.24s ease-out;
+}
+
 .glass-overlay-anim {
   animation: glassFadeIn 0.2s ease-out;
 }
