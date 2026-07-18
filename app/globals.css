@@ -364,6 +364,35 @@
   }
 }
 
+/* ESPELHAMENTO dos lados (A1 — gesto do juiz, virar a tela p/ a quadra real).
+   Os blocos ficam em ordem DOM FIXA (blue, red); só o `transform` os CRUZA.
+   Assim visual e ZONA DE TOQUE viajam JUNTOS por construção — o onClick de cada
+   bloco não muda, é o mesmo elemento que só desliza para o outro lado. Como cada
+   bloco é flex-1/basis-0 (metade), translate de 100% do PRÓPRIO tamanho = 50% do
+   palco = troca exata de posição. Anima o cruzamento (~360ms) — sem animação o
+   juiz não teria certeza de que trocou. Eixo por orientação: horizontal em
+   paisagem, vertical em retrato (mesmo eixo em que os blocos se empilham). */
+.palco-block {
+  transition: transform 0.36s cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: transform;
+}
+@media (orientation: landscape) {
+  .palco-main.mirrored .palco-block-a {
+    transform: translateX(100%);
+  }
+  .palco-main.mirrored .palco-block-b {
+    transform: translateX(-100%);
+  }
+}
+@media (orientation: portrait) {
+  .palco-main.mirrored .palco-block-a {
+    transform: translateY(100%);
+  }
+  .palco-main.mirrored .palco-block-b {
+    transform: translateY(-100%);
+  }
+}
+
 /* Número gigante do ponto: ocupa a maior parte do bloco, legível de longe.
    O tamanho é escalado por ORIENTAÇÃO para caber dentro do próprio bloco
    (metade da tela) sem estourar nem sobrepor o outro lado:

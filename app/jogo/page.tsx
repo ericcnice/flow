@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useRef, type CSSProperties } from "react"
+import { Fragment, useState, useEffect, useRef, type CSSProperties } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import Image from "next/image"
 import { Input } from "@/components/ui/input"
@@ -65,6 +65,10 @@ type GameConfig = {
   matchId?: string
   viewToken?: string
   editToken?: string
+  /** Espelhamento dos lados na tela (A1) — SÓ visual, SÓ deste aparelho.
+   *  Persistido localmente para sobreviver a reload; NÃO entra no sync (o telão
+   *  segue na orientação canônica). Ausente/false = não espelhado. */
+  mirrored?: boolean
 }
 
 // Ação registrada para persistência: o estado do motor é reconstruído por
@@ -248,6 +252,14 @@ export default function JogoPage() {
   // nada (o espelhamento é o gesto manual do juiz, fatia A1).
   const [showSideChange, setShowSideChange] = useState(false)
   const sideChangeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // Espelhamento dos lados (A1): SÓ visual, SÓ deste aparelho. Alternado por
+  // SWIPE horizontal no palco. `swipeStartRef` guarda o início do gesto;
+  // `swipedRef` sinaliza que o release foi um swipe (não um toque), para o
+  // handleScoreClick ABORTAR o ponto daquele release.
+  const [mirrored, setMirrored] = useState(false)
+  const swipeStartRef = useRef<{ x: number; y: number } | null>(null)
+  const swipedRef = useRef(false)
 
   const openScoreboard = () => {
     // Garantir que a URL tenha o parâmetro quadra corretamente
@@ -438,6 +450,8 @@ export default function JogoPage() {
       setSport(resolvedSport)
       setTheme((config.theme as ThemeId) || "neutro")
       setClube(typeof config.clube === "string" ? config.clube : null)
+      // Espelhamento (A1): tolerante a ausência (partidas antigas) → false.
+      setMirrored(config.mirrored === true)
 
       setStartTime(new Date(config.startTime))
       setBluePlayerName(
@@ -857,9 +871,40 @@ export default function JogoPage() {
     }, SIDE_CHANGE_MS)
   }
 
+  // Alterna o espelhamento (A1). SÓ visual e SÓ deste aparelho: persiste no
+  // config LOCAL (sobrevive a reload) e NÃO propaga para a sala (o telão segue
+  // canônico). Tolerante a config ausente. O aviso de troca some ao virar.
+  const toggleMirror = () => {
+    hideSideChange()
+    setMirrored((m) => {
+      const next = !m
+      const cfg = gameConfigRef.current
+      if (cfg) {
+        const updated: GameConfig = { ...cfg, mirrored: next }
+        gameConfigRef.current = updated
+        setGameConfig(updated)
+        try {
+          localStorage.setItem(`tennis_match_${quadra}`, JSON.stringify(updated))
+        } catch {
+          // Sem localStorage (aba privada): o espelhamento vale só nesta sessão.
+        }
+      }
+      return next
+    })
+  }
+
   const handleScoreClick = (team: "blue" | "red") => {
     const engine = engineRef.current
     if (!engine) return
+
+    // ANTI-PONTO-ACIDENTAL (A1): se o release que gerou este click foi um SWIPE
+    // (detectado em onPointerUp do palco), consome-o e NÃO marca ponto. Também
+    // não arma o duplo-toque. `swipedRef` é rearmado (false) a cada onPointerDown,
+    // então nunca fica "preso" matando um toque futuro.
+    if (swipedRef.current) {
+      swipedRef.current = false
+      return
+    }
 
     // Qualquer toque some com o aviso de troca de lado (some "ao próximo toque").
     // Se ESTE mesmo toque disparar uma nova troca, o flash reabre logo abaixo.
@@ -1409,13 +1454,31 @@ export default function JogoPage() {
     const bgVar = isA ? "--lado-a-bg" : "--lado-b-bg"
     const txtVar = isA ? "--lado-a-texto" : "--lado-b-texto"
 
+    // Espelhamento (A1): o bloco DESLIZA para o outro lado via .palco-main.mirrored
+    // (CSS), mas seus alinhamentos internos assumem a posição ORIGINAL — então
+    // quando espelhado, o canto nome+saque huga a borda OPOSTA e a bola de saque
+    // troca de lado da quadra (35↔65) para casar com a nova posição do bloco.
+    const cornerJustify = (isA ? !mirrored : mirrored)
+      ? "landscape:justify-start"
+      : "landscape:justify-end"
+    const serveXLandscape =
+      servingCourt === "center"
+        ? "50%"
+        : servingCourt === "left"
+          ? mirrored
+            ? "65%"
+            : "35%"
+          : mirrored
+            ? "35%"
+            : "65%"
+
     return (
       <div
         role="button"
         tabIndex={0}
         aria-label={`Marcar ponto para ${name}`}
         onClick={() => handleScoreClick(team)}
-        className={`relative flex-1 basis-0 flex flex-col items-stretch justify-center overflow-hidden cursor-pointer select-none
+        className={`palco-block ${isA ? "palco-block-a" : "palco-block-b"} relative flex-1 basis-0 flex flex-col items-stretch justify-center overflow-hidden cursor-pointer select-none
           ${animating ? "point-flash" : ""}`}
         style={{
           backgroundColor: `var(${bgVar})`,
@@ -1447,7 +1510,7 @@ export default function JogoPage() {
             placar central não cobrir o nome do lado direito. */}
         <div
           className={`absolute top-0 left-0 right-0 z-10 flex items-start justify-between gap-2 px-4 pt-3 md:px-5 md:pt-4
-            ${isA ? "landscape:justify-start" : "landscape:justify-end"}`}
+            ${cornerJustify}`}
         >
           {/* CONTAINER DO NOME: envolve SÓ o nome (texto/Input) e é a ÂNCORA
               HORIZONTAL da bola de saque em LANDSCAPE. `landscape:relative` → em
@@ -1527,8 +1590,7 @@ export default function JogoPage() {
                 className="serve-ball"
                 style={{
                   "--serve-x-portrait": "85%",
-                  "--serve-x-landscape":
-                    servingCourt === "left" ? "35%" : servingCourt === "right" ? "65%" : "50%",
+                  "--serve-x-landscape": serveXLandscape,
                   color: `var(${txtVar})`,
                   boxShadow: `0 0 0 0.3rem var(${bgVar}), 0 0.3rem 1rem rgba(0, 0, 0, 0.4)`,
                 } as CSSProperties}
@@ -1660,8 +1722,35 @@ export default function JogoPage() {
           a ORIENTAÇÃO (não a largura): empilhados em retrato, lado a lado em
           paisagem — ver .palco-main. */}
       <main
-        className="palco-main flex-1 flex min-h-0"
-        style={{ gap: "1px", backgroundColor: "var(--palco-divisor)" }}
+        className={`palco-main flex-1 flex min-h-0 ${mirrored ? "mirrored" : ""}`}
+        // touch-action:none → o navegador não rouba o swipe horizontal (scroll/
+        // gesto de "voltar"); o toque simples continua gerando click normalmente.
+        style={{ gap: "1px", backgroundColor: "var(--palco-divisor)", touchAction: "none" }}
+        // SWIPE horizontal p/ espelhar (A1). Pointer events na mão (sem lib):
+        // registra o início e, no release, se o gesto foi PREDOMINANTEMENTE
+        // horizontal e passou do limiar, marca `swipedRef` (o click seguinte
+        // aborta o ponto) e vira. Horizontal em AMBAS as orientações — é o gesto
+        // universal de "virar". Toque parado (ponto/duplo-toque) não vira: o
+        // deslocamento fica abaixo do limiar.
+        onPointerDown={(e) => {
+          swipedRef.current = false
+          swipeStartRef.current = { x: e.clientX, y: e.clientY }
+        }}
+        onPointerUp={(e) => {
+          const start = swipeStartRef.current
+          swipeStartRef.current = null
+          if (!start) return
+          const dx = e.clientX - start.x
+          const dy = e.clientY - start.y
+          const limiar = Math.max(80, e.currentTarget.clientWidth * 0.15)
+          if (Math.abs(dx) >= limiar && Math.abs(dx) > Math.abs(dy)) {
+            swipedRef.current = true
+            toggleMirror()
+          }
+        }}
+        onPointerCancel={() => {
+          swipeStartRef.current = null
+        }}
       >
         {renderBlock("blue")}
         {renderBlock("red")}
@@ -1677,10 +1766,14 @@ export default function JogoPage() {
           aria-live="polite"
           className="pointer-events-none absolute left-1/2 top-[18%] z-40 -translate-x-1/2"
         >
-          <div className="side-change-banner flex items-center gap-2 rounded-full bg-[#FEE100] px-5 py-2.5 shadow-xl ring-1 ring-black/20">
-            <ArrowLeftRight className="h-5 w-5 text-black" />
-            <span className="text-sm font-black uppercase tracking-[0.18em] text-black md:text-base">
+          <div className="side-change-banner flex flex-col items-center gap-0.5 rounded-2xl bg-[#FEE100] px-5 py-2.5 shadow-xl ring-1 ring-black/20">
+            <span className="flex items-center gap-2 text-sm font-black uppercase tracking-[0.18em] text-black md:text-base">
+              <ArrowLeftRight className="h-5 w-5" />
               Troca de lado
+            </span>
+            {/* Sinergia A2+A1: o aviso ENSINA o gesto de espelhar. */}
+            <span className="text-[10px] font-semibold uppercase tracking-wide text-black/70">
+              deslize para trocar
             </span>
           </div>
         </div>
@@ -1750,11 +1843,11 @@ export default function JogoPage() {
                 className="grid grid-cols-[1fr_auto_1fr] items-baseline gap-x-2.5 leading-none tabular-nums font-bold text-sm md:text-base"
               >
                 <span className="text-right" style={{ color }}>
-                  {pillCell(c, "a")}
+                  {pillCell(c, mirrored ? "b" : "a")}
                 </span>
                 <span className="text-center text-white/40">-</span>
                 <span className="text-left" style={{ color }}>
-                  {pillCell(c, "b")}
+                  {pillCell(c, mirrored ? "a" : "b")}
                 </span>
               </span>
             )
@@ -1803,36 +1896,33 @@ export default function JogoPage() {
             active:scale-[0.98] transition-transform"
           style={{ gridTemplateColumns: `minmax(0,1fr) repeat(${broadcastCols.length}, 1.35rem)` }}
         >
-          {/* LINHA 1 — JOGADOR 1 (lado A): nome + números c.a por unidade */}
-          <div className="min-w-0">{renderPillName("blue")}</div>
-          {broadcastCols.map((c) => {
-            const color = !c.played ? "rgba(255,255,255,0.35)" : c.current ? "#FEE100" : "#ffffff"
-            return (
-              <span
-                key={`a-${c.setNum}`}
-                className="text-center leading-none tabular-nums font-bold text-sm"
-                style={{ color }}
-              >
-                {pillCell(c, "a")}
-              </span>
-            )
-          })}
-
-          {/* LINHA 2 — JOGADOR 3 (lado B): nome + números c.b por unidade (mesma
-              ordem/colunas, cor da MESMA unidade → alinhamento vertical) */}
-          <div className="min-w-0">{renderPillName("red")}</div>
-          {broadcastCols.map((c) => {
-            const color = !c.played ? "rgba(255,255,255,0.35)" : c.current ? "#FEE100" : "#ffffff"
-            return (
-              <span
-                key={`b-${c.setNum}`}
-                className="text-center leading-none tabular-nums font-bold text-sm"
-                style={{ color }}
-              >
-                {pillCell(c, "b")}
-              </span>
-            )
-          })}
+          {/* Duas linhas (uma por jogador): nome + números da sua unidade. Quando
+              ESPELHADO, a ORDEM das linhas troca (lado B em cima), acompanhando os
+              blocos que se cruzam. Fragment é transparente ao grid (auto-flow). */}
+          {(mirrored
+            ? ([["red", "b"], ["blue", "a"]] as const)
+            : ([["blue", "a"], ["red", "b"]] as const)
+          ).map(([team, key]) => (
+            <Fragment key={team}>
+              <div className="min-w-0">{renderPillName(team)}</div>
+              {broadcastCols.map((c) => {
+                const color = !c.played
+                  ? "rgba(255,255,255,0.35)"
+                  : c.current
+                    ? "#FEE100"
+                    : "#ffffff"
+                return (
+                  <span
+                    key={`${key}-${c.setNum}`}
+                    className="text-center leading-none tabular-nums font-bold text-sm"
+                    style={{ color }}
+                  >
+                    {pillCell(c, key)}
+                  </span>
+                )
+              })}
+            </Fragment>
+          ))}
 
           {isTiebreak && (
             <span
