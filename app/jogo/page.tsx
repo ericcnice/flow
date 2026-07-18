@@ -69,6 +69,10 @@ type GameConfig = {
    *  Persistido localmente para sobreviver a reload; NÃO entra no sync (o telão
    *  segue na orientação canônica). Ausente/false = não espelhado. */
   mirrored?: boolean
+  /** Ligar o aviso automático "TROCA DE LADO" (A2). Escolha do juiz no setup.
+   *  Padrão DESLIGADO (aviso não solicitado é ruído em quadra) — o swipe (A1)
+   *  segue disponível independente disto. Ausente/false = sem aviso. */
+  sideChangeAlert?: boolean
 }
 
 // Ação registrada para persistência: o estado do motor é reconstruído por
@@ -105,7 +109,8 @@ function rulesMatchFamily(rules: any, family: "tennis" | "rally" | "sideout"): b
 const DOUBLE_TAP_MS = 300
 
 // Quanto tempo o aviso "TROCA DE LADO" fica na tela antes de sumir sozinho.
-const SIDE_CHANGE_MS = 6000
+// Curto de propósito: é um lembrete discreto, não um banner que domina a tela.
+const SIDE_CHANGE_MS = 3000
 
 /**
  * A jogada que ACABOU de ser marcada disparou uma troca de lado? Função PURA que
@@ -249,9 +254,15 @@ export default function JogoPage() {
 
   // Aviso "TROCA DE LADO" (A2): disparado na TRANSIÇÃO por handleScoreClick,
   // some sozinho após SIDE_CHANGE_MS ou ao próximo toque. Só avisa — não troca
-  // nada (o espelhamento é o gesto manual do juiz, fatia A1).
+  // nada (o espelhamento é o gesto manual do juiz, fatia A1). SÓ aparece se o
+  // juiz LIGOU o aviso no setup (padrão desligado).
   const [showSideChange, setShowSideChange] = useState(false)
   const sideChangeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // Preferência do juiz (do setup): ligar/desligar o aviso. Padrão desligado.
+  const [sideChangeAlert, setSideChangeAlert] = useState(false)
+  // A dica "deslize para trocar" aparece só na PRIMEIRA exibição da partida.
+  const [sideChangeHint, setSideChangeHint] = useState(false)
+  const sideChangeHintUsedRef = useRef(false)
 
   // Espelhamento dos lados (A1): SÓ visual, SÓ deste aparelho. Alternado por
   // SWIPE horizontal no palco. `swipeStartRef` guarda o início do gesto;
@@ -452,6 +463,8 @@ export default function JogoPage() {
       setClube(typeof config.clube === "string" ? config.clube : null)
       // Espelhamento (A1): tolerante a ausência (partidas antigas) → false.
       setMirrored(config.mirrored === true)
+      // Aviso de troca de lado (A2): padrão desligado, tolerante a ausência.
+      setSideChangeAlert(config.sideChangeAlert === true)
 
       setStartTime(new Date(config.startTime))
       setBluePlayerName(
@@ -861,9 +874,14 @@ export default function JogoPage() {
     setShowSideChange(false)
   }
 
-  // Mostra o aviso e agenda o auto-hide. Chamado só na transição (ver crossedSideChange).
+  // Mostra o aviso e agenda o auto-hide. Chamado só na transição (ver
+  // crossedSideChange) e só com o aviso LIGADO. A dica "deslize para trocar"
+  // acompanha apenas a PRIMEIRA exibição da partida.
   const flashSideChange = () => {
     if (sideChangeTimerRef.current) clearTimeout(sideChangeTimerRef.current)
+    const primeira = !sideChangeHintUsedRef.current
+    sideChangeHintUsedRef.current = true
+    setSideChangeHint(primeira)
     setShowSideChange(true)
     sideChangeTimerRef.current = setTimeout(() => {
       sideChangeTimerRef.current = null
@@ -945,8 +963,12 @@ export default function JogoPage() {
     setGameState(after)
     persist()
 
-    // Aviso de troca de lado (A2): só na TRANSIÇÃO, conforme a regra do esporte.
-    if (crossedSideChange(sideChangeOf(sport), before, after, (rulesRef.current?.bestOf as number) || 3)) {
+    // Aviso de troca de lado (A2): só se o juiz LIGOU, e só na TRANSIÇÃO
+    // conforme a regra do esporte. A detecção roda igual; só a exibição é opt-in.
+    if (
+      sideChangeAlert &&
+      crossedSideChange(sideChangeOf(sport), before, after, (rulesRef.current?.bestOf as number) || 3)
+    ) {
       flashSideChange()
     }
     // Espelha a ação na sala (paralelo; não bloqueia a marcação local).
@@ -1199,10 +1221,16 @@ export default function JogoPage() {
   // esporte no meio). Zera o placar (novo esporte = partida nova) e reconstrói o
   // motor com o MÓDULO do novo esporte. sportRef precisa estar setado ANTES do
   // rebuildEngine (ele lê o módulo por sportRef.current).
-  const startNewMatch = (nextSport: SportId, nextRules: any, nextTheme: ThemeId) => {
+  const startNewMatch = (
+    nextSport: SportId,
+    nextRules: any,
+    nextTheme: ThemeId,
+    nextSideChangeAlert: boolean,
+  ) => {
     sportRef.current = nextSport
     setSport(nextSport)
     setTheme(nextTheme)
+    setSideChangeAlert(nextSideChangeAlert)
 
     const now = new Date()
     setStartTime(now)
@@ -1213,6 +1241,7 @@ export default function JogoPage() {
         ...gameConfig,
         sport: nextSport,
         theme: nextTheme,
+        sideChangeAlert: nextSideChangeAlert,
         startTime: now.toISOString(),
         maxSets: nextRules.bestOf ?? 3,
       }
@@ -1233,15 +1262,24 @@ export default function JogoPage() {
   //    feitas (mesmo mecanismo usado na persistência), então pontos/games/sets
   //    são preservados e a regra vale daqui pra frente. NÃO recomeça a partida.
   //  - OUTRO esporte  → CASO 2: confirma e inicia uma partida nova (startNewMatch).
-  const onSetupConfirm = (nextSport: SportId, nextRules: any, sportChanged: boolean, nextTheme: ThemeId) => {
+  const onSetupConfirm = (
+    nextSport: SportId,
+    nextRules: any,
+    sportChanged: boolean,
+    nextTheme: ThemeId,
+    nextSideChangeAlert: boolean,
+  ) => {
     if (!sportChanged) {
       // O tema é personalização: aplica SEM recomeçar a partida (só recolore).
       rebuildEngine(nextRules, firstServerRef.current, actionsRef.current)
       setTheme(nextTheme)
+      // Aviso de troca de lado: preferência LOCAL do juiz (não vai para o sync).
+      setSideChangeAlert(nextSideChangeAlert)
       if (gameConfig) {
         const newConfig: GameConfig = {
           ...gameConfig,
           theme: nextTheme,
+          sideChangeAlert: nextSideChangeAlert,
           maxSets: nextRules.bestOf ?? gameConfig.maxSets,
         }
         setGameConfig(newConfig)
@@ -1251,12 +1289,13 @@ export default function JogoPage() {
       setMaxSets(nextRules.bestOf ?? maxSets)
       persist()
       // Propaga REGRAS (bestOf/tiebreak/vantagem) e TEMA para os outros devices.
+      // sideChangeAlert NÃO entra: é preferência do aparelho do juiz.
       sendRealtimeAction({ kind: "set_config", patch: { rules: nextRules, theme: nextTheme } })
       setSetupOpen(false)
       return
     }
     if (confirm("Trocar de esporte vai iniciar uma nova partida. Continuar?")) {
-      startNewMatch(nextSport, nextRules, nextTheme)
+      startNewMatch(nextSport, nextRules, nextTheme, nextSideChangeAlert)
       setSetupOpen(false)
     }
   }
@@ -1764,17 +1803,21 @@ export default function JogoPage() {
       {showSideChange && !finished && (
         <div
           aria-live="polite"
-          className="pointer-events-none absolute left-1/2 top-[18%] z-40 -translate-x-1/2"
+          className="pointer-events-none absolute left-1/2 top-[15%] z-40 -translate-x-1/2"
         >
-          <div className="side-change-banner flex flex-col items-center gap-0.5 rounded-2xl bg-[#FEE100] px-5 py-2.5 shadow-xl ring-1 ring-black/20">
-            <span className="flex items-center gap-2 text-sm font-black uppercase tracking-[0.18em] text-black md:text-base">
-              <ArrowLeftRight className="h-5 w-5" />
+          {/* Lembrete DISCRETO (não banner dominante): pílula pequena, alto
+              contraste (amarelo + preto) p/ ler sob sol, some rápido (~3s). */}
+          <div className="side-change-banner flex flex-col items-center gap-0.5 rounded-full bg-[#FEE100] px-3.5 py-1.5 shadow-lg ring-1 ring-black/15">
+            <span className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-[0.14em] text-black">
+              <ArrowLeftRight className="h-3.5 w-3.5" />
               Troca de lado
             </span>
-            {/* Sinergia A2+A1: o aviso ENSINA o gesto de espelhar. */}
-            <span className="text-[10px] font-semibold uppercase tracking-wide text-black/70">
-              deslize para trocar
-            </span>
+            {/* Sinergia A2+A1: ENSINA o gesto — só na 1ª exibição da partida. */}
+            {sideChangeHint && (
+              <span className="text-[9px] font-semibold uppercase tracking-wide text-black/60">
+                deslize para trocar
+              </span>
+            )}
           </div>
         </div>
       )}
@@ -2115,6 +2158,7 @@ export default function JogoPage() {
               rulesMatchFamily(rulesRef.current, familyOf(sport)) ? rulesRef.current : defaultRulesFor(sport)
             }
             initialTheme={theme}
+            initialSideChangeAlert={sideChangeAlert}
             context="ingame"
             onClose={() => setSetupOpen(false)}
             onConfirm={onSetupConfirm}

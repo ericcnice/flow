@@ -34,13 +34,14 @@ function SetupScreen() {
   const searchParams = useSearchParams()
   const quadra = searchParams.get("quadra") || "1"
 
-  const startGame = (sport: SportId, rules: any, theme: ThemeId) => {
+  const startGame = (sport: SportId, rules: any, theme: ThemeId, sideChangeAlert: boolean) => {
     // Config da partida (mantém as MESMAS chaves do fluxo atual — placar/QR leem
-    // `tennis_match_${quadra}` — apenas acrescenta os campos `sport` e `theme`).
+    // `tennis_match_${quadra}` — acrescenta `sport`, `theme` e o aviso de troca).
     const config = {
       quadra,
       sport,
       theme,
+      sideChangeAlert,
       gameType: "simples",
       scoreType: "pontos",
       players: {
@@ -73,7 +74,9 @@ function SetupScreen() {
         initialRules={defaultRulesFor("tennis")}
         initialTheme={DEFAULT_THEME}
         context="new"
-        onConfirm={(sport, rules, _sportChanged, theme) => startGame(sport, rules, theme)}
+        onConfirm={(sport, rules, _sportChanged, theme, sideChangeAlert) =>
+          startGame(sport, rules, theme, sideChangeAlert)
+        }
       />
     </div>
   )

@@ -21,7 +21,7 @@
 import { useMemo, useState, type ReactNode } from "react"
 import { X } from "lucide-react"
 import { SportCourt, SportCourtGlyph } from "@/components/sport-court"
-import { SPORTS, ruleControlsFor, defaultRulesFor, type RuleControl, type SportId } from "@/lib/sports-catalog"
+import { SPORTS, ruleControlsFor, defaultRulesFor, sideChangeOf, type RuleControl, type SportId } from "@/lib/sports-catalog"
 import { THEMES, DEFAULT_THEME, themeClassName, type ThemeId } from "@/lib/themes"
 
 export type SportSetupContext = "new" | "ingame"
@@ -40,6 +40,7 @@ export function SportSetup({
   initialSport,
   initialRules,
   initialTheme,
+  initialSideChangeAlert,
   context,
   onConfirm,
   onClose,
@@ -51,9 +52,19 @@ export function SportSetup({
   initialRules: any
   /** Tema de cor pré-selecionado (default Neutro). Parte da config da partida. */
   initialTheme?: ThemeId
+  /** Aviso de troca de lado ligado? Padrão DESLIGADO. Só aparece o toggle em
+   *  esportes com troca de lado (sideChange !== 'none'). */
+  initialSideChangeAlert?: boolean
   context: SportSetupContext
-  /** Chamado no CTA. sportChanged=true quando o esporte mudou; theme = tema escolhido. */
-  onConfirm: (sport: SportId, rules: any, sportChanged: boolean, theme: ThemeId) => void
+  /** Chamado no CTA. sportChanged=true quando o esporte mudou; theme = tema
+   *  escolhido; sideChangeAlert = preferência do aviso de troca de lado. */
+  onConfirm: (
+    sport: SportId,
+    rules: any,
+    sportChanged: boolean,
+    theme: ThemeId,
+    sideChangeAlert: boolean,
+  ) => void
   /** Fechar sem confirmar (ingame: volta ao jogo). Ausente = sem "X". */
   onClose?: () => void
   /** Conteúdo extra no miolo (ingame: ações secundárias da partida). */
@@ -62,9 +73,12 @@ export function SportSetup({
   const [sport, setSport] = useState<SportId>(initialSport)
   const [rules, setRules] = useState<any>(initialRules)
   const [theme, setTheme] = useState<ThemeId>(initialTheme ?? DEFAULT_THEME)
+  const [sideChangeAlert, setSideChangeAlert] = useState<boolean>(initialSideChangeAlert ?? false)
 
   const controls = useMemo<RuleControl[]>(() => ruleControlsFor(sport), [sport])
   const sportChanged = sport !== initialSport
+  // Só faz sentido oferecer o aviso onde o esporte troca de lado.
+  const temTrocaDeLado = sideChangeOf(sport) !== "none"
 
   const selectSport = (id: SportId) => {
     setSport(id)
@@ -149,6 +163,32 @@ export function SportSetup({
             )
           })}
 
+          {/* AVISO DE TROCA DE LADO — só em esportes que trocam de lado. Padrão
+              DESLIGADO (aviso não solicitado é ruído em quadra); o swipe para
+              espelhar segue disponível independente disto. Mesmo visual dos
+              toggles de regra (rule-group). */}
+          {temTrocaDeLado && (
+            <div>
+              <div className="text-sm font-semibold mb-2">Avisar troca de lado</div>
+              <div className="rule-group">
+                {[
+                  { label: "Não", value: false },
+                  { label: "Sim", value: true },
+                ].map((opt) => (
+                  <button
+                    key={String(opt.value)}
+                    type="button"
+                    onClick={() => setSideChangeAlert(opt.value)}
+                    className={`rule-option ${sideChangeAlert === opt.value ? "on" : ""}`}
+                    aria-pressed={sideChangeAlert === opt.value}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* CORES (tema/palco) — no FIM das opções: personalização, não config
               de rotina. Amostras tocáveis; a ativa fica destacada. Aplica o
               tema por partida (persiste na config junto de esporte + regras). */}
@@ -180,7 +220,11 @@ export function SportSetup({
 
         {/* BASE do card: CTA JOGAR FIXO (fora do scroll), sempre visível. */}
         <div className="px-4 pt-3 pb-5 border-t" style={{ borderColor: "var(--setup-card-borda)" }}>
-          <button type="button" className="play-button" onClick={() => onConfirm(sport, rules, sportChanged, theme)}>
+          <button
+            type="button"
+            className="play-button"
+            onClick={() => onConfirm(sport, rules, sportChanged, theme, sideChangeAlert)}
+          >
             JOGAR
           </button>
         </div>
