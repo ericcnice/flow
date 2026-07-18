@@ -149,9 +149,26 @@ export function ShareModal({
     }
   }, [editorCount, isOpen])
 
-  // Fechar limpa o ✓: reabrir mostra o número; só uma NOVA transição o reacende.
+  // Cada ABERTURA rearma o auto-close (uma vez POR ABERTURA, não por sessão) e
+  // fixa a BASELINE no editorCount atual: só conexões que chegarem DEPOIS de
+  // abrir disparam o ✓ + auto-close — inclusive reconexões de aparelhos que já
+  // estiveram no jogo. Aberto sem ninguém conectar = fica aberto normal.
+  // Fechar limpa o ✓ (reabrir mostra o número).
   useEffect(() => {
-    if (!isOpen) setShowSuccess(false)
+    if (isOpen) {
+      autoCloseDoneRef.current = false
+      prevEditorCountRef.current = editorCount
+      setShowSuccess(false)
+      if (autoCloseTimerRef.current) {
+        clearTimeout(autoCloseTimerRef.current)
+        autoCloseTimerRef.current = null
+      }
+    } else {
+      setShowSuccess(false)
+    }
+    // Depende só de isOpen: fixa a baseline no MOMENTO da abertura (ler o
+    // editorCount atual aqui é intencional, não uma dep).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen])
 
   // Limpa o timer de auto-close no unmount.

@@ -4,7 +4,7 @@ import { Fragment, useState, useEffect, useRef, type CSSProperties } from "react
 import { useRouter, useSearchParams } from "next/navigation"
 import Image from "next/image"
 import { Input } from "@/components/ui/input"
-import { Settings, Volume2, VolumeX, Undo2, BarChart2, RotateCcw, LogOut, ArrowLeftRight, Share2, Users, WifiOff } from "lucide-react"
+import { Settings, Volume2, VolumeX, Undo2, BarChart2, RotateCcw, LogOut, ArrowLeftRight, Share2, Users, UserMinus } from "lucide-react"
 import { ThirdSetModal } from "@/components/third-set-modal"
 import { ShareModal } from "@/components/share-modal"
 // Superfície de configuração ÚNICA: a MESMA tela de setup (esporte + regras),
@@ -277,6 +277,7 @@ export default function JogoPage() {
   // confirmada no popup. `prevEditorCountRef` detecta a transição; o debounce
   // evita alertar no refresh do outro aparelho (leave+join rápido).
   const [showDisconnect, setShowDisconnect] = useState(false)
+  const [disconnectMsg, setDisconnectMsg] = useState("")
   const disconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const prevEditorCountRef = useRef(0)
   const dropDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -869,6 +870,11 @@ export default function JogoPage() {
           prevEditorCountRef.current >= 1 // nós seguimos conectados
         ) {
           if (disconnectTimerRef.current) clearTimeout(disconnectTimerRef.current)
+          // Mensagem pela composição antes da queda: baseline 2 (você + 1) = "o
+          // outro"; 3+ (você + vários) = "um aparelho". Nunca soa como "eu caí".
+          setDisconnectMsg(
+            baseline <= 2 ? "O outro aparelho saiu do placar" : "Um aparelho saiu do placar",
+          )
           setShowDisconnect(true)
           disconnectTimerRef.current = setTimeout(() => {
             disconnectTimerRef.current = null
@@ -1874,20 +1880,19 @@ export default function JogoPage() {
         </div>
       )}
 
-      {/* TOAST "APARELHO DESCONECTADO" (placar compartilhado): mesma pílula
-          discreta do aviso de troca de lado (.side-change-banner, ~3s), em
-          vermelho de alto contraste — relevante num jogo sem juiz onde o outro
-          lado caiu. Só aparece após o debounce de queda (não no refresh). */}
+      {/* TOAST de SAÍDA de aparelho (placar compartilhado): mesma pílula discreta
+          do aviso de troca de lado (.side-change-banner, ~3s), em vermelho de
+          alto contraste — relevante num jogo sem juiz onde o outro lado caiu. A
+          mensagem deixa claro que foi O OUTRO (nunca "eu"). Só aparece após o
+          debounce de queda (não no refresh). */}
       {showDisconnect && (
         <div
           aria-live="polite"
           className="pointer-events-none absolute left-1/2 top-[15%] z-40 -translate-x-1/2"
         >
           <div className="side-change-banner flex items-center gap-2 rounded-full bg-rose-600 px-3.5 py-1.5 text-white shadow-lg ring-1 ring-black/15">
-            <WifiOff className="h-3.5 w-3.5" />
-            <span className="text-xs font-bold uppercase tracking-[0.14em]">
-              Aparelho desconectado
-            </span>
+            <UserMinus className="h-3.5 w-3.5" />
+            <span className="text-xs font-bold uppercase tracking-[0.14em]">{disconnectMsg}</span>
           </div>
         </div>
       )}
