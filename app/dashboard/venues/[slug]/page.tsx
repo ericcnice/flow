@@ -8,10 +8,11 @@
  * convenção da casa é a página chamar de novo (ver a nota em guard.ts); o
  * cache() do React faz a query de papel rodar uma vez só por request.
  *
- * O que esta tela mostra hoje é só o que EXISTE: dados do venue + os links da
- * jornada por convenção hardcoded. Grade de QR por quadra de verdade,
- * estatísticas e a página pública /c/[slug] ficam para quando houver estrutura
- * de quadras por venue e a frente de analytics.
+ * Estrutura (redesign): banner/header → <VenueOverview> (acessos do clube,
+ * server) → <CourtsPanel> (esportes colapsáveis → cards de quadra unificando
+ * acessos + patrocínio + URL/QR/share, client) → endereço/cadastro. Os rollups
+ * por-quadra e por-esporte são pré-computados AQUI (server) e passados prontos;
+ * o painel é client só pela interatividade (colapsar, dropdown, share nativo).
  */
 
 import Link from 'next/link'
@@ -22,10 +23,21 @@ import { clubBySlug } from '@/lib/clubs-config'
 import { requireSuperAdmin } from '../../guard'
 import { TIPOS } from '../constants'
 import { type Endereco } from '../../address-fields'
-import { ShareLinks, type Coach } from './share-links'
 import { VenueImage } from './venue-image'
-import { VisitStats, type VisitRow } from './visit-stats'
-import { CourtSponsors, type CourtAssoc, type SponsorOption } from './court-sponsors'
+import { VenueOverview } from './venue-overview'
+import {
+  CourtsPanel,
+  type CampaignCoach,
+  type CourtAssoc,
+  type SponsorOption,
+} from './courts-panel'
+import {
+  combinarJanelas,
+  porEsporte,
+  porQuadra,
+  type ParTotais,
+  type VisitRow,
+} from '@/lib/venue-stats'
 
 type VenueDetalhe = {
   id: string
@@ -45,6 +57,7 @@ type SponsorRow = {
   id: string
   slug: string
   name: string
+  logo_url: string
   member_id: string | null
   active: boolean
 }
@@ -124,16 +137,18 @@ export default async function VenueDetailPage({
     sponsorRows.filter((s) => s.active && s.member_id).map((s) => s.member_id as string),
   )
 
-  // Opções para os dropdowns de patrocínio por quadra (peça C.2). Inclui os
-  // INATIVOS — o componente os marca "(inativo)" e alerta sobre a precedência.
+  // Opções para os dropdowns de patrocínio por quadra + a miniatura de logo do
+  // card. Inclui os INATIVOS — o componente os marca "(inativo)" e alerta sobre
+  // a precedência. logo_url alimenta a miniatura do "patrocinador efetivo".
   const sponsorOptions: SponsorOption[] = sponsorRows.map((s) => ({
     id: s.id,
     name: s.name,
     slug: s.slug,
+    logo_url: s.logo_url,
     active: s.active,
   }))
 
-  const coaches: Coach[] = (coachesData ?? []).map((c) => ({
+  const coaches: CampaignCoach[] = (coachesData ?? []).map((c) => ({
     slug: c.slug as string,
     nome: [c.name, c.last_name].filter(Boolean).join(' '),
     // Sem logo a URL monta e a jornada NÃO quebra — o resolveSponsor devolve
@@ -143,8 +158,8 @@ export default async function VenueDetailPage({
   }))
 
   // Quem serve a jornada de QR é o CLUBS estático, não esta tabela — os dois
-  // coexistem (ver a nota em ../page.tsx). Se o slug não estiver lá, os links
-  // montam mas morrem; o ShareLinks avisa em vez de deixar imprimir QR morto.
+  // coexistem (ver a nota em ../page.tsx). Se o slug não estiver lá, as URLs
+  // montam mas morrem; o CourtsPanel avisa em vez de deixar imprimir QR morto.
   const naJornada = clubBySlug(venue.slug) !== null
 
   // Contadores de acesso (peça E). Duas janelas no mesmo request: "total" (teto
@@ -163,6 +178,12 @@ export default async function VenueDetailPage({
   const rowsTotal = (statsTotal.data ?? []) as VisitRow[]
   const rows7d = (stats7d.data ?? []) as VisitRow[]
   const courtAssocs = (courtSponsors.data ?? []) as CourtAssoc[]
+
+  // Rollups pré-computados no SERVER (o client fica burro). Chaveados pelo id
+  // CANÔNICO (por-esporte) e por courtKey(canônico, court) — o CourtsPanel
+  // converte o slug da GRADE com sportIdFromSlug antes de ler estes mapas.
+  const statsByEsporte: Record<string, ParTotais> = combinarJanelas(porEsporte, rowsTotal, rows7d)
+  const statsByCourt: Record<string, ParTotais> = combinarJanelas(porQuadra, rowsTotal, rows7d)
 
   const endereco = linhasEndereco(venue.address)
   const cadastradoEm = new Date(venue.created_at).toLocaleDateString('pt-BR')
@@ -231,14 +252,18 @@ export default async function VenueDetailPage({
         </div>
       </header>
 
-      <VisitStats rowsTotal={rowsTotal} rows7d={rows7d} coaches={coaches} />
+      <VenueOverview rowsTotal={rowsTotal} rows7d={rows7d} coaches={coaches} />
 
-      <CourtSponsors
+      <CourtsPanel
         venueId={venue.id}
         venueSlug={venue.slug}
+        naJornada={naJornada}
         sponsors={sponsorOptions}
         defaultSponsorId={venue.default_sponsor_id}
         associations={courtAssocs}
+        coaches={coaches}
+        statsByEsporte={statsByEsporte}
+        statsByCourt={statsByCourt}
       />
 
       <section className="mt-8 grid gap-4 sm:grid-cols-2">
@@ -269,8 +294,6 @@ export default async function VenueDetailPage({
           </p>
         </div>
       </section>
-
-      <ShareLinks slug={venue.slug} naJornada={naJornada} coaches={coaches} />
     </main>
   )
 }
