@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { X, Copy, Check, Share2, Users } from "lucide-react"
 import { QRCodeGenerator } from "@/components/qr-code"
 
@@ -114,6 +114,54 @@ export function ShareModal({
     if (isOpen) setCopied(false)
   }, [isOpen])
 
+  // --- Confirmação de conexão --------------------------------------------------
+  // editorCount INCLUI o próprio aparelho, então "outro conectou" = editorCount
+  // cresceu E passou de 1. Na PRIMEIRA transição de crescimento da sessão,
+  // mostramos o ✓ e auto-fechamos ~2s depois. A ref do valor anterior garante que
+  // o ✓ dispare na TRANSIÇÃO (não a cada presence sync) — isso já tolera a dupla
+  // contagem de ~1s do refresh de outro aparelho.
+  const [showSuccess, setShowSuccess] = useState(false)
+  const prevEditorCountRef = useRef(editorCount)
+  const autoCloseDoneRef = useRef(false)
+  const autoCloseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // onClose pode trocar de identidade a cada render do pai; a ref faz o timer
+  // chamar sempre a versão atual sem re-agendar/cancelar por dependência.
+  const onCloseRef = useRef(onClose)
+  useEffect(() => {
+    onCloseRef.current = onClose
+  }, [onClose])
+
+  useEffect(() => {
+    const prev = prevEditorCountRef.current
+    prevEditorCountRef.current = editorCount
+    // Só reage com o modal aberto — o ✓ e o auto-close só fazem sentido visíveis.
+    // (prevEditorCountRef segue atualizado mesmo fechado, então reabrir com alguém
+    // já conectado mostra o NÚMERO, não um ✓ de uma transição que não foi vista.)
+    if (!isOpen) return
+    if (editorCount > prev && editorCount > 1) {
+      setShowSuccess(true)
+      // Auto-fecha SÓ na 1ª transição da sessão; reaberturas manuais só atualizam
+      // o número (autoCloseDoneRef nunca volta a false).
+      if (!autoCloseDoneRef.current) {
+        autoCloseDoneRef.current = true
+        autoCloseTimerRef.current = setTimeout(() => onCloseRef.current(), 2000)
+      }
+    }
+  }, [editorCount, isOpen])
+
+  // Fechar limpa o ✓: reabrir mostra o número; só uma NOVA transição o reacende.
+  useEffect(() => {
+    if (!isOpen) setShowSuccess(false)
+  }, [isOpen])
+
+  // Limpa o timer de auto-close no unmount.
+  useEffect(
+    () => () => {
+      if (autoCloseTimerRef.current) clearTimeout(autoCloseTimerRef.current)
+    },
+    [],
+  )
+
   if (!isOpen) return null
 
   const handleCopy = async () => {
@@ -192,13 +240,30 @@ export function ShareModal({
               <p className="text-xs text-white/60 text-center">
                 Escaneie para marcar pontos junto (mesma partida, em tempo real).
               </p>
-              <div className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1.5 text-sm font-semibold">
-                <Users className="h-4 w-4" />
-                <span className="tabular-nums">
-                  {editorCount}/{maxEditors}
-                </span>
-                <span className="text-white/60 font-normal">editando agora</span>
-              </div>
+              {/* Na 1ª conexão de outro aparelho, o chip vira CONFIRMAÇÃO (✓ verde,
+                  pop de entrada) e o modal se fecha sozinho ~2s depois. Fora disso,
+                  o chip neutro mostra a contagem ao vivo (inclui este aparelho). */}
+              {showSuccess ? (
+                <div
+                  key="ok"
+                  className="inline-flex items-center gap-2 rounded-full bg-emerald-500 px-3.5 py-1.5 text-sm font-bold text-white shadow-md
+                    animate-in zoom-in-50 fade-in duration-300"
+                >
+                  <Check className="h-4 w-4" />
+                  <span>Aparelho conectado</span>
+                  <span className="tabular-nums font-semibold text-white/85">
+                    ({editorCount}/{maxEditors})
+                  </span>
+                </div>
+              ) : (
+                <div className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1.5 text-sm font-semibold">
+                  <Users className="h-4 w-4" />
+                  <span className="tabular-nums">
+                    {editorCount}/{maxEditors}
+                  </span>
+                  <span className="text-white/60 font-normal">editando agora</span>
+                </div>
+              )}
             </section>
 
             {/* b) Assistir ao vivo */}

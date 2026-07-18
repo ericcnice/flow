@@ -4,7 +4,7 @@ import { Fragment, useState, useEffect, useRef, type CSSProperties } from "react
 import { useRouter, useSearchParams } from "next/navigation"
 import Image from "next/image"
 import { Input } from "@/components/ui/input"
-import { Settings, Volume2, VolumeX, Undo2, BarChart2, RotateCcw, LogOut, ArrowLeftRight, Share2 } from "lucide-react"
+import { Settings, Volume2, VolumeX, Undo2, BarChart2, RotateCcw, LogOut, ArrowLeftRight, Share2, Users, WifiOff } from "lucide-react"
 import { ThirdSetModal } from "@/components/third-set-modal"
 import { ShareModal } from "@/components/share-modal"
 // Superfície de configuração ÚNICA: a MESMA tela de setup (esporte + regras),
@@ -271,6 +271,15 @@ export default function JogoPage() {
   const [mirrored, setMirrored] = useState(false)
   const swipeStartRef = useRef<{ x: number; y: number } | null>(null)
   const swipedRef = useRef(false)
+
+  // Confirmação de conexão (placar compartilhado). editorCount (do presence, já
+  // exposto pelo hook) INCLUI este aparelho. Só a QUEDA vira toast — a subida é
+  // confirmada no popup. `prevEditorCountRef` detecta a transição; o debounce
+  // evita alertar no refresh do outro aparelho (leave+join rápido).
+  const [showDisconnect, setShowDisconnect] = useState(false)
+  const disconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const prevEditorCountRef = useRef(0)
+  const dropDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const openScoreboard = () => {
     // Garantir que a URL tenha o parâmetro quadra corretamente
@@ -833,9 +842,48 @@ export default function JogoPage() {
     return () => {
       if (undoSpeakTimerRef.current) clearTimeout(undoSpeakTimerRef.current)
       if (sideChangeTimerRef.current) clearTimeout(sideChangeTimerRef.current)
+      if (disconnectTimerRef.current) clearTimeout(disconnectTimerRef.current)
+      if (dropDebounceRef.current) clearTimeout(dropDebounceRef.current)
       speakerRef.current?.cancel()
     }
   }, [])
+
+  // Queda de conexão no placar compartilhado: quando editorCount DIMINUI e não
+  // recupera dentro do debounce (~1,5s → filtra o refresh do outro aparelho, que
+  // é leave+join rápido), mostra um toast transitório. Só quando HAVIA outro
+  // aparelho (baseline ≥ 2) e ESTE segue conectado (≥ 1) — assim não alertamos a
+  // NOSSA própria queda (ir offline). editorCount inclui este aparelho.
+  useEffect(() => {
+    const prev = prevEditorCountRef.current
+    const current = rt.editorCount
+    prevEditorCountRef.current = current
+
+    if (current < prev) {
+      const baseline = prev
+      if (dropDebounceRef.current) clearTimeout(dropDebounceRef.current)
+      dropDebounceRef.current = setTimeout(() => {
+        dropDebounceRef.current = null
+        if (
+          prevEditorCountRef.current < baseline && // ainda caído (não recuperou)
+          baseline >= 2 && // havia outro aparelho
+          prevEditorCountRef.current >= 1 // nós seguimos conectados
+        ) {
+          if (disconnectTimerRef.current) clearTimeout(disconnectTimerRef.current)
+          setShowDisconnect(true)
+          disconnectTimerRef.current = setTimeout(() => {
+            disconnectTimerRef.current = null
+            setShowDisconnect(false)
+          }, 3000)
+        }
+      }, 1500)
+    } else if (current > prev) {
+      // Recuperou/cresceu antes do debounce: era o refresh do outro — não alerta.
+      if (dropDebounceRef.current) {
+        clearTimeout(dropDebounceRef.current)
+        dropDebounceRef.current = null
+      }
+    }
+  }, [rt.editorCount])
 
   const toggleVoice = () => {
     setVoiceEnabled((prev) => {
@@ -1045,6 +1093,10 @@ export default function JogoPage() {
     setGameState(state)
     persist()
     // Espelha na sala: um {kind:'undo'} por ponto desfeito (paralelo, best-effort).
+    // ⚠️ INTENCIONAL (modelo do marcador de tecido): no placar compartilhado o
+    // undo remove a ÚLTIMA ação da sala, de QUALQUER aparelho — se um lado
+    // desfaz logo após o ponto do outro, é o ponto do outro que sai. Qualquer
+    // aparelho manipula o último estado, como no marcador físico. NÃO é bug.
     for (let i = 0; i < undone; i++) sendRealtimeAction({ kind: "undo" })
 
     // Voz ao desfazer (se ligada): palavra curta de correção + placar corrigido
@@ -1822,6 +1874,24 @@ export default function JogoPage() {
         </div>
       )}
 
+      {/* TOAST "APARELHO DESCONECTADO" (placar compartilhado): mesma pílula
+          discreta do aviso de troca de lado (.side-change-banner, ~3s), em
+          vermelho de alto contraste — relevante num jogo sem juiz onde o outro
+          lado caiu. Só aparece após o debounce de queda (não no refresh). */}
+      {showDisconnect && (
+        <div
+          aria-live="polite"
+          className="pointer-events-none absolute left-1/2 top-[15%] z-40 -translate-x-1/2"
+        >
+          <div className="side-change-banner flex items-center gap-2 rounded-full bg-rose-600 px-3.5 py-1.5 text-white shadow-lg ring-1 ring-black/15">
+            <WifiOff className="h-3.5 w-3.5" />
+            <span className="text-xs font-bold uppercase tracking-[0.14em]">
+              Aparelho desconectado
+            </span>
+          </div>
+        </div>
+      )}
+
       {/* Controles nas BORDAS (topo + rodapé), NUNCA no meio: o miolo da tela —
           onde vivem os números gigantes dos dois blocos — fica LIVRE de controle
           em qualquer orientação. Regra fixa (retrato e paisagem):
@@ -2019,6 +2089,23 @@ export default function JogoPage() {
           >
             <Undo2 className="h-5 w-5" />
           </button>
+
+          {/* Indicador de aparelhos conectados (placar compartilhado). Discreto,
+              só aparece quando há OUTRO aparelho no jogo (editorCount > 1) e a
+              sala está conectada — sozinho ou offline não mostra nada
+              (degradação silenciosa, coerente com o offline-first). N/3 inclui
+              este aparelho (modelo do marcador de tecido). pointer-events-none:
+              é só display, nunca rouba o toque de marcar ponto. */}
+          {rt.status === "connected" && rt.editorCount > 1 && (
+            <span
+              className="glass pointer-events-none inline-flex items-center gap-1.5 rounded-full px-2.5 py-1.5 text-xs font-semibold tabular-nums"
+              title={`${rt.editorCount} de 3 aparelhos conectados`}
+              aria-label={`${rt.editorCount} de 3 aparelhos conectados`}
+            >
+              <Users className="h-3.5 w-3.5" />
+              {rt.editorCount}/3
+            </span>
+          )}
         </div>
 
         {/* CENTRO: CONTAGEM ponto-a-ponto vs por games — acessível NO JOGO (um
