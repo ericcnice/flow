@@ -93,11 +93,24 @@ export default async function VenueDetailPage({
   // slug É o segmento /[ad] da URL; sem ele não há o que montar.
   const { data: coachesData } = await supabase
     .from('members')
-    .select('slug, name, last_name, sponsor_logo_url')
+    .select('id, slug, name, last_name')
     .eq('role', 'coach')
     .eq('active', true)
     .not('slug', 'is', null)
     .order('name')
+
+  // "temLogo" agora vem de `sponsors` (peça A/C.1), não mais de
+  // members.sponsor_logo_url (aposentado): um coach "tem logo" quando existe um
+  // patrocinador ATIVO vinculado a ele (member_id). É o que a jornada de fato
+  // resolve. list_sponsors é a única leitura possível de sponsors (RLS com zero
+  // policies) e já roda sob a guarda de super_admin no banco; erro → conjunto
+  // vazio → todos sem logo (degrada seguro, o seletor só deixa de avisar).
+  const { data: sponsorsData } = await supabase.rpc('list_sponsors')
+  const coachesComLogo = new Set(
+    (sponsorsData ?? [])
+      .filter((s: { active: boolean; member_id: string | null }) => s.active && s.member_id)
+      .map((s: { member_id: string | null }) => s.member_id as string),
+  )
 
   const coaches: Coach[] = (coachesData ?? []).map((c) => ({
     slug: c.slug as string,
@@ -105,7 +118,7 @@ export default async function VenueDetailPage({
     // Sem logo a URL monta e a jornada NÃO quebra — o resolveSponsor devolve
     // null e a Tela 2 é pulada. Mas o QR fica sem propósito, então o seletor
     // avisa em vez de deixar imprimir um patrocínio que não aparece.
-    temLogo: Boolean(c.sponsor_logo_url),
+    temLogo: coachesComLogo.has(c.id as string),
   }))
 
   // Quem serve a jornada de QR é o CLUBS estático, não esta tabela — os dois

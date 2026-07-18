@@ -34,7 +34,6 @@ export type MemberFormData = {
   club_slug: string | null
   address: Record<string, string> | null
   avatar_url: string | null
-  sponsor_logo_url: string | null
 }
 
 type CepStatus = 'idle' | 'buscando' | 'ok' | 'nao-encontrado' | 'erro'
@@ -94,10 +93,9 @@ export function MemberFormModal({
   const [endereco, setEndereco] = useState<Record<string, string>>(member?.address ?? {})
   const [cepStatus, setCepStatus] = useState<CepStatus>('idle')
 
-  // `role` é controlado porque o campo de patrocinador aparece/some conforme
-  // ele, sem precisar salvar. Os demais seguem não-controlados.
-  const [role, setRole] = useState(member?.role ?? 'player')
-  const ehCoach = role === 'coach'
+  // `role` voltou a ser NÃO-controlado (defaultValue): o campo de patrocinador
+  // que dependia dele foi aposentado — logos agora vivem na entidade `sponsors`
+  // (peça A/C.1), não em members.sponsor_logo_url.
 
   // --- "Salvar alterações" só quando há mudança de verdade (só na EDIÇÃO) ---
   const formRef = useRef<HTMLFormElement>(null)
@@ -283,8 +281,7 @@ export function MemberFormModal({
                 id="role"
                 name="role"
                 required
-                value={role}
-                onChange={(e) => setRole(e.target.value)}
+                defaultValue={member?.role ?? 'player'}
                 className="h-10 rounded-md border border-border bg-background px-3 text-sm"
               >
                 <option value="player">Player</option>
@@ -323,18 +320,11 @@ export function MemberFormModal({
                 valorInicial={member?.avatar_url}
                 formato="quadrado"
               />
-              {/* Só faz sentido para coach. Desmontado (não escondido com CSS)
-                  quando o papel é player: assim o input some do FormData e a
-                  action recebe null, em vez de gravar um valor invisível na
-                  tela. Ver a nota sobre troca de papel em actions.ts. */}
-              {ehCoach && (
-                <ImageUrlField
-                  id="sponsor_logo_url"
-                  label="Logo de patrocinador"
-                  valorInicial={member?.sponsor_logo_url}
-                  formato="panorama"
-                />
-              )}
+              {/* O "Logo de patrocinador" foi APOSENTADO daqui: a fonte de
+                  verdade dos logos passou a ser a entidade `sponsors` (peça A),
+                  administrada em /dashboard/sponsors (peça C.1). A jornada resolve
+                  o patrocinador por `sponsors`, não por members.sponsor_logo_url —
+                  que segue existindo no banco, mas não é mais editado pela UI. */}
             </div>
           </fieldset>
 

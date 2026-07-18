@@ -45,12 +45,10 @@ const memberSchema = z.object({
   // Sem validação de formato de propósito: o banco não tem CHECK, e o preview
   // no formulário é quem dá o feedback.
   avatar_url: z.preprocess(vazioParaNulo, z.string().trim().nullable()),
-  // ⚠️ Só existe para coach. Quando o papel é player o campo nem é montado no
-  // formulário, então não vem no FormData, vira null aqui e é GRAVADO como
-  // null — ou seja, mudar um coach para player APAGA o logo de patrocinador
-  // dele. É intencional (patrocinador não se aplica a player), mas é perda de
-  // dado silenciosa se alguém trocar o papel por engano e salvar.
-  sponsor_logo_url: z.preprocess(vazioParaNulo, z.string().trim().nullable()),
+  // sponsor_logo_url foi APOSENTADO do formulário (peça C.1): a fonte de verdade
+  // dos logos é a entidade `sponsors`, administrada em /dashboard/sponsors. A
+  // coluna members.sponsor_logo_url continua existindo no banco, mas esta action
+  // não a lê nem a escreve mais — um UPDATE daqui não toca no valor legado.
 })
 
 /** address é jsonb: montamos um objeto e omitimos o que veio vazio. */
@@ -75,7 +73,6 @@ function lerFormulario(formData: FormData) {
     role: formData.get('role'),
     club_slug: formData.get('club_slug'),
     avatar_url: formData.get('avatar_url'),
-    sponsor_logo_url: formData.get('sponsor_logo_url'),
   })
 }
 

@@ -38,6 +38,12 @@ const AREAS: CardArea[] = [
     forma: 'h-16 w-24 rounded-lg bg-primary',
   },
   {
+    titulo: 'Patrocinadores',
+    descricao: 'Marcas e patrocinadores exibidos na jornada de QR — logo, slug e vínculo com a pessoa.',
+    href: '/dashboard/sponsors',
+    forma: 'h-20 w-20 rounded-full bg-amber-500',
+  },
+  {
     titulo: 'Queue',
     descricao: 'Fila de espera e rodízio de quadras.',
     forma: 'h-20 w-20 rounded-full border-4 border-foreground',
