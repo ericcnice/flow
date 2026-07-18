@@ -25,6 +25,7 @@ import { type Endereco } from '../../address-fields'
 import { ShareLinks, type Coach } from './share-links'
 import { VenueImage } from './venue-image'
 import { VisitStats, type VisitRow } from './visit-stats'
+import { CourtSponsors, type CourtAssoc, type SponsorOption } from './court-sponsors'
 
 type VenueDetalhe = {
   id: string
@@ -34,8 +35,18 @@ type VenueDetalhe = {
   address: Endereco | null
   logo_url: string | null
   photo_url: string | null
+  default_sponsor_id: string | null
   active: boolean
   created_at: string
+}
+
+/** Linha crua da RPC list_sponsors (o que a página consome dela). */
+type SponsorRow = {
+  id: string
+  slug: string
+  name: string
+  member_id: string | null
+  active: boolean
 }
 
 const ROTULO_TIPO: Record<string, string> = Object.fromEntries(
@@ -77,7 +88,9 @@ export default async function VenueDetailPage({
   // maybeSingle: `slug` é UNIQUE em venues, então ou vem uma linha ou nenhuma.
   const { data } = await supabase
     .from('venues')
-    .select('id, name, slug, type, address, logo_url, photo_url, active, created_at')
+    .select(
+      'id, name, slug, type, address, logo_url, photo_url, default_sponsor_id, active, created_at',
+    )
     .eq('slug', slug)
     .maybeSingle()
 
@@ -106,11 +119,19 @@ export default async function VenueDetailPage({
   // policies) e já roda sob a guarda de super_admin no banco; erro → conjunto
   // vazio → todos sem logo (degrada seguro, o seletor só deixa de avisar).
   const { data: sponsorsData } = await supabase.rpc('list_sponsors')
+  const sponsorRows = (sponsorsData ?? []) as SponsorRow[]
   const coachesComLogo = new Set(
-    (sponsorsData ?? [])
-      .filter((s: { active: boolean; member_id: string | null }) => s.active && s.member_id)
-      .map((s: { member_id: string | null }) => s.member_id as string),
+    sponsorRows.filter((s) => s.active && s.member_id).map((s) => s.member_id as string),
   )
+
+  // Opções para os dropdowns de patrocínio por quadra (peça C.2). Inclui os
+  // INATIVOS — o componente os marca "(inativo)" e alerta sobre a precedência.
+  const sponsorOptions: SponsorOption[] = sponsorRows.map((s) => ({
+    id: s.id,
+    name: s.name,
+    slug: s.slug,
+    active: s.active,
+  }))
 
   const coaches: Coach[] = (coachesData ?? []).map((c) => ({
     slug: c.slug as string,
@@ -131,12 +152,17 @@ export default async function VenueDetailPage({
   // Erro (ex.: migração ainda não rodada) → data null → listas vazias, e a
   // página renderiza tudo 0 sem quebrar. Nunca faz throw (supabase-js devolve
   // { data, error }, não lança).
-  const [statsTotal, stats7d] = await Promise.all([
+  // Associações patrocinador↔quadra deste venue (peça C.2). Leitura só via RPC
+  // (court_sponsors tem RLS com zero policies). `sport` vem CANÔNICO. Erro →
+  // lista vazia, a seção renderiza tudo em "Nenhum" sem quebrar.
+  const [statsTotal, stats7d, courtSponsors] = await Promise.all([
     supabase.rpc('get_venue_visit_stats', { p_venue_slug: venue.slug, p_days: 3650 }),
     supabase.rpc('get_venue_visit_stats', { p_venue_slug: venue.slug, p_days: 7 }),
+    supabase.rpc('list_court_sponsors', { p_venue_id: venue.id }),
   ])
   const rowsTotal = (statsTotal.data ?? []) as VisitRow[]
   const rows7d = (stats7d.data ?? []) as VisitRow[]
+  const courtAssocs = (courtSponsors.data ?? []) as CourtAssoc[]
 
   const endereco = linhasEndereco(venue.address)
   const cadastradoEm = new Date(venue.created_at).toLocaleDateString('pt-BR')
@@ -206,6 +232,14 @@ export default async function VenueDetailPage({
       </header>
 
       <VisitStats rowsTotal={rowsTotal} rows7d={rows7d} coaches={coaches} />
+
+      <CourtSponsors
+        venueId={venue.id}
+        venueSlug={venue.slug}
+        sponsors={sponsorOptions}
+        defaultSponsorId={venue.default_sponsor_id}
+        associations={courtAssocs}
+      />
 
       <section className="mt-8 grid gap-4 sm:grid-cols-2">
         <div className="rounded-xl border border-border bg-card p-4">

@@ -11,11 +11,54 @@
  */
 
 import { useMemo, useState } from 'react'
-import { ImageOff, Megaphone, Pencil, Plus, Search } from 'lucide-react'
+import { Check, ImageOff, Link2, Megaphone, Pencil, Plus, Search } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { CLUBS } from '@/lib/clubs-config'
+import { GRADE } from '@/lib/courts-grid'
+import { DOMINIO_PUBLICO } from '../venues/constants'
 import { ActiveToggle } from './active-toggle'
 import { SponsorFormModal, type MemberOption, type SponsorFormData } from './sponsor-form'
+
+/**
+ * URL de campanha de EXEMPLO para um slug de patrocinador. A URL real varia por
+ * clube × esporte × quadra; aqui montamos um exemplo concreto e copiável com a
+ * primeira quadra da grade do primeiro clube — útil de imediato, e o admin troca
+ * esporte/quadra à mão. Base de domínio idêntica à do preview de venues.
+ */
+function urlCampanhaExemplo(slug: string): string {
+  const clube = Object.values(CLUBS)[0]?.id ?? 'spac'
+  const g0 = GRADE[0]
+  return `https://${DOMINIO_PUBLICO}/${clube}/${g0.esporte}/${g0.quadras[0]}/${slug}`
+}
+
+/** Copia a URL de campanha de exemplo, com feedback de "copiado". */
+function BotaoCopiarUrl({ slug }: { slug: string }) {
+  const [copiado, setCopiado] = useState(false)
+  const url = urlCampanhaExemplo(slug)
+
+  const copiar = async () => {
+    try {
+      await navigator.clipboard.writeText(url)
+      setCopiado(true)
+      setTimeout(() => setCopiado(false), 2000)
+    } catch (err) {
+      console.error('Copiar URL falhou:', err)
+    }
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={copiar}
+      title={`Copiar URL de campanha (exemplo): ${url} — troque esporte/quadra conforme o cartaz.`}
+      className="inline-flex items-center gap-1 rounded-md border border-border px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground transition-colors hover:bg-background hover:text-foreground"
+    >
+      {copiado ? <Check className="h-3 w-3 text-primary" /> : <Link2 className="h-3 w-3" />}
+      {copiado ? 'copiado' : 'copiar URL'}
+    </button>
+  )
+}
 
 /** Linha da RPC list_sponsors (grão: um patrocinador + nome da pessoa vinculada). */
 export type Sponsor = SponsorFormData & {
@@ -57,9 +100,12 @@ function NomeComLogo({ s }: { s: Sponsor }) {
   return (
     <div className="flex items-center gap-3">
       <LogoMini s={s} />
-      <div className="flex flex-col">
+      <div className="flex flex-col gap-1">
         <span className="font-medium">{s.name}</span>
-        <span className="font-mono text-xs text-muted-foreground">/{s.slug}</span>
+        <div className="flex items-center gap-2">
+          <span className="font-mono text-xs text-muted-foreground">/{s.slug}</span>
+          <BotaoCopiarUrl slug={s.slug} />
+        </div>
       </div>
     </div>
   )

@@ -4,17 +4,14 @@
  * Links de compartilhamento da jornada de QR de um venue: uma URL por
  * combinação esporte × quadra, com botão de copiar.
  *
- * ⚠️ CONVENÇÃO TEMPORÁRIA E HARDCODED (ver GRADE abaixo). Esta grade é a mesma
- * que hoje montamos à mão — ela NÃO vem do banco, porque "quadras de um venue"
- * ainda não existe como estrutura de dado. Enquanto não existir, ela é igual
- * para TODO venue, o que é obviamente falso: um condomínio com uma quadra e um
- * clube com oito recebem a mesma lista de 15 links. Quando a estrutura existir,
- * a GRADE sai daqui e vira leitura por venue — e este arquivo passa a só
- * renderizar o que vier.
+ * A grade de quadras (esporte × quadras) vem de lib/courts-grid — fonte única,
+ * convenção temporária e hardcoded (ver a nota de lá). Antes vivia duplicada
+ * aqui e no visit-stats; foi extraída na peça C.2 sem mudar comportamento.
  */
 
 import { useState } from 'react'
 import { Check, Copy, QrCode, TriangleAlert } from 'lucide-react'
+import { GRADE } from '@/lib/courts-grid'
 import { DOMINIO_PUBLICO } from '../constants'
 import { QrModal } from './qr-modal'
 
@@ -25,43 +22,6 @@ export type Coach = {
   nome: string
   temLogo: boolean
 }
-
-/**
- * Esporte × quadras. Os slugs de esporte são os que a URL aceita (ver
- * SPORT_SLUG_TO_ID em lib/clubs-config.ts): "tenis", "beachtennis", "squash",
- * "pingpong" — e não os ids internos do catálogo ("tennis", "beach",
- * "tabletennis").
- *
- * O sufixo da quadra nomeia o piso (-saibro / -rapida) e faz parte do id: quem
- * valida (resolveClubContext) só checa `includes` numa lista plana, sem vínculo
- * quadra↔esporte. Por isso a grade é escrita à mão aqui em vez de derivada do
- * CLUBS: derivar daria o produto cartesiano (4 esportes × 11 quadras = 44
- * links, incluindo "squash na quadra de saibro"), que passa na validação mas
- * não existe no mundo físico.
- */
-const GRADE = [
-  {
-    esporte: 'tenis',
-    nome: 'Tênis',
-    quadras: [
-      'q1-saibro',
-      'q2-saibro',
-      'q3-saibro',
-      'q4-saibro',
-      'q5-saibro',
-      'q6-saibro',
-      'q7-saibro',
-      'q8-rapida',
-    ],
-  },
-  { esporte: 'squash', nome: 'Squash', quadras: ['q1', 'q2', 'q3'] },
-  { esporte: 'beachtennis', nome: 'Beach Tennis', quadras: ['q1', 'q2'] },
-  { esporte: 'pingpong', nome: 'Ping Pong', quadras: ['q1', 'q2'] },
-  // Sem `as const` de propósito: ele tiparia `quadras.length` como o literal
-  // `2 | 3 | 8`, e o TS passaria a acusar o singular do plural como código
-  // morto — justamente o caso que aparece quando isto virar dado de banco (um
-  // condomínio de uma quadra só).
-]
 
 function LinhaLink({ url, onVerQr }: { url: string; onVerQr: () => void }) {
   const [copiado, setCopiado] = useState(false)
