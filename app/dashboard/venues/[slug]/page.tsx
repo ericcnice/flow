@@ -25,12 +25,7 @@ import { TIPOS } from '../constants'
 import { type Endereco } from '../../address-fields'
 import { VenueImage } from './venue-image'
 import { VenueOverview } from './venue-overview'
-import {
-  CourtsPanel,
-  type CampaignCoach,
-  type CourtAssoc,
-  type SponsorOption,
-} from './courts-panel'
+import { CourtsPanel, type CourtAssoc, type SponsorOption } from './courts-panel'
 import {
   combinarJanelas,
   porEsporte,
@@ -110,36 +105,27 @@ export default async function VenueDetailPage({
   if (!data) notFound()
   const venue = data as VenueDetalhe
 
-  // Coaches para o seletor de patrocinador. Roda com a sessão do usuário, e a
-  // RLS de `members` só libera super_admin — que é exatamente quem chega aqui.
-  //
-  // Os filtros espelham os da RPC get_sponsor_by_slug (role='coach' + active),
-  // que é quem a jornada de fato consulta: listar alguém que a RPC não devolve
-  // seria oferecer uma URL que não resolve. O `slug not null` é estrutural — o
-  // slug É o segmento /[ad] da URL; sem ele não há o que montar.
+  // Coaches para RESOLVER NOMES no "Por patrocinador" do <VenueOverview>: a
+  // telemetria (court_visits) grava o slug do patrocinador, e o coach dá o nome
+  // de exibição quando o slug é de um coach. Roda com a sessão do usuário; a RLS
+  // de `members` só libera super_admin — exatamente quem chega aqui. Filtros
+  // espelham get_sponsor_by_slug (role='coach' + active); `slug not null` é
+  // estrutural — o slug É o segmento /[ad] da URL.
   const { data: coachesData } = await supabase
     .from('members')
-    .select('id, slug, name, last_name')
+    .select('slug, name, last_name')
     .eq('role', 'coach')
     .eq('active', true)
     .not('slug', 'is', null)
     .order('name')
 
-  // "temLogo" agora vem de `sponsors` (peça A/C.1), não mais de
-  // members.sponsor_logo_url (aposentado): um coach "tem logo" quando existe um
-  // patrocinador ATIVO vinculado a ele (member_id). É o que a jornada de fato
-  // resolve. list_sponsors é a única leitura possível de sponsors (RLS com zero
-  // policies) e já roda sob a guarda de super_admin no banco; erro → conjunto
-  // vazio → todos sem logo (degrada seguro, o seletor só deixa de avisar).
   const { data: sponsorsData } = await supabase.rpc('list_sponsors')
   const sponsorRows = (sponsorsData ?? []) as SponsorRow[]
-  const coachesComLogo = new Set(
-    sponsorRows.filter((s) => s.active && s.member_id).map((s) => s.member_id as string),
-  )
 
   // Opções para os dropdowns de patrocínio por quadra + a miniatura de logo do
-  // card. Inclui os INATIVOS — o componente os marca "(inativo)" e alerta sobre
-  // a precedência. logo_url alimenta a miniatura do "patrocinador efetivo".
+  // card + o select de campanha (que filtra só os ativos no componente). Inclui
+  // os INATIVOS — o painel os marca "(inativo)" e alerta sobre a precedência.
+  // logo_url alimenta a miniatura do "patrocinador efetivo".
   const sponsorOptions: SponsorOption[] = sponsorRows.map((s) => ({
     id: s.id,
     name: s.name,
@@ -148,13 +134,9 @@ export default async function VenueDetailPage({
     active: s.active,
   }))
 
-  const coaches: CampaignCoach[] = (coachesData ?? []).map((c) => ({
+  const coaches = (coachesData ?? []).map((c) => ({
     slug: c.slug as string,
     nome: [c.name, c.last_name].filter(Boolean).join(' '),
-    // Sem logo a URL monta e a jornada NÃO quebra — o resolveSponsor devolve
-    // null e a Tela 2 é pulada. Mas o QR fica sem propósito, então o seletor
-    // avisa em vez de deixar imprimir um patrocínio que não aparece.
-    temLogo: coachesComLogo.has(c.id as string),
   }))
 
   // Quem serve a jornada de QR é o CLUBS estático, não esta tabela — os dois
@@ -261,7 +243,6 @@ export default async function VenueDetailPage({
         sponsors={sponsorOptions}
         defaultSponsorId={venue.default_sponsor_id}
         associations={courtAssocs}
-        coaches={coaches}
         statsByEsporte={statsByEsporte}
         statsByCourt={statsByCourt}
       />

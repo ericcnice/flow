@@ -61,9 +61,6 @@ export type CourtAssoc = {
   sponsor_active: boolean
 }
 
-/** Coach elegível ao sufixo /[ad] de campanha (herdado do share-links). */
-export type CampaignCoach = { slug: string; nome: string; temLogo: boolean }
-
 type Assoc = { sponsorId: string; active: boolean }
 type Efetivo = { sponsor: SponsorOption | null; herdado: boolean }
 
@@ -399,7 +396,6 @@ export function CourtsPanel({
   sponsors,
   defaultSponsorId,
   associations,
-  coaches,
   statsByEsporte,
   statsByCourt,
 }: {
@@ -409,11 +405,14 @@ export function CourtsPanel({
   sponsors: SponsorOption[]
   defaultSponsorId: string | null
   associations: CourtAssoc[]
-  coaches: CampaignCoach[]
   statsByEsporte: Record<string, ParTotais>
   statsByCourt: Record<string, ParTotais>
 }) {
   const sponsorById = useMemo(() => new Map(sponsors.map((s) => [s.id, s])), [sponsors])
+
+  // Campanha só faz sentido com sponsor ATIVO: a URL /[slug] resolve por
+  // get_sponsor_by_slug, que filtra active=true — um inativo cairia em nada.
+  const sponsorsAtivos = useMemo(() => sponsors.filter((s) => s.active), [sponsors])
 
   // Estado local das associações, chaveado por courtKey(sportId canônico, court).
   const [assoc, setAssoc] = useState<Record<string, Assoc>>(() => {
@@ -429,11 +428,11 @@ export function CourtsPanel({
   const [errors, setErrors] = useState<Record<string, string>>({})
 
   // Modo campanha (herdado do share-links): recolhido por padrão; ativo, injeta
-  // o sufixo /[slug] em TODAS as URLs dos cards.
+  // o sufixo /[slug] em TODAS as URLs dos cards. `campanha` guarda o SLUG do
+  // sponsor — o mesmo segmento /[ad] que a jornada resolve.
   const [modoCampanha, setModoCampanha] = useState(false)
   const [campanha, setCampanha] = useState('')
   const campanhaSufixo = modoCampanha && campanha ? `/${campanha}` : ''
-  const coachCampanha = coaches.find((c) => c.slug === campanha) ?? null
 
   // Esportes abertos: por padrão só os que têm acesso OU associação.
   const [abertos, setAbertos] = useState<Record<string, boolean>>(() => {
@@ -612,22 +611,16 @@ export function CourtsPanel({
               className="h-10 rounded-md border border-border bg-background px-3 text-sm sm:max-w-xs"
             >
               <option value="">— nenhum —</option>
-              {coaches.map((c) => (
-                <option key={c.slug} value={c.slug}>
-                  {c.nome}
-                  {c.temLogo ? '' : ' (sem logo)'}
+              {sponsorsAtivos.map((s) => (
+                <option key={s.id} value={s.slug}>
+                  {s.name}
                 </option>
               ))}
             </select>
-            {coaches.length === 0 && (
+            {sponsorsAtivos.length === 0 && (
               <p className="text-xs text-muted-foreground">
-                Nenhum coach ativo com slug cadastrado. O slug é o que vira o último segmento da URL.
-              </p>
-            )}
-            {coachCampanha && !coachCampanha.temLogo && (
-              <p className="text-xs text-muted-foreground">
-                {coachCampanha.nome} não tem logo cadastrado — as URLs funcionam, mas a tela de
-                patrocinador será pulada na abertura.
+                Nenhum patrocinador ativo cadastrado. Cadastre em /dashboard/sponsors — o slug do
+                patrocinador é o que vira o último segmento da URL.
               </p>
             )}
           </div>
