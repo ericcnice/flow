@@ -41,6 +41,7 @@ export function SportSetup({
   initialRules,
   initialTheme,
   initialSideChangeAlert,
+  initialGameType,
   context,
   onConfirm,
   onClose,
@@ -55,15 +56,18 @@ export function SportSetup({
   /** Aviso de troca de lado ligado? Padrão DESLIGADO. Só aparece o toggle em
    *  esportes com troca de lado (sideChange !== 'none'). */
   initialSideChangeAlert?: boolean
+  /** Simples/duplas inicial. Ausente = 'duplas' (95% dos jogos do clube). */
+  initialGameType?: string
   context: SportSetupContext
   /** Chamado no CTA. sportChanged=true quando o esporte mudou; theme = tema
-   *  escolhido; sideChangeAlert = preferência do aviso de troca de lado. */
+   *  escolhido; sideChangeAlert = aviso de troca; gameType = simples/duplas. */
   onConfirm: (
     sport: SportId,
     rules: any,
     sportChanged: boolean,
     theme: ThemeId,
     sideChangeAlert: boolean,
+    gameType: string,
   ) => void
   /** Fechar sem confirmar (ingame: volta ao jogo). Ausente = sem "X". */
   onClose?: () => void
@@ -74,6 +78,8 @@ export function SportSetup({
   const [rules, setRules] = useState<any>(initialRules)
   const [theme, setTheme] = useState<ThemeId>(initialTheme ?? DEFAULT_THEME)
   const [sideChangeAlert, setSideChangeAlert] = useState<boolean>(initialSideChangeAlert ?? false)
+  // Simples/duplas. Default 'duplas' para partida nova (initialGameType ausente).
+  const [gameType, setGameType] = useState<string>(initialGameType ?? "duplas")
 
   const controls = useMemo<RuleControl[]>(() => ruleControlsFor(sport), [sport])
   const sportChanged = sport !== initialSport
@@ -140,6 +146,28 @@ export function SportSetup({
               Trocar de esporte inicia uma NOVA partida (o placar atual será descartado).
             </p>
           )}
+
+          {/* SIMPLES/DUPLAS — propriedade fundamental da partida (define quantas
+              pílulas de nome). Antes das regras de propósito. Molde rule-group. */}
+          <div>
+            <div className="text-sm font-semibold mb-2">Formato</div>
+            <div className="rule-group">
+              {[
+                { label: "Simples", value: "simples" },
+                { label: "Duplas", value: "duplas" },
+              ].map((opt) => (
+                <button
+                  key={opt.value}
+                  type="button"
+                  onClick={() => setGameType(opt.value)}
+                  className={`rule-option ${gameType === opt.value ? "on" : ""}`}
+                  aria-pressed={gameType === opt.value}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          </div>
 
           {controls.map((c) => {
             const current = c.get(rules)
@@ -223,7 +251,7 @@ export function SportSetup({
           <button
             type="button"
             className="play-button"
-            onClick={() => onConfirm(sport, rules, sportChanged, theme, sideChangeAlert)}
+            onClick={() => onConfirm(sport, rules, sportChanged, theme, sideChangeAlert, gameType)}
           >
             JOGAR
           </button>

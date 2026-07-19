@@ -3,7 +3,7 @@
 import { Fragment, useState, useEffect, useRef, type CSSProperties } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import Image from "next/image"
-import { Input } from "@/components/ui/input"
+import { NameEditModal } from "@/components/name-edit-modal"
 import { Settings, Volume2, VolumeX, Undo2, BarChart2, RotateCcw, LogOut, ArrowLeftRight, Share2, Users, UserMinus } from "lucide-react"
 import { ThirdSetModal } from "@/components/third-set-modal"
 import { ShareModal } from "@/components/share-modal"
@@ -58,6 +58,11 @@ type GameConfig = {
     red1: string
     red2: string
   }
+  /** Sacador individual INICIAL por lado (0 = blue1/red1, 1 = blue2/red2). Campo
+   *  aditivo do B1: aqui é só criado/persistido/propagado — a UI de escolha vem
+   *  no B1b e a rotação derivada no B2. `firstServer` (Side, na semente do motor)
+   *  segue sendo a fonte do motor. Ausente = {A:0,B:0}. */
+  initialServer?: { A: 0 | 1; B: 0 | 1 }
   startTime: string
   maxSets?: number
   /** Sala Realtime (bônus). Ausentes em partidas offline ou antigas.
@@ -218,8 +223,11 @@ export default function JogoPage() {
 
   const [elapsedTime, setElapsedTime] = useState("00:00:00")
   const [startTime, setStartTime] = useState<Date | null>(null)
-  const [editingBluePlayer, setEditingBluePlayer] = useState(false)
-  const [editingRedPlayer, setEditingRedPlayer] = useState(false)
+  // Lado cujo popup de edição de nomes está aberto (B1a). null = fechado. A
+  // edição inline antiga (Input no canto/faixa) morreu — agora é o popup grande.
+  const [editingSide, setEditingSide] = useState<null | "blue" | "red">(null)
+  // Nomes COMBINADOS para exibição em superfícies que não são as pílulas
+  // (tela de fim, broadcast): simples = "Nome"; duplas = "Nome1/Nome2".
   const [bluePlayerName, setBluePlayerName] = useState("")
   const [redPlayerName, setRedPlayerName] = useState("")
   const [animatingBlue, setAnimatingBlue] = useState(false)
@@ -1165,36 +1173,36 @@ export default function JogoPage() {
     setShowThirdSetModal(false)
   }
 
-  const updatePlayerName = (team: "blue" | "red", name: string) => {
-    if (!gameConfig) return
-
-    const newConfig = { ...gameConfig }
-
+  // Grava os nomes de um lado a partir do popup (B1a): estruturado (p1/p2), SEM
+  // a antiga convenção de split por "/". Em simples só p1 conta. Persiste, mantém
+  // os nomes COMBINADOS em sincronia (tela de fim/broadcast) e propaga players
+  // pelo mesmo set_config de sempre.
+  const saveNames = (team: "blue" | "red", p1: string, p2: string) => {
+    const cfg = gameConfigRef.current
+    if (!cfg) return
+    const duplas = cfg.gameType === "duplas"
+    const players = { ...cfg.players }
     if (team === "blue") {
-      if (gameConfig.gameType === "simples") {
-        newConfig.players.blue1 = name
-      } else {
-        // Split the name by / for doubles
-        const names = name.split("/")
-        if (names.length > 0) newConfig.players.blue1 = names[0]
-        if (names.length > 1) newConfig.players.blue2 = names[1]
-      }
+      players.blue1 = p1
+      if (duplas) players.blue2 = p2
     } else {
-      if (gameConfig.gameType === "simples") {
-        newConfig.players.red1 = name
-      } else {
-        // Split the name by / for doubles
-        const names = name.split("/")
-        if (names.length > 0) newConfig.players.red1 = names[0]
-        if (names.length > 1) newConfig.players.red2 = names[1]
-      }
+      players.red1 = p1
+      if (duplas) players.red2 = p2
     }
 
+    const newConfig: GameConfig = { ...cfg, players }
     setGameConfig(newConfig)
     gameConfigRef.current = newConfig
-    localStorage.setItem(`tennis_match_${quadra}`, JSON.stringify(newConfig))
-    // Propaga os nomes para os outros devices (estado compartilhado).
-    sendRealtimeAction({ kind: "set_config", patch: { players: newConfig.players } })
+    try {
+      localStorage.setItem(`tennis_match_${quadra}`, JSON.stringify(newConfig))
+    } catch {
+      // aba privada / cota: segue só em memória
+    }
+
+    setBluePlayerName(duplas ? `${players.blue1}/${players.blue2}` : players.blue1)
+    setRedPlayerName(duplas ? `${players.red1}/${players.red2}` : players.red1)
+
+    sendRealtimeAction({ kind: "set_config", patch: { players } })
   }
 
   const resetGame = () => {
@@ -1284,6 +1292,7 @@ export default function JogoPage() {
     nextRules: any,
     nextTheme: ThemeId,
     nextSideChangeAlert: boolean,
+    nextGameType: string,
   ) => {
     sportRef.current = nextSport
     setSport(nextSport)
@@ -1300,11 +1309,17 @@ export default function JogoPage() {
         sport: nextSport,
         theme: nextTheme,
         sideChangeAlert: nextSideChangeAlert,
+        gameType: nextGameType,
+        initialServer: { A: 0, B: 0 }, // partida nova → sacador individual no padrão
         startTime: now.toISOString(),
         maxSets: nextRules.bestOf ?? 3,
       }
       setGameConfig(newConfig)
       localStorage.setItem(`tennis_match_${quadra}`, JSON.stringify(newConfig))
+      // Nomes combinados podem mudar de forma se o formato mudou (simples↔duplas).
+      const p = newConfig.players
+      setBluePlayerName(nextGameType === "duplas" ? `${p.blue1}/${p.blue2}` : p.blue1)
+      setRedPlayerName(nextGameType === "duplas" ? `${p.red1}/${p.red2}` : p.red1)
     }
     localStorage.removeItem(`tennis_score_${quadra}`)
 
@@ -1326,6 +1341,7 @@ export default function JogoPage() {
     sportChanged: boolean,
     nextTheme: ThemeId,
     nextSideChangeAlert: boolean,
+    nextGameType: string,
   ) => {
     if (!sportChanged) {
       // O tema é personalização: aplica SEM recomeçar a partida (só recolore).
@@ -1338,22 +1354,28 @@ export default function JogoPage() {
           ...gameConfig,
           theme: nextTheme,
           sideChangeAlert: nextSideChangeAlert,
+          gameType: nextGameType,
           maxSets: nextRules.bestOf ?? gameConfig.maxSets,
         }
         setGameConfig(newConfig)
         gameConfigRef.current = newConfig
         localStorage.setItem(`tennis_match_${quadra}`, JSON.stringify(newConfig))
+        // Se o formato mudou (simples↔duplas), a forma dos nomes combinados muda.
+        const p = newConfig.players
+        setBluePlayerName(nextGameType === "duplas" ? `${p.blue1}/${p.blue2}` : p.blue1)
+        setRedPlayerName(nextGameType === "duplas" ? `${p.red1}/${p.red2}` : p.red1)
       }
       setMaxSets(nextRules.bestOf ?? maxSets)
       persist()
       // Propaga REGRAS (bestOf/tiebreak/vantagem) e TEMA para os outros devices.
-      // sideChangeAlert NÃO entra: é preferência do aparelho do juiz.
+      // sideChangeAlert e gameType NÃO entram: preferência/estado local (gameType
+      // viaja por URL no join; o hook não expõe remoteGameType).
       sendRealtimeAction({ kind: "set_config", patch: { rules: nextRules, theme: nextTheme } })
       setSetupOpen(false)
       return
     }
     if (confirm("Trocar de esporte vai iniciar uma nova partida. Continuar?")) {
-      startNewMatch(nextSport, nextRules, nextTheme, nextSideChangeAlert)
+      startNewMatch(nextSport, nextRules, nextTheme, nextSideChangeAlert, nextGameType)
       setSetupOpen(false)
     }
   }
@@ -1384,6 +1406,9 @@ export default function JogoPage() {
 
   // --- Derivações de exibição a partir do GameState do motor (blue=A, red=B) ---
   const gs = gameState
+  // Config não-nulo após o guard acima — capturado num const para as closures
+  // de render (renderBlock/pílulas) o enxergarem estreitado.
+  const cfg = gameConfig
   const finished = gs.finished
   const blueWinner = gs.winner === "A"
   const redWinner = gs.winner === "B"
@@ -1532,18 +1557,51 @@ export default function JogoPage() {
     return formatPoint(sport, gs[side], false)
   }
 
+  // Nomes INDIVIDUAIS de um lado para as pílulas (B1a): 1 (simples) ou 2 (duplas).
+  // Lê direto do config (fonte da verdade); a montagem combinada "A/B" morreu nas
+  // pílulas (segue só onde ainda é usada: tela de fim/broadcast).
+  const playersOf = (team: "blue" | "red"): string[] => {
+    const p = cfg.players
+    if (team === "blue") return cfg.gameType === "duplas" ? [p.blue1, p.blue2] : [p.blue1]
+    return cfg.gameType === "duplas" ? [p.red1, p.red2] : [p.red1]
+  }
+
+  // Pílulas de nome (glass, padrão do placar central). TOCÁVEIS: o click abre o
+  // popup de edição do lado e dá stopPropagation (não marca ponto) — mas SÓ no
+  // click: nenhum handler de pointer, então o swipe de espelhar (A1) continua
+  // borbulhando ao .palco-main. `layout`: "row" (canto landscape) | "col" (faixa
+  // central portrait). truncate p/ nomes longos.
+  const renderNamePills = (team: "blue" | "red", layout: "row" | "col") => (
+    // span inline-flex (não div) porque em landscape isto vive DENTRO do <span>
+    // âncora da bola — evita nesting inválido (div em span).
+    <span className={`inline-flex ${layout === "col" ? "flex-col" : "flex-row flex-wrap"} gap-1.5`}>
+      {playersOf(team).map((nm, i) => (
+        <button
+          key={i}
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation()
+            setEditingSide(team)
+          }}
+          title="Editar nomes"
+          className="glass max-w-full truncate rounded-full px-2.5 py-1 text-xs font-semibold uppercase tracking-wide text-white/90
+            transition-transform active:scale-95"
+        >
+          {nm?.trim() || "Jogador"}
+        </button>
+      ))}
+    </span>
+  )
+
   // --- Bloco de um lado (ScoreBot): número gigante + nome + BOLA DE SAQUE -----
   // Toda a área é tocável e marca ponto para o lado (engine.pointFor via
-  // handleScoreClick). O nome e o toggle de sacador param a propagação para não
-  // marcarem ponto. A bola de saque é só indicador (pointer-events-none): nunca
-  // rouba o toque de marcar ponto. Cores vêm das variáveis CSS do tema ativo.
+  // handleScoreClick). As pílulas de nome e o toggle de sacador param a
+  // propagação para não marcarem ponto. A bola de saque é só indicador
+  // (pointer-events-none): nunca rouba o toque. Cores vêm das vars do tema.
   const renderBlock = (team: "blue" | "red") => {
     const side: Side = sideOf(team)
     const isA = team === "blue"
-    const name = isA ? bluePlayerName : redPlayerName
-    const setName = isA ? setBluePlayerName : setRedPlayerName
-    const editing = isA ? editingBluePlayer : editingRedPlayer
-    const setEditing = isA ? setEditingBluePlayer : setEditingRedPlayer
+    const name = isA ? bluePlayerName : redPlayerName // só p/ aria-label
     const animating = isA ? animatingBlue : animatingRed
     const blinking = isA ? blueCardBlinking : redCardBlinking
     const isServing = isA ? blueServing : !blueServing
@@ -1622,36 +1680,10 @@ export default function JogoPage() {
               na largura do container (o container continua "envolvendo só o nome").
               `max-w-[75%] min-w-0` garante o truncamento do nome como antes. */}
           <span className="min-w-0 max-w-[75%] landscape:relative">
-            {editing ? (
-              <Input
-                value={name}
-                onClick={(e) => e.stopPropagation()}
-                onChange={(e) => setName(e.target.value)}
-                onBlur={() => {
-                  setEditing(false)
-                  updatePlayerName(team, name)
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    setEditing(false)
-                    updatePlayerName(team, name)
-                  }
-                }}
-                autoFocus
-                className="h-8 w-full bg-transparent border-current/40 text-base font-semibold player-name portrait:hidden"
-                style={{ color: `var(${txtVar})` }}
-              />
-            ) : (
-              <span
-                onClick={(e) => {
-                  e.stopPropagation()
-                  setEditing(true)
-                }}
-                className="player-name block truncate text-sm md:text-base font-semibold uppercase tracking-wide opacity-90 portrait:hidden"
-              >
-                {name}
-              </span>
-            )}
+            {/* PÍLULAS de nome (B1a) — só PAISAGEM (portrait:hidden); em retrato
+                elas vivem na faixa central. Substituem o nome/Input inline. A bola
+                de saque abaixo (âncora inalterada) continua como hoje. */}
+            <span className="portrait:hidden">{renderNamePills(team, "row")}</span>
 
             {/* BOLA DE SAQUE: indicador GRANDE e MÓVEL. Filha absoluta do
                 CONTAINER DO NOME acima → fica SEMPRE logo abaixo do nome (`top:
@@ -1760,53 +1792,6 @@ export default function JogoPage() {
           </div>
         )}
       </div>
-    )
-  }
-
-  // Nome do jogador DENTRO da faixa central (só RETRATO): mesma edição inline do
-  // canto (mesmo estado editing*, mesmo updatePlayerName), mas centralizado e em
-  // cor de vidro. Como o canto é `portrait:hidden` (display:none) em retrato, só
-  // ESTE input existe/autofoca em retrato; em paisagem esta faixa é
-  // `landscape:hidden` (display:none) e quem edita é o canto — sem conflito de
-  // autofocus nem duplicidade.
-  const renderPillName = (team: "blue" | "red") => {
-    const isA = team === "blue"
-    const nm = isA ? bluePlayerName : redPlayerName
-    const setNm = isA ? setBluePlayerName : setRedPlayerName
-    const editing = isA ? editingBluePlayer : editingRedPlayer
-    const setEditing = isA ? setEditingBluePlayer : setEditingRedPlayer
-    if (editing) {
-      return (
-        <Input
-          value={nm}
-          onClick={(e) => e.stopPropagation()}
-          onChange={(e) => setNm(e.target.value)}
-          onBlur={() => {
-            setEditing(false)
-            updatePlayerName(team, nm)
-          }}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              setEditing(false)
-              updatePlayerName(team, nm)
-            }
-          }}
-          autoFocus
-          className="h-7 w-full bg-transparent border-white/30 text-left text-sm font-semibold text-white player-name"
-        />
-      )
-    }
-    return (
-      <button
-        type="button"
-        onClick={(e) => {
-          e.stopPropagation()
-          setEditing(true)
-        }}
-        className="player-name w-full truncate text-left text-xs font-semibold uppercase tracking-wide text-white/90"
-      >
-        {nm}
-      </button>
     )
   }
 
@@ -2022,7 +2007,7 @@ export default function JogoPage() {
             : ([["blue", "a"], ["red", "b"]] as const)
           ).map(([team, key]) => (
             <Fragment key={team}>
-              <div className="min-w-0">{renderPillName(team)}</div>
+              <div className="min-w-0">{renderNamePills(team, "col")}</div>
               {broadcastCols.map((c) => {
                 const color = !c.played
                   ? "rgba(255,255,255,0.35)"
@@ -2251,6 +2236,7 @@ export default function JogoPage() {
             }
             initialTheme={theme}
             initialSideChangeAlert={sideChangeAlert}
+            initialGameType={gameConfig.gameType}
             context="ingame"
             onClose={() => setSetupOpen(false)}
             onConfirm={onSetupConfirm}
@@ -2493,6 +2479,22 @@ export default function JogoPage() {
         editToken={gameConfig.editToken}
         editorCount={rt.editorCount}
       />
+
+      {/* Popup grande de edição de nomes (B1a): abre ao tocar numa pílula do lado.
+          NESTA fatia o toque SEMPRE abre o editor (a alternância seletor-de-saque/
+          editor por fase entra no B1b). accentColor = cor do lado no tema. */}
+      {editingSide && (
+        <NameEditModal
+          accentColor={editingSide === "blue" ? "var(--lado-a-bg)" : "var(--lado-b-bg)"}
+          duplas={cfg.gameType === "duplas"}
+          initialNames={[
+            playersOf(editingSide)[0] ?? "",
+            playersOf(editingSide)[1] ?? "",
+          ]}
+          onSave={(p1, p2) => saveNames(editingSide, p1, p2)}
+          onClose={() => setEditingSide(null)}
+        />
+      )}
     </div>
   )
 }
