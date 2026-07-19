@@ -4,7 +4,7 @@ import { Fragment, useState, useEffect, useRef, type CSSProperties } from "react
 import { useRouter, useSearchParams } from "next/navigation"
 import Image from "next/image"
 import { NameEditModal } from "@/components/name-edit-modal"
-import { Settings, Volume2, VolumeX, Undo2, BarChart2, RotateCcw, LogOut, ArrowLeftRight, Share2, Users, UserMinus } from "lucide-react"
+import { Settings, Volume2, VolumeX, Undo2, BarChart2, RotateCcw, LogOut, ArrowLeftRight, Share2, Users, UserMinus, X } from "lucide-react"
 import { ThirdSetModal } from "@/components/third-set-modal"
 import { ShareModal } from "@/components/share-modal"
 // Superfície de configuração ÚNICA: a MESMA tela de setup (esporte + regras),
@@ -63,6 +63,10 @@ type GameConfig = {
    *  no B1b e a rotação derivada no B2. `firstServer` (Side, na semente do motor)
    *  segue sendo a fonte do motor. Ausente = {A:0,B:0}. */
   initialServer?: { A: 0 | 1; B: 0 | 1 }
+  /** Logo do clube VISITANTE (slot interclubes futuro). Campo aditivo: sem UI de
+   *  seleção nesta entrega — por ora os dois times mostram o logo do clube da
+   *  quadra. Quando definido, o time B usa este. */
+  visitorClubLogo?: string
   startTime: string
   maxSets?: number
   /** Sala Realtime (bônus). Ausentes em partidas offline ou antigas.
@@ -86,6 +90,26 @@ type Action = { kind: "point" | "game"; side: Side }
 
 // Mapa de lados: a tela usa blue/red; o motor usa A/B.
 const sideOf = (team: "blue" | "red"): Side => (team === "blue" ? "A" : "B")
+
+// Abreviação BROADCAST do nome: primeiro nome vira inicial ("Eric Nice" →
+// "E. Nice"); nome único fica inteiro. O truncate final é do CSS.
+function abbrevName(full: string): string {
+  const t = (full ?? "").trim()
+  if (!t) return t
+  const sp = t.indexOf(" ")
+  if (sp <= 0) return t
+  const first = t.slice(0, sp)
+  const rest = t.slice(sp + 1).trim()
+  if (!rest) return first
+  return `${first.charAt(0).toUpperCase()}. ${rest}`
+}
+
+// Nome ainda no fallback ("Jogador 1/2/3/4" ou vazio) — usado para detectar a
+// ETAPA 1 (nomes não editados) da faixa de nomes do portrait.
+function isFallbackName(n: string): boolean {
+  const t = (n ?? "").trim()
+  return !t || /^jogador\s*\d?$/i.test(t)
+}
 
 // Guarda DEFENSIVA: um objeto de regras é do FORMATO esperado pela família do
 // esporte atual da tela? Usado antes de aplicar rules remotas (set_config) e ao
@@ -230,6 +254,29 @@ export default function JogoPage() {
   // saca. `serverChosen` desliga o pulso após a 1ª escolha; volta a false ao
   // reentrar no pré-jogo (undo até 0-0) — ver o effect abaixo.
   const [serverChosen, setServerChosen] = useState(false)
+
+  // Orientação (reescrita do PORTRAIT — cidadão de 1ª classe). Detecta via
+  // matchMedia (o CSS já usava orientation; aqui precisamos ramificar o JSX,
+  // porque portrait e landscape são layouts distintos). SSR nasce portrait
+  // (mobile-first); corrige no mount. Landscape mantém o layout atual.
+  const [isPortrait, setIsPortrait] = useState(true)
+  useEffect(() => {
+    const mq = window.matchMedia("(orientation: portrait)")
+    const update = () => setIsPortrait(mq.matches)
+    update()
+    mq.addEventListener("change", update)
+    return () => mq.removeEventListener("change", update)
+  }, [])
+
+  // Menu inferior recolhível (portrait): fechado = só a engrenagem.
+  const [menuOpen, setMenuOpen] = useState(false)
+
+  // "O sacador JÁ foi escolhido nesta partida?" (portrait). Diferente de
+  // serverChosen (que o effect do B1b zera ao iniciar, p/ o landscape re-pulsar
+  // no undo): este PERSISTE até uma partida nova. Assim, ao voltar ao 0-0 por
+  // undo, as bolas do portrait NÃO re-pulsam se já houve escolha — mantêm a
+  // amarela fixa e permitem re-escolha (regra do portrait). Reset em nova partida.
+  const [serverEverChosen, setServerEverChosen] = useState(false)
   // Nomes COMBINADOS para exibição em superfícies que não são as pílulas
   // (tela de fim, broadcast): simples = "Nome"; duplas = "Nome1/Nome2".
   const [bluePlayerName, setBluePlayerName] = useState("")
@@ -1197,7 +1244,8 @@ export default function JogoPage() {
       sendRealtimeAction({ kind: "set_config", patch: { initialServer } })
     }
 
-    setServerChosen(true) // para o pulso; a bola já salta (server highlight deriva)
+    setServerChosen(true) // para o pulso (landscape/B1b); a bola já salta
+    setServerEverChosen(true) // portrait: escolha registrada até a próxima partida
   }
 
   // Toque numa pílula: pré-jogo (sem ações) escolhe o sacador; em jogo abre o
@@ -1286,6 +1334,7 @@ export default function JogoPage() {
       localStorage.removeItem(`tennis_engine_${quadra}`)
       rebuildEngine(rulesRef.current, "A", [])
       persist()
+      setServerEverChosen(false) // partida nova → volta a convidar a escolha de saque
       sendRealtimeAction({ kind: "reset" }) // zera a sala também (best-effort)
     }
   }
@@ -1299,6 +1348,7 @@ export default function JogoPage() {
     localStorage.removeItem(`tennis_score_${quadra}`)
     rebuildEngine(rulesRef.current, "A", [])
     persist()
+    setServerEverChosen(false)
     sendRealtimeAction({ kind: "reset" }) // zera a sala também (best-effort)
   }
 
@@ -1403,6 +1453,7 @@ export default function JogoPage() {
     // vazias = placar zerado.
     rebuildEngine(nextRules, "A", [])
     persist()
+    setServerEverChosen(false)
   }
 
   // Decisão do overlay de config (a tela de setup dentro do jogo):
@@ -1795,14 +1846,412 @@ export default function JogoPage() {
     )
   }
 
+  /* ===================== TELA VERTICAL (PORTRAIT) — QUADRA 2.0 ==============
+     Cidadão de 1ª classe. Estrutura (cima→baixo): FAIXA A · BLOCO A · divisória
+     · BLOCO B · FAIXA B · PAINEL PLACAR · MENU. Chrome (faixas/painel/menu) é
+     `shrink-0` (desconta antes da divisão); os dois blocos são `flex-1` → áreas
+     idênticas, divisória no centro exato. O landscape segue o layout atual. */
+
+  /** Logo do clube p/ o time (por ora o do clube da quadra nos dois; visitante é
+   *  slot futuro sem UI). null = jogo genérico sem clube. */
+  const logoForTeam = (team: "blue" | "red"): string | null => {
+    const home = clube ? (clubBySlug(clube)?.logo ?? null) : null
+    return team === "red" && cfg.visitorClubLogo ? cfg.visitorClubLogo : home
+  }
+
+  // FAIXA DE NOMES (uma por time). 3 ETAPAS pelo estado (ver detecção abaixo):
+  //  1) nomes fallback → pílula inteira PULSA; toque abre o popup de nomes.
+  //  2) nomes ok & !started → pulso migra p/ as BOLAS cinzas (se ainda não houve
+  //     escolha); tocar na metade do jogador define o sacador; tocar no centro
+  //     (logo) abre o popup.
+  //  3) started → bolas só indicam; toque abre o popup.
+  const renderNameFaixa = (team: "blue" | "red") => {
+    const sideKey = sideOf(team)
+    const teamServing = team === "blue" ? blueServing : !blueServing
+    const serverIdx = cfg.initialServer?.[sideKey] ?? 0
+    const bgVar = team === "blue" ? "--lado-a-bg" : "--lado-b-bg"
+    const duplas = cfg.gameType === "duplas"
+    const raw =
+      team === "blue"
+        ? duplas
+          ? [cfg.players.blue1, cfg.players.blue2]
+          : [cfg.players.blue1]
+        : duplas
+          ? [cfg.players.red1, cfg.players.red2]
+          : [cfg.players.red1]
+    const fallbackFor = (i: number) => `Jogador ${team === "blue" ? i + 1 : i + 3}`
+    const names = raw.map((n, i) => abbrevName(n?.trim() || fallbackFor(i)))
+    const etapa = started ? 3 : raw.every(isFallbackName) ? 1 : 2
+
+    const showAmarela = serverEverChosen || started // antes da 1ª escolha: sem amarela
+    const cinzaPulse = etapa === 2 && !serverEverChosen
+
+    const bola = (idx: number) => {
+      const acesa = showAmarela && teamServing && idx === serverIdx
+      return (
+        <span
+          aria-hidden
+          className={`h-3 w-3 shrink-0 rounded-full ring-1 ring-black/15 ${!acesa && cinzaPulse ? "serve-pill-pulse" : ""}`}
+          style={{ backgroundColor: acesa ? `var(${bgVar})` : "rgba(255,255,255,0.30)" }}
+        />
+      )
+    }
+    const logoEl = logoForTeam(team) ? (
+      <span className="relative block h-6 w-6 shrink-0 overflow-hidden rounded-full ring-1 ring-white/20">
+        <Image src={logoForTeam(team)!} alt="" fill sizes="24px" className="object-cover" />
+      </span>
+    ) : (
+      <span className="h-6 w-6 shrink-0" aria-hidden />
+    )
+    const nameEl = (n: string) => (
+      <span className="truncate text-sm font-semibold uppercase tracking-wide text-white/90">{n}</span>
+    )
+
+    const wrap =
+      "glass grid w-full grid-cols-[1fr_auto_1fr] items-center gap-2 rounded-full px-3 py-2 min-h-[44px]"
+
+    // ETAPA 2: células tocáveis (jogador → saque; centro → editar).
+    if (etapa === 2) {
+      return (
+        <div className={wrap}>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation()
+              chooseServer(team, 0)
+            }}
+            className="flex min-w-0 items-center justify-start gap-2"
+          >
+            {bola(0)}
+            {nameEl(names[0])}
+          </button>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation()
+              setEditingSide(team)
+            }}
+            aria-label="Editar nomes"
+            className="shrink-0"
+          >
+            {logoEl}
+          </button>
+          {duplas ? (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation()
+                chooseServer(team, 1)
+              }}
+              className="flex min-w-0 items-center justify-end gap-2"
+            >
+              {nameEl(names[1])}
+              {bola(1)}
+            </button>
+          ) : (
+            <span aria-hidden />
+          )}
+        </div>
+      )
+    }
+
+    // ETAPAS 1 e 3: qualquer toque abre o popup (etapa 1 pulsa a pílula inteira).
+    return (
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation()
+          setEditingSide(team)
+        }}
+        aria-label="Editar nomes"
+        className={`${wrap} ${etapa === 1 ? "serve-pill-pulse" : ""}`}
+      >
+        <span className="flex min-w-0 items-center justify-start gap-2">
+          {bola(0)}
+          {nameEl(names[0])}
+        </span>
+        {logoEl}
+        {duplas ? (
+          <span className="flex min-w-0 items-center justify-end gap-2">
+            {nameEl(names[1])}
+            {bola(1)}
+          </span>
+        ) : (
+          <span aria-hidden />
+        )}
+      </button>
+    )
+  }
+
+  // BLOCO DE TOQUE (portrait): número gigante; toda a área marca ponto. Sem
+  // pílulas/bola (moram nas faixas). Reaproveita point-flash/win-blink.
+  const renderTouchBlockPortrait = (team: "blue" | "red") => {
+    const side = sideOf(team)
+    const isA = team === "blue"
+    const nameA = isA ? bluePlayerName : redPlayerName
+    const animating = isA ? animatingBlue : animatingRed
+    const blinking = isA ? blueCardBlinking : redCardBlinking
+    const isWinner = isA ? blueWinner : redWinner
+    const bgVar = isA ? "--lado-a-bg" : "--lado-b-bg"
+    const txtVar = isA ? "--lado-a-texto" : "--lado-b-texto"
+    return (
+      <div
+        role="button"
+        tabIndex={0}
+        aria-label={`Marcar ponto para ${nameA}`}
+        onClick={() => handleScoreClick(team)}
+        className={`relative flex min-h-0 flex-1 basis-0 cursor-pointer select-none flex-col items-stretch justify-center overflow-hidden
+          ${animating ? "point-flash" : ""}`}
+        style={
+          {
+            backgroundColor: `var(${bgVar})`,
+            color: `var(${txtVar})`,
+            "--blk-bg": `var(${bgVar})`,
+            "--blk-text": `var(${txtVar})`,
+          } as CSSProperties
+        }
+      >
+        {blinking && <span aria-hidden className="win-blink pointer-events-none absolute inset-0 z-20" />}
+        {/* Número: cap portrait (min(42vw,30vh)) — os blocos são menores que no
+            layout antigo (o chrome desconta mais altura). Inline sobrepõe o
+            .giant-number sem tocar o landscape/globals. */}
+        <div
+          className={`giant-number px-2 text-center ${animating ? "score-animation" : ""}`}
+          style={{ fontSize: "min(42vw, 30vh)" }}
+        >
+          {bigNumber(side)}
+        </div>
+        {(isTiebreak || (finished && isWinner)) && (
+          <div className="absolute bottom-0 left-0 right-0 pb-2 text-center text-xs font-bold tracking-[0.2em] opacity-80">
+            {finished && isWinner ? "VENCEDOR" : "TIEBREAK"}
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  // PAINEL PLACAR GERAL (fixo, inferior, transparente ao toque). 2 linhas:
+  // [logo] nome [ponto] [até 5 unidades]. Largura RESERVADA p/ 5 sets → o placar
+  // NUNCA trunca; o nome usa o resto (regra broadcast). MATA a faixa central
+  // expansível antiga.
+  const renderScorePanel = () => {
+    const rows: { team: "blue" | "red"; key: "a" | "b" }[] = [
+      { team: "blue", key: "a" },
+      { team: "red", key: "b" },
+    ]
+    const ordered = mirrored ? [rows[1], rows[0]] : rows
+    return (
+      <div className="pointer-events-none w-full px-3 pb-1 pt-1">
+        <div
+          className="glass mx-auto grid max-w-md items-center gap-x-2 gap-y-1 rounded-2xl px-3 py-2"
+          style={{ gridTemplateColumns: "auto minmax(0,1fr) 1.4rem repeat(5, 1.05rem)" }}
+        >
+          {ordered.map(({ team, key }) => {
+            const combined = team === "blue" ? bluePlayerName : redPlayerName
+            const logo = logoForTeam(team)
+            const point = pointOf(sideOf(team))
+            return (
+              <Fragment key={team}>
+                {logo ? (
+                  <span className="relative block h-4 w-4 shrink-0 overflow-hidden rounded-full ring-1 ring-white/15">
+                    <Image src={logo} alt="" fill sizes="16px" className="object-cover" />
+                  </span>
+                ) : (
+                  <span className="h-4 w-4 shrink-0" aria-hidden />
+                )}
+                <span className="min-w-0 truncate text-xs font-semibold uppercase tracking-wide text-white/90">
+                  {combined}
+                </span>
+                <span className="text-center text-sm font-bold tabular-nums text-[#FEE100]">{point}</span>
+                {Array.from({ length: 5 }).map((_, i) => {
+                  const c = broadcastCols[i]
+                  const color = !c
+                    ? "transparent"
+                    : !c.played
+                      ? "rgba(255,255,255,0.35)"
+                      : c.current
+                        ? "#FEE100"
+                        : "#ffffff"
+                  return (
+                    <span
+                      key={i}
+                      className="text-center text-xs font-bold tabular-nums"
+                      style={{ color }}
+                    >
+                      {c ? pillCell(c, key) : ""}
+                    </span>
+                  )
+                })}
+              </Fragment>
+            )
+          })}
+        </div>
+      </div>
+    )
+  }
+
+  // MENU inferior (portrait). Recolhido = só a engrenagem (canto direito). Aberto
+  // = pílula com os MESMOS controles de hoje (undo · share · Pontos|Games · voz ·
+  // sair · setup · X). Fecha no X, toque fora, ou após qualquer ação.
+  const runMenu = (fn: () => void) => {
+    setMenuOpen(false)
+    fn()
+  }
+  const renderPortraitMenu = () => (
+    <div className="relative flex w-full items-center justify-end px-3 pb-3 pt-1">
+      {menuOpen ? (
+        <>
+          {/* Toque fora fecha. */}
+          <div className="fixed inset-0 z-30" onClick={() => setMenuOpen(false)} aria-hidden />
+          <div
+            className="glass relative z-40 flex items-center gap-2 rounded-full p-1.5"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              type="button"
+              onClick={() => runMenu(undoLastPoint)}
+              disabled={!started}
+              aria-label="Desfazer último ponto"
+              className="glass rounded-full p-2.5 transition-transform active:scale-95 disabled:pointer-events-none disabled:opacity-40"
+            >
+              <Undo2 className="h-5 w-5" />
+            </button>
+            <button
+              type="button"
+              onClick={() => runMenu(() => setShareOpen(true))}
+              aria-label="Compartilhar partida"
+              style={SHARE_BTN_STYLE}
+              className="rounded-full p-2.5 shadow-lg ring-1 ring-black/10 transition-transform active:scale-95"
+            >
+              <Share2 className="h-5 w-5" />
+            </button>
+            <div className="flex items-center gap-1 rounded-full bg-white/10 p-1">
+              {(
+                [
+                  ["pontos", "Pontos"],
+                  ["games", "Games"],
+                ] as const
+              ).map(([mode, label]) => {
+                const on = gameConfig.scoreType === mode
+                return (
+                  <button
+                    key={mode}
+                    type="button"
+                    onClick={() => {
+                      if (!on) runMenu(toggleScoreType)
+                      else setMenuOpen(false)
+                    }}
+                    aria-pressed={on}
+                    className={`rounded-full px-3 py-1 text-[10px] font-bold uppercase tracking-wide transition-colors ${
+                      on ? "central-seg-on" : "opacity-60"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                )
+              })}
+            </div>
+            <button
+              type="button"
+              onClick={() => runMenu(toggleVoice)}
+              aria-label={voiceEnabled ? "Desligar voz" : "Ligar voz"}
+              className="glass rounded-full p-2.5 transition-transform active:scale-95"
+            >
+              {voiceEnabled ? <Volume2 className="h-5 w-5" /> : <VolumeX className="h-5 w-5 opacity-70" />}
+            </button>
+            <button
+              type="button"
+              onClick={() => runMenu(endMatch)}
+              aria-label="Encerrar / sair"
+              className="glass rounded-full p-2.5 transition-transform active:scale-95"
+            >
+              <LogOut className="h-5 w-5" />
+            </button>
+            <button
+              type="button"
+              onClick={() => runMenu(() => setSetupOpen(true))}
+              aria-label="Configurações"
+              className="glass rounded-full p-2.5 transition-transform active:scale-95"
+            >
+              <Settings className="h-5 w-5" />
+            </button>
+            <button
+              type="button"
+              onClick={() => setMenuOpen(false)}
+              aria-label="Fechar menu"
+              className="glass rounded-full p-2.5 transition-transform active:scale-95"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </div>
+        </>
+      ) : (
+        <button
+          type="button"
+          onClick={() => setMenuOpen(true)}
+          aria-label="Menu"
+          className="glass rounded-full p-2.5 transition-transform active:scale-95"
+        >
+          <Settings className="h-5 w-5" />
+        </button>
+      )}
+    </div>
+  )
+
+  // Monta a tela vertical: swipe + mirror POR ORDEM (mirror troca as seções de
+  // time, faixas junto — coerente com os blocos). O swipe (A1) é o mesmo do
+  // palco: horizontal, aborta o ponto do release.
+  const renderPortrait = () => {
+    const order: readonly ("blue" | "red")[] = mirrored ? ["red", "blue"] : ["blue", "red"]
+    return (
+      <>
+        <main
+          className="flex min-h-0 flex-1 flex-col"
+          style={{ touchAction: "none" }}
+          onPointerDown={(e) => {
+            swipedRef.current = false
+            swipeStartRef.current = { x: e.clientX, y: e.clientY }
+          }}
+          onPointerUp={(e) => {
+            const start = swipeStartRef.current
+            swipeStartRef.current = null
+            if (!start) return
+            const dx = e.clientX - start.x
+            const dy = e.clientY - start.y
+            const limiar = Math.max(80, e.currentTarget.clientWidth * 0.15)
+            if (Math.abs(dx) >= limiar && Math.abs(dx) > Math.abs(dy)) {
+              swipedRef.current = true
+              toggleMirror()
+            }
+          }}
+          onPointerCancel={() => {
+            swipeStartRef.current = null
+          }}
+        >
+          <div className="shrink-0 px-2 pt-2">{renderNameFaixa(order[0])}</div>
+          {renderTouchBlockPortrait(order[0])}
+          <div className="h-px shrink-0" style={{ backgroundColor: "var(--palco-divisor)" }} />
+          {renderTouchBlockPortrait(order[1])}
+          <div className="shrink-0 px-2 pb-1 pt-1">{renderNameFaixa(order[1])}</div>
+        </main>
+        <div className="shrink-0">{renderScorePanel()}</div>
+        <div className="shrink-0">{renderPortraitMenu()}</div>
+      </>
+    )
+  }
+
   return (
     <div
       className={`relative flex flex-col h-[100dvh] overflow-hidden mono-tabular ${themeClassName(theme)}`}
       style={{ backgroundColor: "var(--palco-fundo)", color: "var(--palco-discreto)" }}
     >
-      {/* Palco: dois blocos ocupando a tela INTEIRA (sem barras). A direção segue
-          a ORIENTAÇÃO (não a largura): empilhados em retrato, lado a lado em
-          paisagem — ver .palco-main. */}
+      {/* PORTRAIT (QUADRA 2.0): tela vertical reescrita — cidadão de 1ª classe.
+          Faixas de nome, blocos, painel geral fixo e menu recolhível. */}
+      {isPortrait && renderPortrait()}
+
+      {/* LANDSCAPE (INALTERADO nesta entrega): palco lado a lado + placar central
+          vertical + barra de botões soltos. Só renderiza em paisagem. */}
+      {!isPortrait && (
       <main
         className={`palco-main flex-1 flex min-h-0 ${mirrored ? "mirrored" : ""}`}
         // touch-action:none → o navegador não rouba o swipe horizontal (scroll/
@@ -1837,6 +2286,7 @@ export default function JogoPage() {
         {renderBlock("blue")}
         {renderBlock("red")}
       </main>
+      )}
 
       {/* AVISO "TROCA DE LADO" (A2): banner não-bloqueante, alto contraste (amarelo
           de destaque #FEE100 + texto preto — legível sob sol e igual em qualquer
@@ -1891,11 +2341,9 @@ export default function JogoPage() {
           borda são pointer-events-none, então seus vãos deixam o toque passar e o
           resto da tela (os blocos) continua sendo a área de marcar ponto. */}
 
-      {/* TOPO-CENTRO: assinatura do CLUBE (quando a partida veio da jornada de
-          contexto) + PLACAR GERAL. O logo do clube fica ACIMA da chip, pequeno e
-          discreto (estilo Wimbledon/US Open); a chip desceu um pouco para caber.
-          Sem clube, mostra só a chip (jogo genérico). O container é
-          pointer-events-none e só a chip recebe toque. */}
+      {/* TOPO-CENTRO (LANDSCAPE): assinatura do CLUBE + PLACAR GERAL vertical.
+          Só em paisagem — no portrait o placar geral é o painel inferior fixo. */}
+      {!isPortrait && (
       <div className="pointer-events-none absolute top-2 left-1/2 -translate-x-1/2 z-20 flex flex-col items-center gap-1.5">
         {clube && clubBySlug(clube)?.logo && (
           <div className="relative aspect-square h-10 md:h-12 rounded-full overflow-hidden ring-1 ring-white/15 shadow-md">
@@ -1965,91 +2413,14 @@ export default function JogoPage() {
           )}
         </button>
       </div>
+      )}
 
-      {/* PLACAR CENTRAL — VARIANTE RETRATO (estreita-e-alta): FAIXA HORIZONTAL
-          ancorada na LINHA DIVISÓRIA entre os dois blocos empilhados (meio da
-          tela, top-1/2), NÃO no topo-centro. Estrutura em DUAS LINHAS, uma por
-          jogador (sem bloco de placar central separado):
-            - LINHA 1: nome do JOGADOR 1 (lado A/azul) à esquerda + os números de
-              c.a de cada coluna de buildScoreCols (na ordem, com "–" p/ futuras);
-            - LINHA 2: nome do JOGADOR 3 (lado B/vermelho) à esquerda + os números
-              de c.b, na MESMA ordem.
-          Um ÚNICO GRID [nome | col×N] com auto-flow em linha garante que o número
-          de cada unidade fique em COLUNA alinhada verticalmente entre as duas
-          linhas (set 1 de cima exatamente acima do set 1 de baixo, etc.): a 1ª
-          coluna é o nome (minmax(0,1fr), truncável) e as N seguintes têm LARGURA
-          FIXA por unidade. Cor por UNIDADE (não por jogador): branco encerrada,
-          amarelo current (aplicada ao número daquela unidade nas DUAS linhas),
-          dash esmaecido futura — direto de buildScoreCols. Os nomes vieram dos
-          cantos (que ficam livres p/ a bola de saque). Mesmo GLASS da pílula de
-          paisagem; tocar na pílula abre o overview (div role=button, os nomes dão
-          stopPropagation p/ editar); tocar num nome edita.
-          `landscape:hidden` → em paisagem (larga-e-baixa) esta faixa NÃO existe e
-          vale a pílula vertical do topo (inalterada). */}
-      <div className="landscape:hidden pointer-events-none absolute left-1/2 top-1/2 z-30 flex w-full -translate-x-1/2 -translate-y-1/2 justify-center px-3">
-        <div
-          role="button"
-          tabIndex={0}
-          onClick={(e) => {
-            e.stopPropagation()
-            openOverview()
-          }}
-          aria-label="Ver placar geral"
-          className="glass pointer-events-auto grid max-w-full items-center gap-x-3 gap-y-1 rounded-2xl px-3.5 py-2
-            active:scale-[0.98] transition-transform"
-          style={{ gridTemplateColumns: `minmax(0,1fr) repeat(${broadcastCols.length}, 1.35rem)` }}
-        >
-          {/* Duas linhas (uma por jogador): nome + números da sua unidade. Quando
-              ESPELHADO, a ORDEM das linhas troca (lado B em cima), acompanhando os
-              blocos que se cruzam. Fragment é transparente ao grid (auto-flow). */}
-          {(mirrored
-            ? ([["red", "b"], ["blue", "a"]] as const)
-            : ([["blue", "a"], ["red", "b"]] as const)
-          ).map(([team, key]) => (
-            <Fragment key={team}>
-              {/* Nome na faixa central: single-line ENXUTO (como antes do B1a),
-                  read-only — a edição é pelas pílulas do topo do bloco (popup).
-                  Tocar aqui não edita: borbulha e abre o overview. */}
-              <div className="min-w-0">
-                <span className="player-name block w-full truncate text-left text-xs font-semibold uppercase tracking-wide text-white/90">
-                  {team === "blue" ? bluePlayerName : redPlayerName}
-                </span>
-              </div>
-              {broadcastCols.map((c) => {
-                const color = !c.played
-                  ? "rgba(255,255,255,0.35)"
-                  : c.current
-                    ? "#FEE100"
-                    : "#ffffff"
-                return (
-                  <span
-                    key={`${key}-${c.setNum}`}
-                    className="text-center leading-none tabular-nums font-bold text-sm"
-                    style={{ color }}
-                  >
-                    {pillCell(c, key)}
-                  </span>
-                )
-              })}
-            </Fragment>
-          ))}
+      {/* A faixa central portrait antiga MORREU (QUADRA 2.0): no portrait o placar
+          geral é o painel inferior fixo (renderScorePanel). */}
 
-          {isTiebreak && (
-            <span
-              className="col-span-full text-center font-bold tracking-widest text-[9px]"
-              style={{ color: "#FEE100" }}
-            >
-              TB
-            </span>
-          )}
-        </div>
-      </div>
-
-      {/* BARRA DE CONTROLES no RODAPÉ: três posições (grid-cols-3) que nunca se
-          sobrepõem — ESQUERDA: voltar · CENTRO: contagem · DIREITA: voz + config.
-          O container é pointer-events-none (vãos passam o toque); cada controle é
-          pointer-events-auto. Config/voz saíram do canto p/ esta barra, sem
-          sobrepor o toggle. Rótulos do toggle curtos p/ caber em telas estreitas. */}
+      {/* BARRA DE CONTROLES (LANDSCAPE): botões soltos no rodapé. Só em paisagem —
+          no portrait viraram o menu recolhível (renderPortraitMenu). */}
+      {!isPortrait && (
       <div className="pointer-events-none absolute inset-x-3 bottom-4 z-20 grid grid-cols-3 items-center">
         {/* ESQUERDA: COMPARTILHAR + VOLTAR (undo). O undo é SEMPRE renderizado:
             quando não há o que desfazer, fica DESABILITADO (esmaecido +
@@ -2167,6 +2538,7 @@ export default function JogoPage() {
           </button>
         </div>
       </div>
+      )}
 
       {/* Placar geral expandido: overlay glass de tela cheia, estilo BROADCAST
           (Grand Slam). Aparece ao tocar no placar central, some sozinho após
