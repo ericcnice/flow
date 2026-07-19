@@ -226,6 +226,10 @@ export default function JogoPage() {
   // Lado cujo popup de edição de nomes está aberto (B1a). null = fechado. A
   // edição inline antiga (Input no canto/faixa) morreu — agora é o popup grande.
   const [editingSide, setEditingSide] = useState<null | "blue" | "red">(null)
+  // Fase de seleção de sacador (B1b): as pílulas pulsam até o juiz ESCOLHER quem
+  // saca. `serverChosen` desliga o pulso após a 1ª escolha; volta a false ao
+  // reentrar no pré-jogo (undo até 0-0) — ver o effect abaixo.
+  const [serverChosen, setServerChosen] = useState(false)
   // Nomes COMBINADOS para exibição em superfícies que não são as pílulas
   // (tela de fim, broadcast): simples = "Nome"; duplas = "Nome1/Nome2".
   const [bluePlayerName, setBluePlayerName] = useState("")
@@ -902,6 +906,22 @@ export default function JogoPage() {
     }
   }, [rt.editorCount])
 
+  // Rearma o pulso de seleção de sacador (B1b): ao SAIR do pré-jogo (1º ponto),
+  // zera `serverChosen` para que uma futura volta ao 0-0 (undo/reset) faça as
+  // pílulas pulsarem de novo. Deriva "started" do gameState (só leitura).
+  useEffect(() => {
+    if (!gameState) return
+    const startedNow =
+      gameState.A.points > 0 ||
+      gameState.B.points > 0 ||
+      gameState.A.games > 0 ||
+      gameState.B.games > 0 ||
+      gameState.A.sets > 0 ||
+      gameState.B.sets > 0 ||
+      gameState.completedSets.length > 0
+    if (startedNow) setServerChosen(false)
+  }, [gameState])
+
   const toggleVoice = () => {
     setVoiceEnabled((prev) => {
       const next = !prev
@@ -1144,15 +1164,48 @@ export default function JogoPage() {
   // Caminho confiável de undo (botão VOLTAR + ação do setup): desfaz 1 ponto.
   const undoLastPoint = () => undoPoints(1)
 
-  const toggleServing = () => {
-    // Só permite alterar o sacador antes do primeiro ponto (nenhuma ação ainda).
-    if (actionsRef.current.length === 0) {
-      const newFirstServer: Side = firstServerRef.current === "A" ? "B" : "A"
-      rebuildEngine(rulesRef.current, newFirstServer, [])
-      persist()
-      // Propaga o sacador para os outros devices (estado compartilhado).
-      sendRealtimeAction({ kind: "set_config", patch: { firstServer: newFirstServer } })
+  // Escolha do sacador inicial pelo TOQUE numa pílula (B1b) — substitui o antigo
+  // chip SAQUE. Grava o LADO (firstServer, mesma escrita do toggle antigo:
+  // rebuild do motor com ações vazias) E o jogador do lado (initialServer[side];
+  // em simples sempre 0). Sincroniza ambos. Só age no pré-jogo (sem ações).
+  const chooseServer = (team: "blue" | "red", playerIndex: number) => {
+    if (actionsRef.current.length !== 0) return
+    const side = sideOf(team) // "A" | "B"
+
+    // 1) LADO → firstServer (o motor).
+    rebuildEngine(rulesRef.current, side, [])
+    persist()
+    sendRealtimeAction({ kind: "set_config", patch: { firstServer: side } })
+
+    // 2) JOGADOR do lado → initialServer[side] (config; UI/derivação, não o motor).
+    const c = gameConfigRef.current
+    if (c) {
+      const idx: 0 | 1 = c.gameType === "duplas" && playerIndex === 1 ? 1 : 0
+      const initialServer = {
+        A: c.initialServer?.A ?? 0,
+        B: c.initialServer?.B ?? 0,
+        [side]: idx,
+      } as { A: 0 | 1; B: 0 | 1 }
+      const newConfig: GameConfig = { ...c, initialServer }
+      setGameConfig(newConfig)
+      gameConfigRef.current = newConfig
+      try {
+        localStorage.setItem(`tennis_match_${quadra}`, JSON.stringify(newConfig))
+      } catch {
+        // aba privada / cota
+      }
+      sendRealtimeAction({ kind: "set_config", patch: { initialServer } })
     }
+
+    setServerChosen(true) // para o pulso; a bola já salta (server highlight deriva)
+  }
+
+  // Toque numa pílula: pré-jogo (sem ações) escolhe o sacador; em jogo abre o
+  // popup de nomes. actionsRef.length===0 é o mesmo sinal de pré-jogo que o
+  // chooseServer usa (e casa com initialServingSet do render).
+  const onTapPill = (team: "blue" | "red", playerIndex: number) => {
+    if (actionsRef.current.length === 0) chooseServer(team, playerIndex)
+    else setEditingSide(team)
   }
 
   const toggleScoreType = () => {
@@ -1453,39 +1506,9 @@ export default function JogoPage() {
     gs.completedSets.length > 0
   const initialServingSet = !started
 
-  // --- Lado da BOLA DE SAQUE dentro do bloco do sacador --------------------
-  // A bola grande aparece SÓ no bloco de quem saca (gs.server). Quando o
-  // esporte alterna o LADO da quadra a cada ponto E esse lado é DERIVÁVEL do
-  // estado que o motor já expõe (server + points/advantage/tiebreakPoints — NÃO
-  // tocamos lib/scoring), a bola desliza na horizontal a cada ponto:
-  //   • TÊNIS e PADEL — mesma mecânica de deuce/ad court do tênis:
-  //       - em tiebreak, a quadra alterna a CADA ponto → paridade do total de
-  //         pontos do tiebreak (par = direita, ímpar = esquerda);
-  //       - fora do tiebreak, o 40-40 com vantagem é sempre servido da quadra
-  //         de VANTAGEM (esquerda); nos demais casos, paridade do total de
-  //         pontos do game (par = quadra de IGUAIS/direita, ímpar = esquerda).
-  //   • PICKLEBALL — regra de simples: o sacador serve da quadra DIREITA quando
-  //       a PRÓPRIA pontuação é par, da ESQUERDA quando ímpar (derivável do
-  //       modelo de saque único da Fase 0 do motor).
-  //   • BEACH, SQUASH e PING PONG — "center": sem deslocamento (ver relatório).
-  //       Beach não tem a alternância deuce/ad do tênis; no squash o box do
-  //       saque depende do histórico de rallies vencidos no saque (não vem no
-  //       snapshot server+points); no ping pong o saque troca a cada 2 pontos
-  //       sem lado esquerdo/direito da quadra por ponto. Nesses, só QUEM saca.
-  type ServeCourt = "left" | "right" | "center"
-  const servingCourt: ServeCourt = (() => {
-    if (sport === "tennis" || sport === "padel") {
-      if (isTiebreak) {
-        return (gs.A.tiebreakPoints + gs.B.tiebreakPoints) % 2 === 0 ? "right" : "left"
-      }
-      if (gs.A.advantage || gs.B.advantage) return "left"
-      return (gs.A.points + gs.B.points) % 2 === 0 ? "right" : "left"
-    }
-    if (sport === "pickleball") {
-      return gs[gs.server].points % 2 === 0 ? "right" : "left"
-    }
-    return "center"
-  })()
+  // NOTA (B1b): a bola de saque deixou de deslizar por lado da quadra (deuce/ad).
+  // Agora ela é ancorada à PÍLULA do sacador (ver renderNamePills). O cálculo de
+  // servingCourt foi removido — decisão de produto: bola na pílula não desliza.
 
   // Família de placar do esporte: "tennis" (15/30/40, games, sets, tiebreak) ou
   // "rally"/"sideout" (contagem corrida por game). Decide como exibir o placar.
@@ -1589,32 +1612,83 @@ export default function JogoPage() {
     return cfg.gameType === "duplas" ? [p.red1, p.red2] : [p.red1]
   }
 
-  // Pílulas de nome (glass, padrão do placar central). TOCÁVEIS: o click abre o
-  // popup de edição do lado e dá stopPropagation (não marca ponto) — mas SÓ no
-  // click: nenhum handler de pointer, então o swipe de espelhar (A1) continua
-  // borbulhando ao .palco-main. `layout`: "row" (canto landscape) | "col" (faixa
-  // central portrait). truncate p/ nomes longos.
-  const renderNamePills = (team: "blue" | "red", layout: "row" | "col") => (
-    // span inline-flex (não div) porque em landscape isto vive DENTRO do <span>
-    // âncora da bola — evita nesting inválido (div em span).
-    <span className={`inline-flex ${layout === "col" ? "flex-col" : "flex-row flex-wrap"} gap-1.5`}>
-      {playersOf(team).map((nm, i) => (
-        <button
-          key={i}
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation()
-            setEditingSide(team)
-          }}
-          title="Editar nomes"
-          className="glass max-w-full truncate rounded-full px-2.5 py-1 text-xs font-semibold uppercase tracking-wide text-white/90
-            transition-transform active:scale-95"
-        >
-          {nm?.trim() || "Jogador"}
-        </button>
-      ))}
-    </span>
-  )
+  // Pílulas de nome (glass, padrão do placar central). TOCÁVEIS: pré-jogo o
+  // toque ESCOLHE o sacador (chooseServer); em jogo abre o popup de nomes.
+  // stopPropagation SÓ no click (não marca ponto) — sem handler de pointer, o
+  // swipe de espelhar (A1) continua borbulhando ao .palco-main.
+  //
+  // B1b — a pílula do SACADOR ATUAL ganha destaque (fundo na cor de acento do
+  // tema) e a BOLA DE SAQUE ancorada na borda; as demais ficam glass. Na fase de
+  // seleção (pré-jogo, sem escolha) TODAS pulsam. "sacador atual" = o LADO que
+  // saca (blueServing) × o jogador do initialServer daquele lado (rotação
+  // individual por game é B2; até lá fica no jogador inicial — honesto e visível).
+  const renderNamePills = (team: "blue" | "red", layout: "row" | "col") => {
+    const sideKey = sideOf(team) // "A" | "B"
+    const teamServing = team === "blue" ? blueServing : !blueServing
+    const serverIdx = cfg.initialServer?.[sideKey] ?? 0
+    const bgVar = team === "blue" ? "--lado-a-bg" : "--lado-b-bg"
+    const txtVar = team === "blue" ? "--lado-a-texto" : "--lado-b-texto"
+    const pulsing = initialServingSet && !serverChosen
+
+    return (
+      // span inline-flex (não div): em landscape vive DENTRO do <span> do canto.
+      <span className={`inline-flex ${layout === "col" ? "flex-col" : "flex-row flex-wrap"} gap-1.5`}>
+        {playersOf(team).map((nm, i) => {
+          const isServerPill = teamServing && i === serverIdx && !finished
+          return (
+            <button
+              key={i}
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation()
+                onTapPill(team, i)
+              }}
+              title={initialServingSet ? "Toque para definir o sacador" : "Editar nomes"}
+              className={`relative max-w-full truncate rounded-full px-2.5 py-1 text-xs font-semibold uppercase tracking-wide
+                transition-transform active:scale-95
+                ${isServerPill ? "" : "glass text-white/90"}
+                ${pulsing ? "serve-pill-pulse" : ""}`}
+              style={
+                isServerPill
+                  ? ({ backgroundColor: `var(${bgVar})`, color: `var(${txtVar})` } as CSSProperties)
+                  : undefined
+              }
+            >
+              {nm?.trim() || "Jogador"}
+              {isServerPill && (
+                // Bola ANCORADA na borda da pílula (B1b): sai do posicionamento por
+                // % (--serve-x-*); é filha da pílula → viaja de graça no mirror.
+                <span
+                  aria-hidden
+                  className="pointer-events-none absolute -right-2 top-1/2 h-5 w-5 -translate-y-1/2"
+                  style={{ color: `var(${txtVar})` }}
+                >
+                  <svg
+                    viewBox="0 0 100 100"
+                    className="h-full w-full rounded-full"
+                    style={{ boxShadow: `0 0 0 2px var(${bgVar}), 0 1px 4px rgba(0,0,0,0.4)` }}
+                  >
+                    {sport === "squash" ? (
+                      <>
+                        <circle cx="50" cy="50" r="49" fill="#000000" />
+                        <circle cx="70" cy="50" r="9" fill="#FEE100" />
+                      </>
+                    ) : (
+                      <>
+                        <circle cx="50" cy="50" r="49" fill="currentColor" />
+                        <path d="M22 10 C40 33 40 67 22 90" fill="none" stroke={`var(${bgVar})`} strokeOpacity={0.5} strokeWidth={5} strokeLinecap="round" />
+                        <path d="M78 10 C60 33 60 67 78 90" fill="none" stroke={`var(${bgVar})`} strokeOpacity={0.5} strokeWidth={5} strokeLinecap="round" />
+                      </>
+                    )}
+                  </svg>
+                </span>
+              )}
+            </button>
+          )
+        })}
+      </span>
+    )
+  }
 
   // --- Bloco de um lado (ScoreBot): número gigante + nome + BOLA DE SAQUE -----
   // Toda a área é tocável e marca ponto para o lado (engine.pointFor via
@@ -1627,28 +1701,16 @@ export default function JogoPage() {
     const name = isA ? bluePlayerName : redPlayerName // só p/ aria-label
     const animating = isA ? animatingBlue : animatingRed
     const blinking = isA ? blueCardBlinking : redCardBlinking
-    const isServing = isA ? blueServing : !blueServing
     const isWinner = isA ? blueWinner : redWinner
     const bgVar = isA ? "--lado-a-bg" : "--lado-b-bg"
     const txtVar = isA ? "--lado-a-texto" : "--lado-b-texto"
 
     // Espelhamento (A1): o bloco DESLIZA para o outro lado via .palco-main.mirrored
-    // (CSS), mas seus alinhamentos internos assumem a posição ORIGINAL — então
-    // quando espelhado, o canto nome+saque huga a borda OPOSTA e a bola de saque
-    // troca de lado da quadra (35↔65) para casar com a nova posição do bloco.
+    // (CSS); em landscape o canto das pílulas huga a borda OPOSTA quando espelhado.
+    // A bola de saque agora é filha da PÍLULA (B1b) → espelha junto, sem % da tela.
     const cornerJustify = (isA ? !mirrored : mirrored)
       ? "landscape:justify-start"
       : "landscape:justify-end"
-    const serveXLandscape =
-      servingCourt === "center"
-        ? "50%"
-        : servingCourt === "left"
-          ? mirrored
-            ? "65%"
-            : "35%"
-          : mirrored
-            ? "35%"
-            : "65%"
 
     return (
       <div
@@ -1711,107 +1773,13 @@ export default function JogoPage() {
               senão esconderia a bola junto; a bola é filha absoluta → não conta
               na largura do container (o container continua "envolvendo só o nome").
               `max-w-[75%] min-w-0` garante o truncamento do nome como antes. */}
-          <span className="min-w-0 max-w-[75%] landscape:relative">
-            {/* PÍLULAS de nome (B1a) — só PAISAGEM (portrait:hidden); em retrato
-                elas vivem na faixa central. Substituem o nome/Input inline. A bola
-                de saque abaixo (âncora inalterada) continua como hoje. */}
-            <span className="portrait:hidden">{renderNamePills(team, "row")}</span>
-
-            {/* BOLA DE SAQUE: indicador GRANDE e MÓVEL. Filha absoluta do
-                CONTAINER DO NOME acima → fica SEMPRE logo abaixo do nome (`top:
-                100%` da caixa do nome + margem) e, em landscape, ACOMPANHA a
-                posição real do nome (não uma % do bloco). Aparece só no bloco de
-                quem saca; desliza p/ esquerda/direita quando o lado da quadra muda
-                (tênis/padel/pickleball) ou fica no centro quando não se aplica
-                (beach/squash/ping pong). FORMA: bola de tênis em SVG — disco na
-                cor do número (currentColor = --lado-*-texto) + duas curvas de
-                costura na cor de fundo do tema (--lado-*-bg) em baixa opacidade.
-                Anel = --lado-*-bg.
-
-                POSIÇÃO HORIZONTAL por ORIENTAÇÃO (a vertical `top:100%` já ancora
-                perto do topo do bloco nos dois casos): o `left` sai de duas
-                variáveis e o media query em .serve-ball escolhe qual usar:
-                  - RETRATO: container `static` → left é % do WRAPPER (que cobre a
-                    faixa superior do bloco inteiro, left-0 right-0). Aqui os nomes
-                    migraram p/ a pílula central, então os cantos ficaram livres:
-                    --serve-x-portrait é FIXO em 85% (canto superior DIREITO), IGUAL
-                    nos dois blocos (não espelhado) e SEM deslizar — não segue mais
-                    o lado da quadra nem a antiga posição do nome. Só muda QUAL
-                    bloco a exibe (o de quem saca).
-                  - PAISAGEM: container `relative` → left é % da CAIXA DO NOME:
-                    --serve-x-landscape = 35/50/65% (centrado sob o nome, com um
-                    leve deslize p/ indicar o lado da quadra em tênis/padel).
-                    Como o nome já é jogado p/ a borda externa (landscape:justify-
-                    start/end), a bola segue o nome no canto certo automaticamente.
-                    INALTERADO. */}
-            {isServing && !finished && (
-              <svg
-                aria-hidden
-                viewBox="0 0 100 100"
-                className="serve-ball"
-                style={{
-                  "--serve-x-portrait": "85%",
-                  "--serve-x-landscape": serveXLandscape,
-                  color: `var(${txtVar})`,
-                  boxShadow: `0 0 0 0.3rem var(${bgVar}), 0 0.3rem 1rem rgba(0, 0, 0, 0.4)`,
-                } as CSSProperties}
-              >
-                {sport === "squash" ? (
-                  <>
-                    {/* Bola de SQUASH: disco PRETO sólido — a bola de squash é
-                        sempre preta, independente do tema (por isso #000 fixo, e
-                        não currentColor) — com o "pingo" amarelo de velocidade na
-                        lateral, como a marcação das bolas reais. */}
-                    <circle cx="50" cy="50" r="49" fill="#000000" />
-                    <circle cx="70" cy="50" r="9" fill="#FEE100" />
-                  </>
-                ) : (
-                  <>
-                    <circle cx="50" cy="50" r="49" fill="currentColor" />
-                    {/* Costura da bola: duas curvas simétricas que arqueiam para o
-                        centro (a "linha em S" clássica da bola de tênis/padel/beach). */}
-                    <path
-                      d="M22 10 C40 33 40 67 22 90"
-                      fill="none"
-                      stroke={`var(${bgVar})`}
-                      strokeOpacity={0.5}
-                      strokeWidth={4}
-                      strokeLinecap="round"
-                    />
-                    <path
-                      d="M78 10 C60 33 60 67 78 90"
-                      fill="none"
-                      stroke={`var(${bgVar})`}
-                      strokeOpacity={0.5}
-                      strokeWidth={4}
-                      strokeLinecap="round"
-                    />
-                  </>
-                )}
-              </svg>
-            )}
+          {/* PÍLULAS de nome — só PAISAGEM (portrait:hidden); em retrato ficam no
+              TOPO do bloco (elemento landscape:hidden acima). A bola de saque é
+              filha da PÍLULA do sacador (B1b) — não mais posicionada por % aqui.
+              O chip SAQUE e o slide deuce/ad court MORRERAM (B1b). */}
+          <span className="min-w-0 max-w-[75%] portrait:hidden">
+            {renderNamePills(team, "row")}
           </span>
-
-          {/* Troca de sacador: SÓ antes do 1º ponto e SÓ no bloco de quem saca
-              (após o início, o sacador não muda — o motor rejeita). O indicador
-              visual de saque agora é a BOLA GRANDE abaixo; este chip é só o
-              controle discreto para escolher quem começa sacando. */}
-          {initialServingSet && isServing && (
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation()
-                toggleServing()
-              }}
-              title="Toque para trocar quem saca primeiro (só antes do 1º ponto)"
-              aria-label="Trocar sacador"
-              className="serve-toggle shrink-0"
-              style={{ color: `var(${txtVar})` }}
-            >
-              <ArrowLeftRight className="h-3 w-3" />
-              saque
-            </button>
-          )}
         </div>
 
         {/* Número gigante */}
