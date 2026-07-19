@@ -359,6 +359,7 @@ export default function JogoPage() {
     const sportParam = searchParams.get("sport")
     const themeParam = searchParams.get("theme")
     const scoreTypeParam = searchParams.get("scoreType")
+    const gameTypeParam = searchParams.get("gameType")
 
     // O CANAL de broadcast é sempre calculado a partir do view_token (é assim que
     // o servidor transmite em apply_live_match_action). No link de espectador ele
@@ -433,7 +434,9 @@ export default function JogoPage() {
             quadra,
             sport: resolvedSport,
             theme: resolvedTheme,
-            gameType: "simples",
+            // Join de link compartilhado: HERDA o formato do host pela URL
+            // (&gameType=); fallback 'duplas' (padrão do clube) p/ links antigos.
+            gameType: gameTypeParam === "simples" || gameTypeParam === "duplas" ? gameTypeParam : "duplas",
             scoreType: loadedScoreType,
             players: { blue1: "Jogador 1", blue2: "Jogador 2", red1: "Jogador 3", red2: "Jogador 4" },
             startTime: new Date().toISOString(),
@@ -1205,6 +1208,26 @@ export default function JogoPage() {
     sendRealtimeAction({ kind: "set_config", patch: { players } })
   }
 
+  // Troca o FORMATO da partida (simples↔duplas) do popup de nomes — mesmo campo
+  // que o toggle do settings grava. Persiste, re-deriva os nomes combinados e
+  // propaga via set_config (como o settings). As pílulas passam a mostrar 1↔2.
+  const setMatchGameType = (newGt: string) => {
+    const cfg = gameConfigRef.current
+    if (!cfg) return
+    const newConfig: GameConfig = { ...cfg, gameType: newGt }
+    setGameConfig(newConfig)
+    gameConfigRef.current = newConfig
+    try {
+      localStorage.setItem(`tennis_match_${quadra}`, JSON.stringify(newConfig))
+    } catch {
+      // aba privada / cota
+    }
+    const p = newConfig.players
+    setBluePlayerName(newGt === "duplas" ? `${p.blue1}/${p.blue2}` : p.blue1)
+    setRedPlayerName(newGt === "duplas" ? `${p.red1}/${p.red2}` : p.red1)
+    sendRealtimeAction({ kind: "set_config", patch: { gameType: newGt } })
+  }
+
   const resetGame = () => {
     if (confirm("Tem certeza que deseja reiniciar o jogo? Todos os dados serão perdidos.")) {
       localStorage.removeItem(`tennis_engine_${quadra}`)
@@ -1654,6 +1677,15 @@ export default function JogoPage() {
           <span aria-hidden className="win-blink pointer-events-none absolute inset-0 z-20" />
         )}
 
+        {/* PÍLULAS de nome — RETRATO (B1a QA): saíram da faixa central (que
+            engordava e apertava o placar) e vieram para o TOPO do bloco,
+            horizontais e centradas, usando a largura. `landscape:hidden` (em
+            paisagem ficam no canto). Filhas do bloco → espelham de graça com o
+            mirror (A1), toque viaja junto. */}
+        <div className="landscape:hidden absolute left-0 right-0 top-0 z-10 flex justify-center px-3 pt-3">
+          {renderNamePills(team, "row")}
+        </div>
+
         {/* Canto: nome do jogador (pequeno) + indicador de saque.
             RETRATO (estreita-e-alta, blocos empilhados): o NOME SAI do canto (é
             `portrait:hidden` aqui) e passa para a FAIXA HORIZONTAL central sobre
@@ -2007,7 +2039,14 @@ export default function JogoPage() {
             : ([["blue", "a"], ["red", "b"]] as const)
           ).map(([team, key]) => (
             <Fragment key={team}>
-              <div className="min-w-0">{renderNamePills(team, "col")}</div>
+              {/* Nome na faixa central: single-line ENXUTO (como antes do B1a),
+                  read-only — a edição é pelas pílulas do topo do bloco (popup).
+                  Tocar aqui não edita: borbulha e abre o overview. */}
+              <div className="min-w-0">
+                <span className="player-name block w-full truncate text-left text-xs font-semibold uppercase tracking-wide text-white/90">
+                  {team === "blue" ? bluePlayerName : redPlayerName}
+                </span>
+              </div>
               {broadcastCols.map((c) => {
                 const color = !c.played
                   ? "rgba(255,255,255,0.35)"
@@ -2486,11 +2525,15 @@ export default function JogoPage() {
       {editingSide && (
         <NameEditModal
           accentColor={editingSide === "blue" ? "var(--lado-a-bg)" : "var(--lado-b-bg)"}
-          duplas={cfg.gameType === "duplas"}
-          initialNames={[
-            playersOf(editingSide)[0] ?? "",
-            playersOf(editingSide)[1] ?? "",
-          ]}
+          gameType={cfg.gameType}
+          onGameTypeChange={setMatchGameType}
+          // Sempre os DOIS nomes do lado (não filtrado por formato): trocar para
+          // duplas no popup revela o 2º nome já existente.
+          initialNames={
+            editingSide === "blue"
+              ? [cfg.players.blue1, cfg.players.blue2]
+              : [cfg.players.red1, cfg.players.red2]
+          }
           onSave={(p1, p2) => saveNames(editingSide, p1, p2)}
           onClose={() => setEditingSide(null)}
         />

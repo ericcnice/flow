@@ -19,21 +19,35 @@ import { Button } from "@/components/ui/button"
  */
 export function NameEditModal({
   accentColor,
-  duplas,
+  gameType,
+  onGameTypeChange,
   initialNames,
   onSave,
   onClose,
 }: {
   /** Cor do lado (var do tema) para um ponto indicador no cabeçalho. */
   accentColor: string
-  duplas: boolean
+  /** Formato atual da partida ('simples'|'duplas'). O toggle no topo o muda AO
+   *  VIVO (mesma escrita do settings, via onGameTypeChange) — revela/oculta o 2º
+   *  campo na hora. */
+  gameType: string
+  onGameTypeChange: (gameType: string) => void
   /** [nome1, nome2] atuais; nome2 ignorado em simples. */
   initialNames: [string, string]
   onSave: (p1: string, p2: string) => void
   onClose: () => void
 }) {
+  const [gt, setGt] = useState(gameType)
+  const duplas = gt === "duplas"
   const [p1, setP1] = useState(initialNames[0] ?? "")
   const [p2, setP2] = useState(initialNames[1] ?? "")
+
+  // Trocar o formato grava JÁ (mesmo campo do settings) e revela/oculta o 2º
+  // campo imediatamente. Sincroniza via onGameTypeChange (set_config no pai).
+  const trocarFormato = (v: string) => {
+    setGt(v)
+    onGameTypeChange(v)
+  }
 
   const salvar = () => {
     onSave(p1.trim(), p2.trim())
@@ -74,6 +88,27 @@ export function NameEditModal({
         </div>
 
         <div className="flex flex-col gap-3 px-5 py-5">
+          {/* Segmentado Simples|Duplas (estilo PONTOS|GAMES): muda o formato na
+              hora — Duplas revela o 2º campo, Simples oculta. */}
+          <div className="flex rounded-full bg-white/10 p-1 text-sm font-semibold">
+            {[
+              { v: "simples", label: "Simples" },
+              { v: "duplas", label: "Duplas" },
+            ].map((opt) => (
+              <button
+                key={opt.v}
+                type="button"
+                onClick={() => trocarFormato(opt.v)}
+                aria-pressed={gt === opt.v}
+                className={`flex-1 rounded-full px-3 py-1.5 transition ${
+                  gt === opt.v ? "bg-white text-neutral-900" : "text-white/70 hover:text-white"
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+
           <label className="flex flex-col gap-1.5">
             <span className="text-xs font-semibold uppercase tracking-wide text-white/60">
               {duplas ? "Jogador 1" : "Nome"}

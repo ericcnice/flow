@@ -165,7 +165,10 @@ export function ClubOpening({ ad }: { ad?: string }) {
       // closure antiga, e só o ref tem o adCfg final. Grava o SLUG, que é o que
       // /jogo e /placar re-resolvem depois. Sem patrocinador o campo nem aparece.
       ...(adCfgRef.current ? { ad: adCfgRef.current.slug } : {}),
-      gameType: "simples",
+      // Padrão do clube: 95% dos jogos são DUPLAS (QUADRA 2.0, B1a QA). Só o
+      // valor default muda — o fluxo da jornada (branding/patrocinador/timing)
+      // é idêntico. O juiz troca no card de setup ou no popup de nomes.
+      gameType: "duplas",
       scoreType: "pontos",
       players: { blue1: "Jogador 1", blue2: "Jogador 2", red1: "Jogador 3", red2: "Jogador 4" },
       startTime: new Date().toISOString(),
