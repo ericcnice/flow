@@ -1,6 +1,6 @@
 "use client"
 
-import { Fragment, useState, useEffect, useRef, type CSSProperties } from "react"
+import { Fragment, useState, useEffect, useRef, type CSSProperties, type ReactNode } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import Image from "next/image"
 import { NameEditModal } from "@/components/name-edit-modal"
@@ -194,6 +194,11 @@ function crossedSideChange(
 // Botão COMPARTILHAR: visual destacado (fundo sólido branco), diferente dos
 // demais botões glass. Centralizado aqui para ajuste fácil de cor/efeito.
 const SHARE_BTN_STYLE: CSSProperties = { background: "#ffffff", color: "#0a0a0a" }
+
+// ZONA DE INFORMAÇÃO (portrait): azul SUPER ESCURO, quase preto — o mesmo do
+// rodapé, consolidado como fundo do painel de placar geral E do menu bottom
+// sheet. Contraste deliberado: claro = jogo, escuro = informação.
+const INFO_BG = "#0a1024"
 
 export default function JogoPage() {
   const router = useRouter()
@@ -1869,7 +1874,6 @@ export default function JogoPage() {
     const sideKey = sideOf(team)
     const teamServing = team === "blue" ? blueServing : !blueServing
     const serverIdx = cfg.initialServer?.[sideKey] ?? 0
-    const bgVar = team === "blue" ? "--lado-a-bg" : "--lado-b-bg"
     const duplas = cfg.gameType === "duplas"
     const raw =
       team === "blue"
@@ -1886,31 +1890,61 @@ export default function JogoPage() {
     const showAmarela = serverEverChosen || started // antes da 1ª escolha: sem amarela
     const cinzaPulse = etapa === 2 && !serverEverChosen
 
+    // BOLA DE TÊNIS de verdade (SVG com costuras), ~70-80% da altura da pílula,
+    // nas extremidades internas. Sacador = amarela vibrante; não-sacador =
+    // acinzentada mas claramente uma bola. Identificável a 3 metros.
     const bola = (idx: number) => {
       const acesa = showAmarela && teamServing && idx === serverIdx
       return (
         <span
           aria-hidden
-          className={`h-3 w-3 shrink-0 rounded-full ring-1 ring-black/15 ${!acesa && cinzaPulse ? "serve-pill-pulse" : ""}`}
-          style={{ backgroundColor: acesa ? `var(${bgVar})` : "rgba(255,255,255,0.30)" }}
-        />
+          className={`block h-9 w-9 shrink-0 drop-shadow ${!acesa && cinzaPulse ? "serve-pill-pulse" : ""}`}
+        >
+          <svg viewBox="0 0 100 100" className="h-full w-full">
+            <circle
+              cx="50"
+              cy="50"
+              r="48"
+              fill={acesa ? "#FEE100" : "#8b95a7"}
+              stroke="rgba(0,0,0,0.25)"
+              strokeWidth="2"
+            />
+            <path
+              d="M20 12 C40 34 40 66 20 88"
+              fill="none"
+              stroke={acesa ? "#b89b00" : "#59616f"}
+              strokeWidth="5"
+              strokeLinecap="round"
+            />
+            <path
+              d="M80 12 C60 34 60 66 80 88"
+              fill="none"
+              stroke={acesa ? "#b89b00" : "#59616f"}
+              strokeWidth="5"
+              strokeLinecap="round"
+            />
+          </svg>
+        </span>
       )
     }
     const logoEl = logoForTeam(team) ? (
-      <span className="relative block h-6 w-6 shrink-0 overflow-hidden rounded-full ring-1 ring-white/20">
-        <Image src={logoForTeam(team)!} alt="" fill sizes="24px" className="object-cover" />
+      <span className="relative block h-7 w-7 shrink-0 overflow-hidden rounded-full ring-1 ring-white/25">
+        <Image src={logoForTeam(team)!} alt="" fill sizes="28px" className="object-cover" />
       </span>
     ) : (
-      <span className="h-6 w-6 shrink-0" aria-hidden />
+      <span className="h-7 w-7 shrink-0" aria-hidden />
     )
     const nameEl = (n: string) => (
-      <span className="truncate text-sm font-semibold uppercase tracking-wide text-white/90">{n}</span>
+      <span className="truncate text-sm font-bold uppercase tracking-wide text-white">{n}</span>
     )
 
+    // Pílula FLUTUANTE: glass, rounded-full, sombra. `pointer-events-auto` (o
+    // container ao redor é pointer-events-none → tocar fora da pílula marca ponto).
     const wrap =
-      "glass grid w-full grid-cols-[1fr_auto_1fr] items-center gap-2 rounded-full px-3 py-2 min-h-[44px]"
+      "glass pointer-events-auto grid w-full grid-cols-[1fr_auto_1fr] items-center gap-2 rounded-full px-2.5 py-1 shadow-lg ring-1 ring-white/10 min-h-[52px]"
 
-    // ETAPA 2: células tocáveis (jogador → saque; centro → editar).
+    // ETAPA 2: células tocáveis (jogador → saque; centro/logo → editar).
+    // Grupos com justify-between: bola na EXTREMIDADE, nome perto do logo.
     if (etapa === 2) {
       return (
         <div className={wrap}>
@@ -1920,7 +1954,7 @@ export default function JogoPage() {
               e.stopPropagation()
               chooseServer(team, 0)
             }}
-            className="flex min-w-0 items-center justify-start gap-2"
+            className="flex min-w-0 items-center justify-between gap-2"
           >
             {bola(0)}
             {nameEl(names[0])}
@@ -1943,7 +1977,7 @@ export default function JogoPage() {
                 e.stopPropagation()
                 chooseServer(team, 1)
               }}
-              className="flex min-w-0 items-center justify-end gap-2"
+              className="flex min-w-0 items-center justify-between gap-2"
             >
               {nameEl(names[1])}
               {bola(1)}
@@ -1966,13 +2000,13 @@ export default function JogoPage() {
         aria-label="Editar nomes"
         className={`${wrap} ${etapa === 1 ? "serve-pill-pulse" : ""}`}
       >
-        <span className="flex min-w-0 items-center justify-start gap-2">
+        <span className="flex min-w-0 items-center justify-between gap-2">
           {bola(0)}
           {nameEl(names[0])}
         </span>
         {logoEl}
         {duplas ? (
-          <span className="flex min-w-0 items-center justify-end gap-2">
+          <span className="flex min-w-0 items-center justify-between gap-2">
             {nameEl(names[1])}
             {bola(1)}
           </span>
@@ -2000,7 +2034,7 @@ export default function JogoPage() {
         tabIndex={0}
         aria-label={`Marcar ponto para ${nameA}`}
         onClick={() => handleScoreClick(team)}
-        className={`relative flex min-h-0 flex-1 basis-0 cursor-pointer select-none flex-col items-stretch justify-center overflow-hidden
+        className={`absolute inset-0 flex cursor-pointer select-none flex-col items-stretch justify-center overflow-hidden
           ${animating ? "point-flash" : ""}`}
         style={
           {
@@ -2041,9 +2075,12 @@ export default function JogoPage() {
     ]
     const ordered = mirrored ? [rows[1], rows[0]] : rows
     return (
-      <div className="pointer-events-none w-full px-3 pb-1 pt-1">
+      <div
+        className="pointer-events-none w-full px-3 py-2"
+        style={{ backgroundColor: INFO_BG }}
+      >
         <div
-          className="glass mx-auto grid max-w-md items-center gap-x-2 gap-y-1 rounded-2xl px-3 py-2"
+          className="mx-auto grid max-w-md items-center gap-x-2 gap-y-1 rounded-2xl px-3 py-2 ring-1 ring-white/10"
           style={{ gridTemplateColumns: "auto minmax(0,1fr) 1.4rem repeat(5, 1.05rem)" }}
         >
           {ordered.map(({ team, key }) => {
@@ -2090,112 +2127,102 @@ export default function JogoPage() {
     )
   }
 
-  // MENU inferior (portrait). Recolhido = só a engrenagem (canto direito). Aberto
-  // = pílula com os MESMOS controles de hoje (undo · share · Pontos|Games · voz ·
-  // sair · setup · X). Fecha no X, toque fora, ou após qualquer ação.
+  // MENU (portrait): BOTTOM SHEET. Recolhido = engrenagem flutuante no bloco B
+  // (ver renderPortrait). Aberto = painel sólido (azul super escuro, SEM glass)
+  // deslizando de baixo (~1/3). Fecha no X, toque fora (jogo acima) ou pós-ação.
   const runMenu = (fn: () => void) => {
     setMenuOpen(false)
     fn()
   }
-  const renderPortraitMenu = () => (
-    <div className="relative flex w-full items-center justify-end px-3 pb-3 pt-1">
-      {menuOpen ? (
-        <>
-          {/* Toque fora fecha. */}
-          <div className="fixed inset-0 z-30" onClick={() => setMenuOpen(false)} aria-hidden />
-          <div
-            className="glass relative z-40 flex items-center gap-2 rounded-full p-1.5"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <button
-              type="button"
-              onClick={() => runMenu(undoLastPoint)}
-              disabled={!started}
-              aria-label="Desfazer último ponto"
-              className="glass rounded-full p-2.5 transition-transform active:scale-95 disabled:pointer-events-none disabled:opacity-40"
-            >
-              <Undo2 className="h-5 w-5" />
-            </button>
-            <button
-              type="button"
-              onClick={() => runMenu(() => setShareOpen(true))}
-              aria-label="Compartilhar partida"
-              style={SHARE_BTN_STYLE}
-              className="rounded-full p-2.5 shadow-lg ring-1 ring-black/10 transition-transform active:scale-95"
-            >
-              <Share2 className="h-5 w-5" />
-            </button>
-            <div className="flex items-center gap-1 rounded-full bg-white/10 p-1">
-              {(
-                [
-                  ["pontos", "Pontos"],
-                  ["games", "Games"],
-                ] as const
-              ).map(([mode, label]) => {
-                const on = gameConfig.scoreType === mode
-                return (
-                  <button
-                    key={mode}
-                    type="button"
-                    onClick={() => {
-                      if (!on) runMenu(toggleScoreType)
-                      else setMenuOpen(false)
-                    }}
-                    aria-pressed={on}
-                    className={`rounded-full px-3 py-1 text-[10px] font-bold uppercase tracking-wide transition-colors ${
-                      on ? "central-seg-on" : "opacity-60"
-                    }`}
-                  >
-                    {label}
-                  </button>
-                )
-              })}
-            </div>
-            <button
-              type="button"
-              onClick={() => runMenu(toggleVoice)}
-              aria-label={voiceEnabled ? "Desligar voz" : "Ligar voz"}
-              className="glass rounded-full p-2.5 transition-transform active:scale-95"
-            >
-              {voiceEnabled ? <Volume2 className="h-5 w-5" /> : <VolumeX className="h-5 w-5 opacity-70" />}
-            </button>
-            <button
-              type="button"
-              onClick={() => runMenu(endMatch)}
-              aria-label="Encerrar / sair"
-              className="glass rounded-full p-2.5 transition-transform active:scale-95"
-            >
-              <LogOut className="h-5 w-5" />
-            </button>
-            <button
-              type="button"
-              onClick={() => runMenu(() => setSetupOpen(true))}
-              aria-label="Configurações"
-              className="glass rounded-full p-2.5 transition-transform active:scale-95"
-            >
-              <Settings className="h-5 w-5" />
-            </button>
-            <button
-              type="button"
-              onClick={() => setMenuOpen(false)}
-              aria-label="Fechar menu"
-              className="glass rounded-full p-2.5 transition-transform active:scale-95"
-            >
-              <X className="h-5 w-5" />
-            </button>
-          </div>
-        </>
-      ) : (
+  // Botão do menu: ícone circular GRANDE (alvo ≥56px) + rótulo pequeno embaixo.
+  const menuBtn = (icon: ReactNode, label: string, onClick: () => void, disabled = false) => (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      aria-label={label}
+      className="flex min-w-[56px] flex-col items-center gap-1 disabled:opacity-40"
+    >
+      <span className="flex h-14 w-14 items-center justify-center rounded-full bg-white/10 text-white transition active:scale-95">
+        {icon}
+      </span>
+      <span className="text-[10px] font-medium text-white/70">{label}</span>
+    </button>
+  )
+  const renderBottomSheet = () => (
+    <>
+      {/* Toque fora (área do jogo acima) fecha. */}
+      <div className="fixed inset-0 z-40" onClick={() => setMenuOpen(false)} aria-hidden />
+      <div
+        className="animate-in slide-in-from-bottom fixed inset-x-0 bottom-0 z-50 flex flex-col gap-4 rounded-t-3xl px-5 pb-7 pt-6 shadow-2xl duration-200"
+        style={{ backgroundColor: INFO_BG }}
+        onClick={(e) => e.stopPropagation()}
+      >
         <button
           type="button"
-          onClick={() => setMenuOpen(true)}
-          aria-label="Menu"
-          className="glass rounded-full p-2.5 transition-transform active:scale-95"
+          onClick={() => setMenuOpen(false)}
+          aria-label="Fechar menu"
+          className="absolute right-3 top-3 rounded-full p-2 text-white/60 transition hover:text-white active:scale-95"
         >
-          <Settings className="h-5 w-5" />
+          <X className="h-5 w-5" />
         </button>
-      )}
-    </div>
+
+        {/* LINHA 1: 5 ações. COMPARTILHAR no CENTRO (posição de honra, fundo
+            branco diferenciado — incentivar o share como motor de aquisição). */}
+        <div className="mt-1 flex items-end justify-between gap-1">
+          {menuBtn(<Undo2 className="h-6 w-6" />, "Desfazer", () => runMenu(undoLastPoint), !started)}
+          {menuBtn(
+            voiceEnabled ? <Volume2 className="h-6 w-6" /> : <VolumeX className="h-6 w-6 opacity-70" />,
+            "Volume",
+            () => runMenu(toggleVoice),
+          )}
+          <button
+            type="button"
+            onClick={() => runMenu(() => setShareOpen(true))}
+            aria-label="Compartilhar partida"
+            className="flex min-w-[56px] flex-col items-center gap-1"
+          >
+            <span
+              style={SHARE_BTN_STYLE}
+              className="flex h-16 w-16 items-center justify-center rounded-full shadow-lg ring-1 ring-black/10 transition active:scale-95"
+            >
+              <Share2 className="h-7 w-7" />
+            </span>
+            <span className="text-[10px] font-bold text-white">Compartilhar</span>
+          </button>
+          {menuBtn(<LogOut className="h-6 w-6" />, "Sair", () => runMenu(endMatch))}
+          {menuBtn(<Settings className="h-6 w-6" />, "Ajustes", () => runMenu(() => setSetupOpen(true)))}
+        </div>
+
+        {/* LINHA 2: segmentado PONTOS|GAMES sozinho, largo e centrado. */}
+        <div className="flex w-full items-center gap-1 rounded-full bg-white/10 p-1">
+          {(
+            [
+              ["pontos", "Pontos"],
+              ["games", "Games"],
+            ] as const
+          ).map(([mode, label]) => {
+            const on = gameConfig.scoreType === mode
+            return (
+              <button
+                key={mode}
+                type="button"
+                onClick={() => {
+                  if (!on) runMenu(toggleScoreType)
+                  else setMenuOpen(false)
+                }}
+                aria-pressed={on}
+                className={`flex-1 rounded-full px-3 py-2.5 text-xs font-bold uppercase tracking-wide transition-colors ${
+                  on ? "central-seg-on" : "text-white/60"
+                }`}
+              >
+                {label}
+              </button>
+            )
+          })}
+        </div>
+      </div>
+    </>
   )
 
   // Monta a tela vertical: swipe + mirror POR ORDEM (mirror troca as seções de
@@ -2228,14 +2255,42 @@ export default function JogoPage() {
             swipeStartRef.current = null
           }}
         >
-          <div className="shrink-0 px-2 pt-2">{renderNameFaixa(order[0])}</div>
-          {renderTouchBlockPortrait(order[0])}
+          {/* BLOCO order[0]: bloco de toque (absolute inset-0) + pílula FLUTUANTE
+              no TOPO. O container da pílula é pointer-events-none → tocar FORA
+              dela (mesmo nesta faixa de altura) marca ponto; a pílula é
+              pointer-events-auto (stopPropagation só na área dela). Blocos são
+              flex-1/basis-0 → alturas IDÊNTICAS (as pílulas não roubam altura). */}
+          <div className="relative flex min-h-0 flex-1 basis-0 overflow-hidden">
+            {renderTouchBlockPortrait(order[0])}
+            <div className="pointer-events-none absolute inset-x-0 top-3 z-10 flex justify-center px-3">
+              {renderNameFaixa(order[0])}
+            </div>
+          </div>
+
           <div className="h-px shrink-0" style={{ backgroundColor: "var(--palco-divisor)" }} />
-          {renderTouchBlockPortrait(order[1])}
-          <div className="shrink-0 px-2 pb-1 pt-1">{renderNameFaixa(order[1])}</div>
+
+          {/* BLOCO order[1]: pílula FLUTUANTE na BASE + ENGRENAGEM flutuante no
+              canto inferior direito (absolute, sem ocupar linha). */}
+          <div className="relative flex min-h-0 flex-1 basis-0 overflow-hidden">
+            {renderTouchBlockPortrait(order[1])}
+            <div className="pointer-events-none absolute inset-x-0 bottom-3 z-10 flex justify-center px-3">
+              {renderNameFaixa(order[1])}
+            </div>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation()
+                setMenuOpen(true)
+              }}
+              aria-label="Menu"
+              className="glass absolute bottom-3 right-3 z-20 rounded-full p-2.5 text-white transition active:scale-95"
+            >
+              <Settings className="h-5 w-5" />
+            </button>
+          </div>
         </main>
         <div className="shrink-0">{renderScorePanel()}</div>
-        <div className="shrink-0">{renderPortraitMenu()}</div>
+        {menuOpen && renderBottomSheet()}
       </>
     )
   }
@@ -2419,7 +2474,7 @@ export default function JogoPage() {
           geral é o painel inferior fixo (renderScorePanel). */}
 
       {/* BARRA DE CONTROLES (LANDSCAPE): botões soltos no rodapé. Só em paisagem —
-          no portrait viraram o menu recolhível (renderPortraitMenu). */}
+          no portrait viraram a engrenagem flutuante + bottom sheet. */}
       {!isPortrait && (
       <div className="pointer-events-none absolute inset-x-3 bottom-4 z-20 grid grid-cols-3 items-center">
         {/* ESQUERDA: COMPARTILHAR + VOLTAR (undo). O undo é SEMPRE renderizado:
