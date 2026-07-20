@@ -104,11 +104,28 @@ function abbrevName(full: string): string {
   return `${first.charAt(0).toUpperCase()}. ${rest}`
 }
 
-// Nome ainda no fallback ("Jogador 1/2/3/4" ou vazio) — usado para detectar a
-// ETAPA 1 (nomes não editados) da faixa de nomes do portrait.
+// Nome ainda no fallback ("Player 1..4", legado "Jogador 1..4" ou vazio) — usado
+// para detectar a ETAPA 1 (nomes não editados) da faixa de nomes do portrait.
+// Reconhece o legado "Jogador" (partidas/jornada antigas) além do novo "Player".
 function isFallbackName(n: string): boolean {
   const t = (n ?? "").trim()
-  return !t || /^jogador\s*\d?$/i.test(t)
+  return !t || /^(player|jogador)\s*\d?$/i.test(t)
+}
+
+/** Rótulo fallback canônico por posição global (blue1=1, blue2=2, red1=3, red2=4). */
+function fallbackLabel(team: "blue" | "red", idx: number): string {
+  return `Player ${team === "blue" ? idx + 1 : idx + 3}`
+}
+
+/**
+ * Nome para EXIBIÇÃO (portrait): fallback/vazio → "Player N" INTEIRO (nunca
+ * abrevia); nome digitado pelo usuário → abreviação broadcast quando pedida
+ * ("Eric Nice" → "E. Nice"). A abreviação NÃO se aplica a fallbacks.
+ */
+function displayName(raw: string, team: "blue" | "red", idx: number, abbrev: boolean): string {
+  const t = (raw ?? "").trim()
+  if (!t || isFallbackName(t)) return fallbackLabel(team, idx)
+  return abbrev ? abbrevName(t) : t
 }
 
 // Guarda DEFENSIVA: um objeto de regras é do FORMATO esperado pela família do
@@ -494,7 +511,7 @@ export default function JogoPage() {
             // (&gameType=); fallback 'duplas' (padrão do clube) p/ links antigos.
             gameType: gameTypeParam === "simples" || gameTypeParam === "duplas" ? gameTypeParam : "duplas",
             scoreType: loadedScoreType,
-            players: { blue1: "Jogador 1", blue2: "Jogador 2", red1: "Jogador 3", red2: "Jogador 4" },
+            players: { blue1: "Player 1", blue2: "Player 2", red1: "Player 3", red2: "Player 4" },
             startTime: new Date().toISOString(),
             maxSets: (rRules?.bestOf as number) || 3,
             matchId: remote.id,
@@ -503,8 +520,8 @@ export default function JogoPage() {
           setGameConfig(synthetic)
           setTheme(resolvedTheme)
           setClube(null)
-          setBluePlayerName("Jogador 1")
-          setRedPlayerName("Jogador 3")
+          setBluePlayerName("Player 1")
+          setRedPlayerName("Player 3")
           setStartTime(new Date(synthetic.startTime))
           setMaxSets(synthetic.maxSets || 3)
           if (cleanActions.length > 0) hadRemoteActionsRef.current = true
@@ -1883,8 +1900,12 @@ export default function JogoPage() {
         : duplas
           ? [cfg.players.red1, cfg.players.red2]
           : [cfg.players.red1]
-    const fallbackFor = (i: number) => `Jogador ${team === "blue" ? i + 1 : i + 3}`
-    const names = raw.map((n, i) => abbrevName(n?.trim() || fallbackFor(i)))
+    // Nomes exibidos: fallback → "Player N" INTEIRO (nunca abrevia); digitado →
+    // abreviação broadcast.
+    const names = raw.map((n, i) => displayName(n, team, i, true))
+    // ETAPA por gameType: `raw` já contém só os slots do formato (simples = 1 por
+    // lado, duplas = 2), então every() checa exatamente os nomes que importam —
+    // um simples com o único nome preenchido cai na etapa 2 (não exige os 4).
     const etapa = started ? 3 : raw.every(isFallbackName) ? 1 : 2
 
     const showAmarela = serverEverChosen || started // antes da 1ª escolha: sem amarela
@@ -1940,14 +1961,61 @@ export default function JogoPage() {
 
     // Pílula FLUTUANTE: glass, rounded-full, sombra. `pointer-events-auto` (o
     // container ao redor é pointer-events-none → tocar fora da pílula marca ponto).
-    const wrap =
-      "glass pointer-events-auto grid w-full grid-cols-[1fr_auto_1fr] items-center gap-2 rounded-full px-2.5 py-1 shadow-lg ring-1 ring-white/10 min-h-[52px]"
+    const pill =
+      "glass pointer-events-auto w-full rounded-full px-3 py-1 shadow-lg ring-1 ring-white/10 min-h-[52px]"
+    const editOnClick = (e: { stopPropagation: () => void }) => {
+      e.stopPropagation()
+      setEditingSide(team)
+    }
+    const nameCentered = (
+      <span className="min-w-0 flex-1 truncate text-center text-sm font-bold uppercase tracking-wide text-white">
+        {names[0]}
+      </span>
+    )
 
-    // ETAPA 2: células tocáveis (jogador → saque; centro/logo → editar).
-    // Grupos com justify-between: bola na EXTREMIDADE, nome perto do logo.
+    // SIMPLES (item 5a): [LOGO na esquerda] [Nome no centro] [BOLA na direita] —
+    // o logo assume a ponta que a 2ª bola ocuparia em duplas.
+    if (!duplas) {
+      if (etapa === 2) {
+        return (
+          <div className={`${pill} flex items-center gap-2`}>
+            <button type="button" onClick={editOnClick} aria-label="Editar nomes" className="shrink-0">
+              {logoEl}
+            </button>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation()
+                chooseServer(team, 0)
+              }}
+              className="flex min-w-0 flex-1 items-center gap-2"
+            >
+              {nameCentered}
+              {bola(0)}
+            </button>
+          </div>
+        )
+      }
+      return (
+        <button
+          type="button"
+          onClick={editOnClick}
+          aria-label="Editar nomes"
+          className={`${pill} flex items-center gap-2 ${etapa === 1 ? "serve-pill-pulse" : ""}`}
+        >
+          {logoEl}
+          {nameCentered}
+          {bola(0)}
+        </button>
+      )
+    }
+
+    // DUPLAS: [bola][Nome1] [LOGO] [Nome2][bola]. Grupos justify-between → bola na
+    // EXTREMIDADE, nome perto do logo.
+    const gridPill = `${pill} grid grid-cols-[1fr_auto_1fr] items-center gap-2`
     if (etapa === 2) {
       return (
-        <div className={wrap}>
+        <div className={gridPill}>
           <button
             type="button"
             onClick={(e) => {
@@ -1959,60 +2027,39 @@ export default function JogoPage() {
             {bola(0)}
             {nameEl(names[0])}
           </button>
+          <button type="button" onClick={editOnClick} aria-label="Editar nomes" className="shrink-0">
+            {logoEl}
+          </button>
           <button
             type="button"
             onClick={(e) => {
               e.stopPropagation()
-              setEditingSide(team)
+              chooseServer(team, 1)
             }}
-            aria-label="Editar nomes"
-            className="shrink-0"
+            className="flex min-w-0 items-center justify-between gap-2"
           >
-            {logoEl}
+            {nameEl(names[1])}
+            {bola(1)}
           </button>
-          {duplas ? (
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation()
-                chooseServer(team, 1)
-              }}
-              className="flex min-w-0 items-center justify-between gap-2"
-            >
-              {nameEl(names[1])}
-              {bola(1)}
-            </button>
-          ) : (
-            <span aria-hidden />
-          )}
         </div>
       )
     }
-
-    // ETAPAS 1 e 3: qualquer toque abre o popup (etapa 1 pulsa a pílula inteira).
     return (
       <button
         type="button"
-        onClick={(e) => {
-          e.stopPropagation()
-          setEditingSide(team)
-        }}
+        onClick={editOnClick}
         aria-label="Editar nomes"
-        className={`${wrap} ${etapa === 1 ? "serve-pill-pulse" : ""}`}
+        className={`${gridPill} ${etapa === 1 ? "serve-pill-pulse" : ""}`}
       >
         <span className="flex min-w-0 items-center justify-between gap-2">
           {bola(0)}
           {nameEl(names[0])}
         </span>
         {logoEl}
-        {duplas ? (
-          <span className="flex min-w-0 items-center justify-between gap-2">
-            {nameEl(names[1])}
-            {bola(1)}
-          </span>
-        ) : (
-          <span aria-hidden />
-        )}
+        <span className="flex min-w-0 items-center justify-between gap-2">
+          {nameEl(names[1])}
+          {bola(1)}
+        </span>
       </button>
     )
   }
@@ -2084,7 +2131,18 @@ export default function JogoPage() {
           style={{ gridTemplateColumns: "auto minmax(0,1fr) 1.4rem repeat(5, 1.05rem)" }}
         >
           {ordered.map(({ team, key }) => {
-            const combined = team === "blue" ? bluePlayerName : redPlayerName
+            // Nomes do painel: mesma regra da faixa (fallback → "Player N" inteiro;
+            // digitado → abreviado). Simples = 1 nome; duplas = "N1 / N2".
+            const p = cfg.players
+            const combined =
+              cfg.gameType === "duplas"
+                ? `${displayName(team === "blue" ? p.blue1 : p.red1, team, 0, true)} / ${displayName(
+                    team === "blue" ? p.blue2 : p.red2,
+                    team,
+                    1,
+                    true,
+                  )}`
+                : displayName(team === "blue" ? p.blue1 : p.red1, team, 0, true)
             const logo = logoForTeam(team)
             const point = pointOf(sideOf(team))
             return (
@@ -2269,11 +2327,12 @@ export default function JogoPage() {
 
           <div className="h-px shrink-0" style={{ backgroundColor: "var(--palco-divisor)" }} />
 
-          {/* BLOCO order[1]: pílula FLUTUANTE na BASE + ENGRENAGEM flutuante no
-              canto inferior direito (absolute, sem ocupar linha). */}
+          {/* BLOCO order[1]: pílula FLUTUANTE no TOPO (espelho do time A — cada
+              pílula apresenta seu bloco na ENTRADA, logo abaixo da divisória) +
+              ENGRENAGEM flutuante no canto inferior direito (sem colisão). */}
           <div className="relative flex min-h-0 flex-1 basis-0 overflow-hidden">
             {renderTouchBlockPortrait(order[1])}
-            <div className="pointer-events-none absolute inset-x-0 bottom-3 z-10 flex justify-center px-3">
+            <div className="pointer-events-none absolute inset-x-0 top-3 z-10 flex justify-center px-3">
               {renderNameFaixa(order[1])}
             </div>
             <button
