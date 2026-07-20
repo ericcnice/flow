@@ -27,8 +27,7 @@ function toRacketRules(rules: PadelRules): RacketRules {
   return {
     gamesPerSet: rules.gamesPerSet,
     advantage: !rules.goldenPoint,
-    tiebreak: rules.tiebreak,
-    superTiebreak: rules.superTiebreak,
+    tiebreakMode: rules.tiebreakMode,
     bestOf: rules.bestOf,
   }
 }
@@ -41,8 +40,7 @@ export const padelModule: SportModule<PadelRules> = {
     return {
       gamesPerSet: 6,
       goldenPoint: true, // padrão real: ponto de ouro (no-ad) no 40-40
-      tiebreak: { enabled: true, target: 7, mode: "by-two" },
-      superTiebreak: { enabled: false, target: 10, mode: "by-two" },
+      tiebreakMode: "tb7",
       bestOf: 3,
     }
   },

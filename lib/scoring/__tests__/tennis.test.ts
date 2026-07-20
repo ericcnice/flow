@@ -14,6 +14,7 @@ import assert from "node:assert/strict"
 
 import { ScoringEngine } from "../engine.ts"
 import { tennisModule } from "../sports/tennis.ts"
+import { resolveTiebreakMode, migrateRacketRules } from "../sports/racket-core.ts"
 import type { ScoringEvent, ScoringEventType, Side, TennisRules } from "../types"
 
 // ---------- helpers ----------
@@ -174,37 +175,32 @@ test("tiebreak em 6-6 e vitória por 2", () => {
   assert.deepEqual(s.completedSets[0], { set: 1, A: 7, B: 6, tiebreak: true })
 })
 
-// ---------- 5) Super tiebreak substituindo o set decisivo ----------
+// ---------- 5) Modo super10: tiebreak de 10 no 6-6 ----------
 
-test("super tiebreak substitui o set decisivo e fecha a partida", () => {
-  const engine = makeEngine({
-    superTiebreak: { enabled: true, target: 10, mode: "by-two" },
-  })
+test("modo super10: 6-6 abre tiebreak até 10 (diff 2), fecha 7-6 e a partida avança", () => {
+  const engine = makeEngine({ tiebreakMode: "super10" })
 
-  // Set 1 para A, Set 2 para B → 1-1, entra o set decisivo (3).
-  for (let i = 0; i < 6; i++) cleanGame(engine, "A")
-  for (let i = 0; i < 6; i++) cleanGame(engine, "B")
+  for (let i = 0; i < 6; i++) {
+    cleanGame(engine, "A")
+    cleanGame(engine, "B")
+  } // 6-6
+  let s = engine.getState()
+  assert.equal(s.isTiebreak, true, "6-6 entra em tiebreak")
+  assert.equal(s.isSuperTiebreak, true, "modo super10 → super")
 
-  const mid = engine.getState()
-  assert.equal(mid.currentSet, 3, "set decisivo")
-  assert.equal(mid.isTiebreak, true, "decisivo começa em tiebreak")
-  assert.equal(mid.isSuperTiebreak, true, "é um super tiebreak")
-
-  // Super tiebreak até 10 para A → vence set e partida.
-  score(engine, "A", 9)
-  assert.equal(engine.getState().finished, false)
-  const ev = score(engine, "A", 1) // 10 → fecha
-  assert.ok(has(ev, "MATCH"), "vencer o super tiebreak fecha a partida")
-
-  const s = engine.getState()
-  assert.equal(s.finished, true)
-  assert.equal(s.winner, "A")
-  assert.equal(s.A.sets, 2)
-  assert.deepEqual(s.completedSets[2], { set: 3, A: 1, B: 0, tiebreak: true })
+  score(engine, "A", 9) // 9-0
+  assert.equal(engine.getState().isTiebreak, true, "9-0 não fecha (precisa 10)")
+  const ev = score(engine, "A", 1) // 10-0 → fecha (diff 2)
+  assert.ok(has(ev, "SET"), "chegar a 10 com diff 2 fecha o set")
+  s = engine.getState()
+  assert.equal(s.isTiebreak, false)
+  assert.equal(s.A.sets, 1)
+  assert.deepEqual(s.completedSets[0], { set: 1, A: 7, B: 6, tiebreak: true }, "set fecha 7-6")
+  assert.equal(s.currentSet, 2, "partida avança")
 })
 
 test("partida ignora pontos após terminar", () => {
-  const engine = makeEngine({ gamesPerSet: 2, bestOf: 3, tiebreak: { enabled: false, target: 7, mode: "by-two" } })
+  const engine = makeEngine({ gamesPerSet: 2, bestOf: 3, tiebreakMode: "advantage" })
   // gamesPerSet 2: 2 games limpos fecham cada set.
   cleanGame(engine, "A")
   cleanGame(engine, "A") // set 1
@@ -249,7 +245,7 @@ test("undo atravessa a fronteira de um game", () => {
 })
 
 test("undo reverte o fim da partida", () => {
-  const engine = makeEngine({ gamesPerSet: 2, bestOf: 3, tiebreak: { enabled: false, target: 7, mode: "by-two" } })
+  const engine = makeEngine({ gamesPerSet: 2, bestOf: 3, tiebreakMode: "advantage" })
   cleanGame(engine, "A")
   cleanGame(engine, "A") // set 1
   cleanGame(engine, "A")
@@ -347,4 +343,62 @@ test("REGRESSÃO: gamesPerSet como STRING ('6') ainda abre o tiebreak no 6-6", (
   assert.equal(s.isTiebreak, true, "string '6' também dispara o tiebreak de set no 6-6")
   assert.equal(s.A.games, 6)
   assert.equal(s.B.games, 6)
+})
+
+// ---------- Modo 'advantage': sem tiebreak, set por vantagem de games ----------
+
+test("modo advantage: 6-6 NÃO fecha; segue 7-6, 8-6 (vantagem de 2 games)", () => {
+  const engine = makeEngine({ tiebreakMode: "advantage" })
+  for (let i = 0; i < 6; i++) {
+    cleanGame(engine, "A")
+    cleanGame(engine, "B")
+  } // 6-6
+  let s = engine.getState()
+  assert.equal(s.isTiebreak, false, "advantage: 6-6 NÃO entra em tiebreak")
+  assert.equal(s.A.games, 6)
+  assert.equal(s.B.games, 6)
+
+  cleanGame(engine, "A") // 7-6 → não fecha (diff 1)
+  assert.equal(engine.getState().isTiebreak, false)
+  assert.equal(engine.getState().A.sets, 0, "7-6 não fecha o set")
+
+  const ev = cleanGame(engine, "A") // 8-6 → fecha (diff 2)
+  assert.ok(has(ev, "SET"), "8-6 fecha o set por vantagem")
+  s = engine.getState()
+  assert.deepEqual(s.completedSets[0], { set: 1, A: 8, B: 6 }, "set 8-6, SEM flag tiebreak")
+})
+
+// ---------- Migração de config legada → tiebreakMode ----------
+
+test("migração: flags legados (tiebreak/superTiebreak) mapeiam para tiebreakMode", () => {
+  const tb = { enabled: true, target: 7, mode: "by-two" }
+  const sup = { enabled: true, target: 10, mode: "by-two" }
+  const off = { enabled: false, target: 7, mode: "by-two" }
+
+  // super ligado → super10 (prioridade, cobre "ambos ligados")
+  assert.equal(resolveTiebreakMode({ gamesPerSet: 6, tiebreak: tb, superTiebreak: sup }), "super10")
+  assert.equal(resolveTiebreakMode({ gamesPerSet: 6, tiebreak: off, superTiebreak: sup }), "super10")
+  // tiebreak ligado e super desligado → tb7
+  assert.equal(resolveTiebreakMode({ gamesPerSet: 6, tiebreak: tb, superTiebreak: off }), "tb7")
+  // ambos desligados → advantage
+  assert.equal(resolveTiebreakMode({ gamesPerSet: 6, tiebreak: off, superTiebreak: off }), "advantage")
+  // ausência total → tb7 (tolerante)
+  assert.equal(resolveTiebreakMode({ gamesPerSet: 6 }), "tb7")
+  // já novo → idempotente
+  assert.equal(resolveTiebreakMode({ gamesPerSet: 6, tiebreakMode: "super10" }), "super10")
+
+  // migrateRacketRules injeta o campo (tênis) e é no-op fora da família (sem gamesPerSet)
+  assert.equal(migrateRacketRules({ gamesPerSet: 6, tiebreak: tb } as any).tiebreakMode, "tb7")
+  const rally = { target: 11, winBy: 2 }
+  assert.deepEqual(migrateRacketRules(rally), rally, "rally (sem gamesPerSet) não é tocado")
+
+  // Legado que reproduz o BUG relatado (tiebreak ligado, super desligado) roda
+  // no motor via migração e DISPARA o tiebreak no 6-6:
+  const legacy = { gamesPerSet: 6, advantage: true, tiebreak: tb, superTiebreak: off, bestOf: 3 }
+  const engine = new ScoringEngine(tennisModule, migrateRacketRules(legacy) as unknown as TennisRules)
+  for (let i = 0; i < 6; i++) {
+    engine.awardGameFor("A")
+    engine.awardGameFor("B")
+  }
+  assert.equal(engine.getState().isTiebreak, true, "config legada migrada → 6-6 entra em tiebreak")
 })

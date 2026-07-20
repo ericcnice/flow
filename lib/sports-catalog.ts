@@ -21,7 +21,7 @@ import { padelModule } from "./scoring/sports/padel"
 import { squashModule } from "./scoring/sports/squash"
 import { tableTennisModule } from "./scoring/sports/tabletennis"
 import { pickleballModule } from "./scoring/sports/pickleball"
-import { pointLabel } from "./scoring/sports/racket-core"
+import { pointLabel, resolveTiebreakMode, migrateRacketRules } from "./scoring/sports/racket-core"
 
 /** Ids estáveis dos 6 esportes ligados à UI. */
 export type SportId = "tennis" | "beach" | "padel" | "squash" | "tabletennis" | "pickleball"
@@ -232,6 +232,22 @@ export type RuleControl = {
   set: (rules: any, value: RuleOption["value"]) => any
 }
 
+// Seletor ÚNICO de desempate no 6-6 (substitui os dois toggles Tiebreak/Super).
+// 3 opções mutuamente exclusivas, grava `tiebreakMode`. O `get` usa
+// resolveTiebreakMode → mostra a opção certa mesmo em config LEGADA (flags antigos).
+// (Espaço conceitual para uma 4ª opção "tb7 nos sets + super10 no decisivo" = Etapa 2.)
+const tiebreakModeControl = (): RuleControl => ({
+  key: "tiebreakMode",
+  label: "Desempate no 6-6",
+  options: [
+    { label: "Tiebreak (7)", value: "tb7" },
+    { label: "Super tiebreak (10)", value: "super10" },
+    { label: "Sem (vantagem)", value: "advantage" },
+  ],
+  get: (r) => resolveTiebreakMode(r),
+  set: (r, v) => ({ ...r, tiebreakMode: v }),
+})
+
 // Controles da família de racquete (tênis/beach) — mesmo formato de regras.
 const racketControls = (): RuleControl[] => [
   {
@@ -254,26 +270,7 @@ const racketControls = (): RuleControl[] => [
     get: (r) => r.advantage,
     set: (r, v) => ({ ...r, advantage: v }),
   },
-  {
-    key: "tiebreak",
-    label: "Tiebreak",
-    options: [
-      { label: "Sim", value: true },
-      { label: "Não", value: false },
-    ],
-    get: (r) => r.tiebreak.enabled,
-    set: (r, v) => ({ ...r, tiebreak: { ...r.tiebreak, enabled: v } }),
-  },
-  {
-    key: "superTiebreak",
-    label: "Super tiebreak",
-    options: [
-      { label: "Sim", value: true },
-      { label: "Não", value: false },
-    ],
-    get: (r) => r.superTiebreak.enabled,
-    set: (r, v) => ({ ...r, superTiebreak: { ...r.superTiebreak, enabled: v } }),
-  },
+  tiebreakModeControl(),
   {
     key: "bestOf",
     label: "Melhor de",
@@ -314,26 +311,7 @@ const padelControls = (): RuleControl[] => [
     get: (r) => !r.goldenPoint,
     set: (r, v) => ({ ...r, goldenPoint: !v }),
   },
-  {
-    key: "tiebreak",
-    label: "Tiebreak",
-    options: [
-      { label: "Sim", value: true },
-      { label: "Não", value: false },
-    ],
-    get: (r) => r.tiebreak.enabled,
-    set: (r, v) => ({ ...r, tiebreak: { ...r.tiebreak, enabled: v } }),
-  },
-  {
-    key: "superTiebreak",
-    label: "Super tiebreak",
-    options: [
-      { label: "Sim", value: true },
-      { label: "Não", value: false },
-    ],
-    get: (r) => r.superTiebreak.enabled,
-    set: (r, v) => ({ ...r, superTiebreak: { ...r.superTiebreak, enabled: v } }),
-  },
+  tiebreakModeControl(),
   {
     key: "bestOf",
     label: "Melhor de",
@@ -402,3 +380,7 @@ export function ruleControlsFor(id: SportId): RuleControl[] {
 
 // Reexport de tipos úteis para os consumidores.
 export type { GameState, Side, SideState }
+
+// Reexport da migração de rules (o app aplica no boundary: seed persistido /
+// set_config remoto → normaliza os flags legados de tiebreak em `tiebreakMode`).
+export { migrateRacketRules, resolveTiebreakMode }

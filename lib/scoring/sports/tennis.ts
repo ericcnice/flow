@@ -25,8 +25,7 @@ export const tennisModule: SportModule<TennisRules> = {
     return {
       gamesPerSet: 6,
       advantage: true,
-      tiebreak: { enabled: true, target: 7, mode: "by-two" },
-      superTiebreak: { enabled: false, target: 10, mode: "by-two" },
+      tiebreakMode: "tb7",
       bestOf: 3,
     }
   },

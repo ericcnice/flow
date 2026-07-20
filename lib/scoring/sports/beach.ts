@@ -23,8 +23,7 @@ export const beachModule: SportModule<BeachRules> = {
     return {
       gamesPerSet: 6,
       advantage: false, // no-ad: ponto de ouro no 40-40 (padrão do beach)
-      tiebreak: { enabled: true, target: 7, mode: "by-two" },
-      superTiebreak: { enabled: false, target: 10, mode: "by-two" },
+      tiebreakMode: "tb7",
       bestOf: 3,
     }
   },

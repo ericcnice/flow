@@ -10,11 +10,18 @@
 export type Side = "A" | "B"
 
 /**
- * Como um tiebreak (ou super tiebreak) é decidido:
- * - "by-two":       precisa vencer por 2 de diferença (ex.: 7 com dif. de 2).
- * - "sudden-death": basta atingir o alvo (ponto seco), sem exigir diferença.
+ * DESEMPATE no 6-6 (gps-gps) de um set — FONTE ÚNICA de verdade (substitui os
+ * antigos flags independentes `tiebreak.enabled` + `superTiebreak.enabled`, cuja
+ * ambiguidade deixava o 6-6 consultar o flag errado). Três opções mutuamente
+ * exclusivas:
+ * - "tb7":       tiebreak comum até 7, diferença de 2 (padrão de TODOS os esportes).
+ * - "super10":   tiebreak até 10, diferença de 2 (o "super tiebreak").
+ * - "advantage": SEM tiebreak — set por vantagem de games (8-6, 9-7...).
+ *
+ * Sempre por 2 de diferença (o antigo "sudden-death" foi aposentado — nenhum
+ * esporte o usava). A 4ª opção (tb7 nos sets + super10 só no decisivo) é a Etapa 2.
  */
-export type TiebreakMode = "by-two" | "sudden-death"
+export type TiebreakMode = "tb7" | "super10" | "advantage"
 
 /** Estado de pontuação de um único lado. */
 export type SideState = {
@@ -129,20 +136,8 @@ export type TennisRules = {
   gamesPerSet: number
   /** Com vantagem (deuce/AD) ou sem vantagem (ponto seco no 40-40). */
   advantage: boolean
-  /** Tiebreak comum, disputado em 6-6 (ou gamesPerSet-gamesPerSet). */
-  tiebreak: {
-    enabled: boolean
-    /** Pontos para vencer (padrão 7). */
-    target: number
-    mode: TiebreakMode
-  }
-  /** Super tiebreak que substitui o set decisivo. */
-  superTiebreak: {
-    enabled: boolean
-    /** Pontos para vencer (padrão 10). */
-    target: number
-    mode: TiebreakMode
-  }
+  /** Desempate no 6-6: 'tb7' | 'super10' | 'advantage' (padrão 'tb7'). */
+  tiebreakMode: TiebreakMode
   /** Melhor de 3 ou de 5 sets. */
   bestOf: 3 | 5
 }
@@ -160,20 +155,8 @@ export type BeachRules = {
   gamesPerSet: number
   /** Com vantagem (deuce/AD) ou sem vantagem — no beach o padrão é SEM. */
   advantage: boolean
-  /** Tiebreak comum, disputado em gamesPerSet-gamesPerSet (ex.: 6-6 ou 4-4). */
-  tiebreak: {
-    enabled: boolean
-    /** Pontos para vencer (padrão 7). */
-    target: number
-    mode: TiebreakMode
-  }
-  /** Super tiebreak que substitui o set decisivo (padrão desligado). */
-  superTiebreak: {
-    enabled: boolean
-    /** Pontos para vencer (padrão 10). */
-    target: number
-    mode: TiebreakMode
-  }
+  /** Desempate no gamesPerSet-gamesPerSet (6-6 ou 4-4): padrão 'tb7'. */
+  tiebreakMode: TiebreakMode
   /** Melhor de 3 ou de 5 sets — beach raramente é de 5, padrão 3. */
   bestOf: 3 | 5
 }
@@ -189,16 +172,7 @@ export type BeachRules = {
 export type RacketRules = {
   gamesPerSet: number
   advantage: boolean
-  tiebreak: {
-    enabled: boolean
-    target: number
-    mode: TiebreakMode
-  }
-  superTiebreak: {
-    enabled: boolean
-    target: number
-    mode: TiebreakMode
-  }
+  tiebreakMode: TiebreakMode
   bestOf: 3 | 5
 }
 
@@ -216,20 +190,8 @@ export type PadelRules = {
   gamesPerSet: number
   /** true = ponto seco no 40-40 (no-ad); false = vantagem tradicional. */
   goldenPoint: boolean
-  /** Tiebreak comum, disputado em gamesPerSet-gamesPerSet (ex.: 6-6). */
-  tiebreak: {
-    enabled: boolean
-    /** Pontos para vencer (padrão 7). */
-    target: number
-    mode: TiebreakMode
-  }
-  /** Super tiebreak que substitui o set decisivo (padrão desligado). */
-  superTiebreak: {
-    enabled: boolean
-    /** Pontos para vencer (padrão 10). */
-    target: number
-    mode: TiebreakMode
-  }
+  /** Desempate no 6-6: 'tb7' | 'super10' | 'advantage' (padrão 'tb7'). */
+  tiebreakMode: TiebreakMode
   /** Melhor de 3 ou de 5 sets — padel é quase sempre de 3, padrão 3. */
   bestOf: 3 | 5
 }

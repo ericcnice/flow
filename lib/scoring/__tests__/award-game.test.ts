@@ -92,22 +92,24 @@ test("tênis: conceder game em tiebreak concede o tiebreak/set", () => {
   assert.deepEqual(s.completedSets[0], { set: 1, A: 7, B: 6, tiebreak: true })
 })
 
-test("tênis: conceder game em super tiebreak decisivo fecha a partida", () => {
+test("tênis: conceder game em tiebreak super10 (6-6) fecha o set 7-6", () => {
   const engine = new ScoringEngine(tennisModule, {
     ...tennisModule.defaultRules(),
-    superTiebreak: { enabled: true, target: 10, mode: "by-two" },
+    tiebreakMode: "super10",
   })
 
-  for (let i = 0; i < 6; i++) engine.awardGameFor("A") // set 1 → A
-  for (let i = 0; i < 6; i++) engine.awardGameFor("B") // set 2 → B
-  assert.equal(engine.getState().isSuperTiebreak, true, "decisivo é super tiebreak")
+  for (let i = 0; i < 6; i++) {
+    engine.awardGameFor("A")
+    engine.awardGameFor("B")
+  } // 6-6 → tiebreak super10
+  assert.equal(engine.getState().isTiebreak, true, "6-6 abre tiebreak")
+  assert.equal(engine.getState().isSuperTiebreak, true, "modo super10")
 
-  const ev = engine.awardGameFor("A") // concede o super tiebreak
-  assert.ok(has(ev, "MATCH"))
+  const ev = engine.awardGameFor("A") // concede o tiebreak
+  assert.ok(has(ev, "SET"), "conceder o game no tiebreak fecha o set")
   const s = engine.getState()
-  assert.equal(s.finished, true)
-  assert.equal(s.winner, "A")
-  assert.deepEqual(s.completedSets[2], { set: 3, A: 1, B: 0, tiebreak: true })
+  assert.equal(s.isTiebreak, false)
+  assert.deepEqual(s.completedSets[0], { set: 1, A: 7, B: 6, tiebreak: true })
 })
 
 // ---------- Undo ----------

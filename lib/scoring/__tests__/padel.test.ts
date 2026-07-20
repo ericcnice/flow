@@ -43,8 +43,7 @@ test("defaultRules refletem o padrão real do padel", () => {
   const r = padelModule.defaultRules()
   assert.equal(r.gamesPerSet, 6)
   assert.equal(r.goldenPoint, true, "golden point ligado por padrão")
-  assert.equal(r.tiebreak.enabled, true)
-  assert.equal(r.superTiebreak.enabled, false)
+  assert.equal(r.tiebreakMode, "tb7", "desempate padrão = tiebreak de 7")
   assert.equal(r.bestOf, 3)
 })
 

@@ -43,8 +43,7 @@ test("defaultRules refletem o padrão real do beach", () => {
   const r = beachModule.defaultRules()
   assert.equal(r.gamesPerSet, 6)
   assert.equal(r.advantage, false, "no-ad por padrão")
-  assert.equal(r.tiebreak.enabled, true)
-  assert.equal(r.superTiebreak.enabled, false)
+  assert.equal(r.tiebreakMode, "tb7", "desempate padrão = tiebreak de 7")
   assert.equal(r.bestOf, 3)
 })
 
@@ -162,25 +161,25 @@ test("com vantagem ligada: 40-40 vira deuce/vantagem como no tênis", () => {
   assert.equal(engine.getState().A.games, 1)
 })
 
-// ---------- 5) Super tiebreak opcional (mesma mecânica do tênis) ----------
+// ---------- 5) Modo super10: desempate de 10 no 6-6 (mesma mecânica do tênis) ----
 
-test("super tiebreak opcional substitui o set decisivo", () => {
-  const engine = makeEngine({
-    superTiebreak: { enabled: true, target: 10, mode: "by-two" },
-  })
+test("modo super10: 6-6 abre tiebreak até 10 (diff 2) e fecha o set 7-6", () => {
+  const engine = makeEngine({ tiebreakMode: "super10" })
 
-  for (let i = 0; i < 6; i++) cleanGame(engine, "A") // set 1 → A
-  for (let i = 0; i < 6; i++) cleanGame(engine, "B") // set 2 → B
+  for (let i = 0; i < 6; i++) {
+    cleanGame(engine, "A")
+    cleanGame(engine, "B")
+  } // 6-6
+  let s = engine.getState()
+  assert.equal(s.isTiebreak, true, "6-6 entra em tiebreak")
+  assert.equal(s.isSuperTiebreak, true, "modo super10 → super")
 
-  const mid = engine.getState()
-  assert.equal(mid.currentSet, 3)
-  assert.equal(mid.isSuperTiebreak, true, "decisivo vira super tiebreak")
-
-  score(engine, "A", 9)
-  const ev = score(engine, "A", 1) // 10 → fecha partida
-  assert.ok(has(ev, "MATCH"))
-  const s = engine.getState()
-  assert.equal(s.finished, true)
-  assert.equal(s.winner, "A")
-  assert.deepEqual(s.completedSets[2], { set: 3, A: 1, B: 0, tiebreak: true })
+  score(engine, "A", 8) // 8-0
+  score(engine, "B", 8) // 8-8
+  score(engine, "A", 1) // 9-8 → não fecha (precisa 10 e diff 2)
+  assert.equal(engine.getState().isTiebreak, true, "9-8 no super10 não fecha")
+  score(engine, "A", 1) // 10-8 → fecha
+  s = engine.getState()
+  assert.equal(s.isTiebreak, false)
+  assert.deepEqual(s.completedSets[0], { set: 1, A: 7, B: 6, tiebreak: true }, "set fecha 7-6")
 })

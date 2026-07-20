@@ -28,7 +28,7 @@ import { createSpeechSynthesisSpeaker, type Speaker } from "@/lib/voice/speaker"
 // pong/pickleball). O "catálogo" (lib/sports-catalog) é a cola entre a UI e os
 // módulos — ele NÃO altera lib/scoring, só o consome.
 import { ScoringEngine } from "@/lib/scoring/engine"
-import { sportById, familyOf, formatPoint, defaultRulesFor, buildScoreCols, concededUnitFlags, displayServer, sideChangeOf, type SideChangeMode, type SportId } from "@/lib/sports-catalog"
+import { sportById, familyOf, formatPoint, defaultRulesFor, buildScoreCols, concededUnitFlags, displayServer, sideChangeOf, migrateRacketRules, type SideChangeMode, type SportId } from "@/lib/sports-catalog"
 import { themeClassName, type ThemeId } from "@/lib/themes"
 import { clubBySlug } from "@/lib/clubs-config"
 import { resolveSponsor, type Sponsor } from "@/lib/supabase/sponsors"
@@ -138,13 +138,11 @@ function displayName(raw: string, team: "blue" | "red", idx: number, abbrev: boo
 function rulesMatchFamily(rules: any, family: "tennis" | "rally" | "sideout"): boolean {
   if (!rules || typeof rules !== "object") return false
   if (family === "tennis") {
-    // tênis/beach/padel: bloco de tiebreak (lido pelo motor e pelo RULE_SPECS)
-    // + gamesPerSet. É exatamente o que falta nas regras de rally.
-    return (
-      typeof rules.tiebreak === "object" &&
-      rules.tiebreak !== null &&
-      typeof rules.gamesPerSet === "number"
-    )
+    // tênis/beach/padel: discriminadas por `gamesPerSet` (numérico) — é o que
+    // falta nas regras de rally ({target, winBy}). O desempate agora é o campo
+    // único `tiebreakMode` (o motor tolera ausência → 'tb7' via resolveTiebreakMode),
+    // então não é mais discriminante.
+    return typeof rules.gamesPerSet === "number"
   }
   // rally/sideout (squash/ping pong/pickleball): contagem corrida por alvo.
   return typeof rules.target === "number" && typeof rules.winBy === "number"
@@ -498,9 +496,11 @@ export default function JogoPage() {
           // Regras da sala só são aceitas se forem do FORMATO do esporte resolvido
           // (o mesmo da URL/motor). Sala com regras de outra família cairia no
           // default válido em vez de quebrar o motor no primeiro replay.
-          const rRules = rulesMatchFamily(rState.rules, familyOf(resolvedSport))
-            ? rState.rules
-            : defaultRulesFor(resolvedSport)
+          const rRules = migrateRacketRules(
+            rulesMatchFamily(rState.rules, familyOf(resolvedSport))
+              ? rState.rules
+              : defaultRulesFor(resolvedSport),
+          )
           const rFirst: Side = rState.firstServer === "B" ? "B" : "A"
 
           // scoreType agora vive na RAIZ do state (padrão unificado set_config);
@@ -594,7 +594,8 @@ export default function JogoPage() {
       if (stored) {
         try {
           const parsed = JSON.parse(stored)
-          if (parsed.rules) rules = parsed.rules
+          // MIGRAÇÃO: seed legado (flags tiebreak/superTiebreak) → tiebreakMode.
+          if (parsed.rules) rules = migrateRacketRules(parsed.rules)
           if (parsed.firstServer === "A" || parsed.firstServer === "B") firstServer = parsed.firstServer
           if (Array.isArray(parsed.actions)) actions = parsed.actions
         } catch {
@@ -856,7 +857,7 @@ export default function JogoPage() {
       remoteRulesObj &&
       JSON.stringify(remoteRulesObj) !== JSON.stringify(rulesRef.current) // dedup anti-eco
     ) {
-      nextRules = remoteRulesObj
+      nextRules = migrateRacketRules(remoteRulesObj) // legado remoto → tiebreakMode
       needRebuild = true
       const bo = (remoteRulesObj as any).bestOf
       if (bo === 3 || bo === 5) applyLocalConfig({ maxSets: bo })

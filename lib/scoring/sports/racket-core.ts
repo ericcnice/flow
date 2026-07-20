@@ -44,11 +44,47 @@ function setsToWin(rules: RacketRules): number {
   return Math.ceil(rules.bestOf / 2)
 }
 
-/** Verifica se um tiebreak foi vencido, respeitando o modo (por-2 ou seco). */
-function tiebreakWon(mine: number, theirs: number, target: number, mode: TiebreakMode): boolean {
-  if (mine < target) return false
-  if (mode === "sudden-death") return true
-  return mine - theirs >= 2
+/** Verifica se um tiebreak foi vencido: atingiu o alvo E abriu 2 de diferença. */
+function tiebreakWon(mine: number, theirs: number, target: number): boolean {
+  return mine >= target && mine - theirs >= 2
+}
+
+/**
+ * FONTE ÚNICA do desempate no 6-6 (tiebreakMode). Tolerante a config legada e
+ * ausente: se `tiebreakMode` não for um dos três valores válidos, deriva dos
+ * flags antigos (super ligado → 'super10' [prioridade, cobre "ambos ligados"];
+ * tiebreak ligado e super desligado → 'tb7'; ambos desligados → 'advantage';
+ * ausência total → 'tb7'). Assim o motor "se cura" mesmo recebendo rules velhas.
+ */
+export function resolveTiebreakMode(rules: unknown): TiebreakMode {
+  const r = (rules ?? {}) as {
+    tiebreakMode?: unknown
+    tiebreak?: { enabled?: unknown }
+    superTiebreak?: { enabled?: unknown }
+  }
+  if (r.tiebreakMode === "tb7" || r.tiebreakMode === "super10" || r.tiebreakMode === "advantage") {
+    return r.tiebreakMode
+  }
+  if (r.superTiebreak?.enabled) return "super10"
+  if (r.tiebreak?.enabled) return "tb7"
+  if (r.tiebreak && r.tiebreak.enabled === false) return "advantage"
+  return "tb7"
+}
+
+/** Alvo de pontos do tiebreak conforme o modo (super10 = 10, senão 7). */
+function tiebreakTarget(mode: TiebreakMode): number {
+  return mode === "super10" ? 10 : 7
+}
+
+/**
+ * MIGRAÇÃO de rules da família tênis (uso no boundary do app: seed persistido /
+ * set_config remoto). Só toca objetos que parecem tênis (têm gamesPerSet);
+ * normaliza para o campo único `tiebreakMode`. Idempotente para rules já novas.
+ */
+export function migrateRacketRules<T>(raw: T): T {
+  const r = raw as { gamesPerSet?: unknown } | null | undefined
+  if (!r || typeof r !== "object" || typeof r.gamesPerSet !== "number") return raw
+  return { ...(raw as object), tiebreakMode: resolveTiebreakMode(raw) } as T
 }
 
 /** Cria o estado inicial de uma partida de racquete. */
@@ -194,13 +230,18 @@ function checkSetStatus(state: GameState, side: Side, rules: RacketRules, events
   // nada muda para regras já numéricas.
   const gps = Number(rules.gamesPerSet)
 
-  // Empate em gamesPerSet-gamesPerSet (ex.: 6-6 ou 4-4) → tiebreak, se ligado.
+  // Empate em gamesPerSet-gamesPerSet (ex.: 6-6 ou 4-4): o DESEMPATE é roteado
+  // pelo campo único `tiebreakMode` (fonte de verdade). 'tb7'/'super10' abrem o
+  // MESMO mecanismo de tiebreak (só muda o alvo: 7 vs 10); 'advantage' segue por
+  // games. `isSuperTiebreak` fica só para exibição (rótulo "super"/voz).
   if (me.games === gps && opp.games === gps) {
-    if (rules.tiebreak.enabled) {
+    const mode = resolveTiebreakMode(rules)
+    if (mode !== "advantage") {
       state.isTiebreak = true
-      events.push({ type: "TIEBREAK_START" })
+      state.isSuperTiebreak = mode === "super10"
+      events.push({ type: "TIEBREAK_START", ...(mode === "super10" ? { detail: "super" } : {}) })
     }
-    // Sem tiebreak: set por vantagem, segue jogando até 2 de diferença.
+    // 'advantage': sem tiebreak, segue jogando até 2 de diferença (8-6, 9-7...).
     return
   }
 
@@ -210,7 +251,7 @@ function checkSetStatus(state: GameState, side: Side, rules: RacketRules, events
   }
 }
 
-/** Marca um ponto de tiebreak / super tiebreak. */
+/** Marca um ponto de tiebreak. O alvo (7 ou 10) vem do `tiebreakMode` das rules. */
 function scoreTiebreakPoint(state: GameState, side: Side, rules: RacketRules, events: ScoringEvent[]): void {
   const me = state[side]
   const opp = state[other(side)]
@@ -218,9 +259,9 @@ function scoreTiebreakPoint(state: GameState, side: Side, rules: RacketRules, ev
   me.tiebreakPoints += 1
   events.push({ type: "POINT", side, detail: tiebreakScoreText(state) })
 
-  const cfg = state.isSuperTiebreak ? rules.superTiebreak : rules.tiebreak
+  const target = tiebreakTarget(resolveTiebreakMode(rules))
 
-  if (tiebreakWon(me.tiebreakPoints, opp.tiebreakPoints, cfg.target, cfg.mode)) {
+  if (tiebreakWon(me.tiebreakPoints, opp.tiebreakPoints, target)) {
     concludeTiebreak(state, side, rules, events)
   }
 }
@@ -277,11 +318,7 @@ function completeSet(
     events.push({ type: "MATCH", side })
     return
   }
-
-  // O set decisivo é jogado como super tiebreak, se configurado.
-  if (rules.superTiebreak.enabled && state.currentSet === rules.bestOf) {
-    state.isTiebreak = true
-    state.isSuperTiebreak = true
-    events.push({ type: "TIEBREAK_START", detail: "super" })
-  }
+  // (O super tiebreak deixou de ser "substituir o set decisivo": agora é o modo
+  //  'super10' do desempate no 6-6, roteado em checkSetStatus. A combinação
+  //  "tb7 nos sets + super10 só no decisivo" é a Etapa 2.)
 }
