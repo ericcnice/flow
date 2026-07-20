@@ -806,10 +806,11 @@
 }
 .rule-option {
   flex: 1 1 0;
-  padding: 12px 8px;
+  padding: 10px 6px;
   border-radius: 12px;
   font-weight: 800;
-  font-size: 1rem;
+  font-size: 0.95rem;
+  line-height: 1.15;
   text-align: center;
   background: var(--setup-opcao-bg);
   color: var(--setup-opcao-texto);
@@ -828,10 +829,10 @@
 /* CTA JOGAR: fixo na base do card, sempre visível, forte sobre o card claro. */
 .play-button {
   width: 100%;
-  padding: 16px;
+  padding: 14px;
   border-radius: 14px;
   font-weight: 900;
-  font-size: 1.3rem;
+  font-size: 1.2rem;
   letter-spacing: 0.06em;
   background: var(--setup-cta-bg);
   color: var(--setup-cta-texto);

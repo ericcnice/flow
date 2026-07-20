@@ -19,8 +19,8 @@
  */
 
 import { useMemo, useState, type ReactNode } from "react"
-import { X } from "lucide-react"
-import { SportCourt, SportCourtGlyph } from "@/components/sport-court"
+import { X, ChevronDown } from "lucide-react"
+import { SportCourtGlyph } from "@/components/sport-court"
 import { SPORTS, ruleControlsFor, defaultRulesFor, sideChangeOf, type RuleControl, type SportId } from "@/lib/sports-catalog"
 import { THEMES, DEFAULT_THEME, themeClassName, type ThemeId } from "@/lib/themes"
 
@@ -42,6 +42,7 @@ export function SportSetup({
   initialTheme,
   initialSideChangeAlert,
   initialGameType,
+  sportFromCourt,
   context,
   onConfirm,
   onClose,
@@ -58,6 +59,10 @@ export function SportSetup({
   initialSideChangeAlert?: boolean
   /** Simples/duplas inicial. Ausente = 'duplas' (95% dos jogos do clube). */
   initialGameType?: string
+  /** Esporte veio do CONTEXTO DE QUADRA (QR): o seletor nasce RECOLHIDO (o
+   *  professor raramente troca; as regras ganham a 1ª dobra). Ausente/false =
+   *  aberto sem contexto (desktop/ajustes) → seletor já expandido. */
+  sportFromCourt?: boolean
   context: SportSetupContext
   /** Chamado no CTA. sportChanged=true quando o esporte mudou; theme = tema
    *  escolhido; sideChangeAlert = aviso de troca; gameType = simples/duplas. */
@@ -80,6 +85,10 @@ export function SportSetup({
   const [sideChangeAlert, setSideChangeAlert] = useState<boolean>(initialSideChangeAlert ?? false)
   // Simples/duplas. Default 'duplas' para partida nova (initialGameType ausente).
   const [gameType, setGameType] = useState<string>(initialGameType ?? "duplas")
+  // Seletor de esportes: RECOLHIDO por padrão quando o esporte veio da quadra
+  // (QR) — o banner-título mostra o esporte e as regras ganham a 1ª dobra;
+  // EXPANDIDO quando aberto sem contexto (a escolha do esporte importa mais).
+  const [selectorOpen, setSelectorOpen] = useState<boolean>(!sportFromCourt)
 
   const controls = useMemo<RuleControl[]>(() => ruleControlsFor(sport), [sport])
   const sportChanged = sport !== initialSport
@@ -98,49 +107,77 @@ export function SportSetup({
       className={`relative flex flex-col h-full overflow-hidden ${themeClassName(theme)}`}
       style={{ backgroundColor: "var(--palco-fundo)" }}
     >
-      {/* Fundo: a QUADRA do esporte selecionado (SVG), visível ACIMA do card. */}
-      <SportCourt sport={sport} />
-
-      {/* Fechar (ingame): flutua sobre a quadra, no canto. */}
+      {/* Fechar (ingame): flutua no canto superior direito do card. */}
       {onClose && (
         <button
           type="button"
           onClick={onClose}
           aria-label="Fechar e voltar ao jogo"
-          className="glass absolute top-4 right-4 z-30 rounded-full p-3 active:scale-95 transition-transform"
+          className="absolute top-3 right-3 z-30 rounded-full p-2 active:scale-95 transition-transform"
+          style={{ color: "var(--setup-card-cinza)" }}
         >
           <X className="h-5 w-5" />
         </button>
       )}
 
-      {/* Empurra o card para a base; a quadra respira no espaço acima. */}
-      <div className="relative z-10 flex-1" aria-hidden />
+      {/* CARD CLARO ocupa a tela CHEIA (sem quadra ao fundo — ela era efêmera e
+          forçava scroll): banner-título → regras → CTA. */}
+      <div className="setup-card relative z-20 flex min-h-0 flex-1 flex-col">
+        {/* BANNER-TÍTULO: o NOME GRANDE do esporte editado É o seletor. Tocar
+            expande as 6 quadrinhas; ao escolher, recolhe e o banner atualiza.
+            Deixa inequívoco QUAL esporte está sendo configurado (cada um tem
+            regras próprias de desempate/vantagem). */}
+        <div className="px-4 pt-3">
+          <button
+            type="button"
+            onClick={() => setSelectorOpen((o) => !o)}
+            aria-expanded={selectorOpen}
+            aria-label={`Esporte: ${SHORT_NAME[sport]}. Tocar para trocar.`}
+            className="flex w-full items-center gap-3 text-left"
+          >
+            <span className="court-glyph shrink-0">
+              <SportCourtGlyph sport={sport} />
+            </span>
+            <span className="min-w-0 flex-1 truncate text-4xl font-black uppercase leading-none tracking-tight">
+              {SHORT_NAME[sport]}
+            </span>
+            <span
+              className="inline-flex shrink-0 items-center gap-1 text-sm font-bold"
+              style={{ color: "var(--setup-card-cinza)" }}
+            >
+              {selectorOpen ? "fechar" : "trocar"}
+              <ChevronDown className={`h-4 w-4 transition-transform ${selectorOpen ? "rotate-180" : ""}`} />
+            </span>
+          </button>
 
-      {/* CARD CLARO único: seletor → miolo rolável → CTA fixo. */}
-      <div className="setup-card relative z-20 flex flex-col max-h-[74vh]">
-        {/* TOPO do card: seletor de esportes = mini-quadras + nome cinza. */}
-        <div className="px-4 pt-4">
-          <div className="setup-selector">
-            {SPORTS.map((s) => (
-              <button
-                key={s.id}
-                type="button"
-                onClick={() => selectSport(s.id)}
-                className={`court-option ${s.id === sport ? "on" : ""}`}
-                aria-pressed={s.id === sport}
-                aria-label={SHORT_NAME[s.id]}
-              >
-                <span className="court-glyph">
-                  <SportCourtGlyph sport={s.id} />
-                </span>
-                <span className="court-option-name">{SHORT_NAME[s.id]}</span>
-              </button>
-            ))}
-          </div>
+          {/* SELETOR EXPANDIDO: as 6 quadrinhas (mesma lógica selectSport). Ao
+              escolher, recolhe. Recolhido por padrão quando veio da quadra (QR). */}
+          {selectorOpen && (
+            <div className="setup-selector mt-3">
+              {SPORTS.map((s) => (
+                <button
+                  key={s.id}
+                  type="button"
+                  onClick={() => {
+                    selectSport(s.id)
+                    setSelectorOpen(false)
+                  }}
+                  className={`court-option ${s.id === sport ? "on" : ""}`}
+                  aria-pressed={s.id === sport}
+                  aria-label={SHORT_NAME[s.id]}
+                >
+                  <span className="court-glyph">
+                    <SportCourtGlyph sport={s.id} />
+                  </span>
+                  <span className="court-option-name">{SHORT_NAME[s.id]}</span>
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
-        {/* MIOLO rolável: regras do esporte + ações secundárias. NÃO inclui o CTA. */}
-        <div className="flex-1 overflow-y-auto px-4 pt-1 pb-3 space-y-4">
+        {/* MIOLO rolável (safety-net; o alvo é caber sem rolar): regras + ações. */}
+        <div className="flex-1 overflow-y-auto px-4 pt-2 pb-3 space-y-3">
           {context === "ingame" && sportChanged && (
             <p className="text-xs leading-snug" style={{ color: "var(--setup-card-cinza)" }}>
               Trocar de esporte inicia uma NOVA partida (o placar atual será descartado).
@@ -150,7 +187,7 @@ export function SportSetup({
           {/* SIMPLES/DUPLAS — propriedade fundamental da partida (define quantas
               pílulas de nome). Antes das regras de propósito. Molde rule-group. */}
           <div>
-            <div className="text-sm font-semibold mb-2">Formato</div>
+            <div className="text-xs font-bold uppercase tracking-wide mb-1.5">Formato</div>
             <div className="rule-group">
               {[
                 { label: "Simples", value: "simples" },
@@ -173,7 +210,7 @@ export function SportSetup({
             const current = c.get(rules)
             return (
               <div key={c.key}>
-                <div className="text-sm font-semibold mb-2">{c.label}</div>
+                <div className="text-xs font-bold uppercase tracking-wide mb-1.5">{c.label}</div>
                 <div className="rule-group">
                   {c.options.map((opt) => (
                     <button
@@ -197,7 +234,7 @@ export function SportSetup({
               toggles de regra (rule-group). */}
           {temTrocaDeLado && (
             <div>
-              <div className="text-sm font-semibold mb-2">Avisar troca de lado</div>
+              <div className="text-xs font-bold uppercase tracking-wide mb-1.5">Avisar troca de lado</div>
               <div className="rule-group">
                 {[
                   { label: "Não", value: false },
@@ -221,7 +258,7 @@ export function SportSetup({
               de rotina. Amostras tocáveis; a ativa fica destacada. Aplica o
               tema por partida (persiste na config junto de esporte + regras). */}
           <div>
-            <div className="text-sm font-semibold mb-2">Cores</div>
+            <div className="text-xs font-bold uppercase tracking-wide mb-1.5">Cores</div>
             <div className="theme-swatches">
               {THEMES.map((t) => (
                 <button
@@ -247,7 +284,7 @@ export function SportSetup({
         </div>
 
         {/* BASE do card: CTA JOGAR FIXO (fora do scroll), sempre visível. */}
-        <div className="px-4 pt-3 pb-5 border-t" style={{ borderColor: "var(--setup-card-borda)" }}>
+        <div className="px-4 pt-2 pb-4 border-t" style={{ borderColor: "var(--setup-card-borda)" }}>
           <button
             type="button"
             className="play-button"

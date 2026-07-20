@@ -2638,6 +2638,10 @@ export default function JogoPage() {
             initialTheme={theme}
             initialSideChangeAlert={sideChangeAlert}
             initialGameType={gameConfig.gameType}
+            // Veio da quadra (jornada QR) → seletor de esporte recolhido: o
+            // professor raramente troca e as regras ganham a 1ª dobra. Jogo
+            // genérico (sem clube) → expandido (a escolha importa mais).
+            sportFromCourt={!!clube}
             context="ingame"
             onClose={() => setSetupOpen(false)}
             onConfirm={onSetupConfirm}
