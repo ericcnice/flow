@@ -1579,6 +1579,26 @@ export default function JogoPage() {
     gs.completedSets.length > 0
   const initialServingSet = !started
 
+  // ROTAÇÃO INDIVIDUAL DE SAQUE EM DUPLAS (B2 — derivação na UI, lib/scoring
+  // INTOCADO). O motor alterna só o LADO (gs.server); aqui derivamos QUAL parceiro
+  // do lado saca o game atual. Regra oficial: dentro do time, os parceiros
+  // alternam a cada VEZ que o time volta a sacar → ciclo P1→P3→P2→P4.
+  //
+  // Derivação: o lado sacador serve games alternados; sua "vez" no set é
+  // floor(gamesDoSet / 2) (0-based) — par → initialServer[lado], ímpar → parceiro.
+  // Lê games do SET atual (gs.A.games + gs.B.games) + initialServer + firstServer
+  // (implícito: game 1 do set é do firstServer). Só vale p/ o lado que saca; o
+  // outro time não tem bola acesa. Simples → sempre 0. TIEBREAK → mantém o
+  // comportamento atual (initialServer fixo; a rotação a cada 2 pontos é a B3).
+  const serverPlayerIdx = (team: "blue" | "red"): 0 | 1 => {
+    const side = sideOf(team)
+    const init = (gameConfig?.initialServer?.[side] ?? 0) as 0 | 1
+    if (gameConfig?.gameType !== "duplas" || isTiebreak) return init
+    const gamesNoSet = gs.A.games + gs.B.games
+    const vezDoTime = Math.floor(gamesNoSet / 2) // 0-based: 0ª, 1ª, 2ª… vez do time
+    return (vezDoTime % 2 === 0 ? init : 1 - init) as 0 | 1
+  }
+
   // NOTA (B1b): a bola de saque deixou de deslizar por lado da quadra (deuce/ad).
   // Agora ela é ancorada à PÍLULA do sacador (ver renderNamePills). O cálculo de
   // servingCourt foi removido — decisão de produto: bola na pílula não desliza.
@@ -1915,16 +1935,14 @@ export default function JogoPage() {
     </span>
   )
 
-  // FAIXA DE NOMES (uma por time). 3 ETAPAS pelo estado (ver detecção abaixo):
-  //  1) nomes fallback → pílula inteira PULSA; toque abre o popup de nomes.
-  //  2) nomes ok & !started → pulso migra p/ as BOLAS cinzas (se ainda não houve
-  //     escolha); tocar na metade do jogador define o sacador; tocar no centro
-  //     (logo) abre o popup.
-  //  3) started → bolas só indicam; toque abre o popup.
+  // FAIXA DE NOMES (uma por time). DUAS FASES (item 2):
+  //  PRÉ-JOGO (!started): nomes OPCIONAIS — dois alvos coexistem. Tocar na METADE
+  //    do jogador → escolhe o saque; tocar no CENTRO (logo) → popup de nomes. A
+  //    pílula pulsa 2x na entrada (item 1) e para.
+  //  JOGO (>=1 ponto): pílula inteira → popup; bolas só indicam.
   const renderNameFaixa = (team: "blue" | "red") => {
-    const sideKey = sideOf(team)
     const teamServing = team === "blue" ? blueServing : !blueServing
-    const serverIdx = cfg.initialServer?.[sideKey] ?? 0
+    const serverIdx = serverPlayerIdx(team) // rotação individual de duplas (item 3)
     const duplas = cfg.gameType === "duplas"
     const raw =
       team === "blue"
@@ -1937,19 +1955,12 @@ export default function JogoPage() {
     // Nomes exibidos: fallback → "Player N" INTEIRO (nunca abrevia); digitado →
     // abreviação broadcast.
     const names = raw.map((n, i) => displayName(n, team, i, true))
-    // ETAPA por gameType: `raw` já contém só os slots do formato (simples = 1 por
-    // lado, duplas = 2), então every() checa exatamente os nomes que importam —
-    // um simples com o único nome preenchido cai na etapa 2 (não exige os 4).
-    const etapa = started ? 3 : raw.every(isFallbackName) ? 1 : 2
-
+    const prejogo = !started
     const showAmarela = serverEverChosen || started // antes da 1ª escolha: sem amarela
-    const cinzaPulse = etapa === 2 && !serverEverChosen
 
-    // Bola (compartilhada): acesa = sacador; pulso na etapa 2 antes da escolha.
-    const bola = (idx: number) => {
-      const acesa = showAmarela && teamServing && idx === serverIdx
-      return serveBola(acesa, !acesa && cinzaPulse)
-    }
+    // Bola (compartilhada): acesa = sacador. O pulso da fase pré-jogo é da PÍLULA
+    // (as bolas movem junto) — finito, 2x, na entrada; a bola não pulsa sozinha.
+    const bola = (idx: number) => serveBola(showAmarela && teamServing && idx === serverIdx, false)
     const logoEl = logoForTeam(team) ? (
       <span className="relative block h-7 w-7 shrink-0 overflow-hidden rounded-full ring-1 ring-white/25">
         <Image src={logoForTeam(team)!} alt="" fill sizes="28px" className="object-cover" />
@@ -1978,9 +1989,11 @@ export default function JogoPage() {
     // SIMPLES (item 5a): [LOGO na esquerda] [Nome no centro] [BOLA na direita] —
     // o logo assume a ponta que a 2ª bola ocuparia em duplas.
     if (!duplas) {
-      if (etapa === 2) {
+      // PRÉ-JOGO: dois alvos — metade do jogador escolhe o saque (nomes
+      // opcionais), o logo abre o popup. A pílula pulsa 2x na entrada e para.
+      if (prejogo) {
         return (
-          <div className={`${pill} flex items-center gap-2`}>
+          <div className={`${pill} flex items-center gap-2 serve-pill-pulse`}>
             <button type="button" onClick={editOnClick} aria-label="Editar nomes" className="shrink-0">
               {logoEl}
             </button>
@@ -1998,12 +2011,13 @@ export default function JogoPage() {
           </div>
         )
       }
+      // JOGO: pílula inteira abre o popup; sem pulso.
       return (
         <button
           type="button"
           onClick={editOnClick}
           aria-label="Editar nomes"
-          className={`${pill} flex items-center gap-2 ${etapa === 1 ? "serve-pill-pulse" : ""}`}
+          className={`${pill} flex items-center gap-2`}
         >
           {logoEl}
           {nameCentered}
@@ -2015,9 +2029,11 @@ export default function JogoPage() {
     // DUPLAS: [bola][Nome1] [LOGO] [Nome2][bola]. Grupos justify-between → bola na
     // EXTREMIDADE, nome perto do logo.
     const gridPill = `${pill} grid grid-cols-[1fr_auto_1fr] items-center gap-2`
-    if (etapa === 2) {
+    // PRÉ-JOGO: cada metade escolhe o sacador do par (nomes opcionais), logo
+    // central abre o popup. Pílula pulsa 2x na entrada e para.
+    if (prejogo) {
       return (
-        <div className={gridPill}>
+        <div className={`${gridPill} serve-pill-pulse`}>
           <button
             type="button"
             onClick={(e) => {
@@ -2046,12 +2062,14 @@ export default function JogoPage() {
         </div>
       )
     }
+    // JOGO: pílula inteira abre o popup; sem pulso. A bola amarela migra sozinha
+    // conforme serverIdx = serverPlayerIdx(team) (rotação B2, item 3).
     return (
       <button
         type="button"
         onClick={editOnClick}
         aria-label="Editar nomes"
-        className={`${gridPill} ${etapa === 1 ? "serve-pill-pulse" : ""}`}
+        className={gridPill}
       >
         <span className="flex min-w-0 items-center justify-between gap-2">
           {bola(0)}
@@ -2361,9 +2379,8 @@ export default function JogoPage() {
   // FAIXA DE NOMES landscape: logo na extremidade EXTERNA (borda da tela). `side`
   // "left" = logo à esquerda; "right" = ESPELHO (logo à direita, ordem reversa).
   const renderNameFaixaLandscape = (team: "blue" | "red", side: "left" | "right") => {
-    const sideKey = sideOf(team)
     const teamServing = team === "blue" ? blueServing : !blueServing
-    const serverIdx = cfg.initialServer?.[sideKey] ?? 0
+    const serverIdx = serverPlayerIdx(team) // rotação individual de duplas (item 3)
     const duplas = cfg.gameType === "duplas"
     const raw =
       team === "blue"
@@ -2374,13 +2391,10 @@ export default function JogoPage() {
           ? [cfg.players.red1, cfg.players.red2]
           : [cfg.players.red1]
     const names = raw.map((n, i) => displayName(n, team, i, true))
-    const etapa = started ? 3 : raw.every(isFallbackName) ? 1 : 2
+    const prejogo = !started
     const showAmarela = serverEverChosen || started
-    const cinzaPulse = etapa === 2 && !serverEverChosen
-    const bola = (idx: number) => {
-      const acesa = showAmarela && teamServing && idx === serverIdx
-      return serveBola(acesa, !acesa && cinzaPulse)
-    }
+    // Pulso da fase pré-jogo é da PÍLULA (bolas movem junto) — finito, 2x.
+    const bola = (idx: number) => serveBola(showAmarela && teamServing && idx === serverIdx, false)
     const logoEl = logoForTeam(team) ? (
       <span className="relative block h-7 w-7 shrink-0 overflow-hidden rounded-full ring-1 ring-white/25">
         <Image src={logoForTeam(team)!} alt="" fill sizes="28px" className="object-cover" />
@@ -2411,8 +2425,9 @@ export default function JogoPage() {
     const pill =
       "glass pointer-events-auto flex items-center gap-3 rounded-full px-3 py-1 shadow-lg ring-1 ring-white/10 min-h-[52px] max-w-full"
 
-    // ETAPA 2: unidades tocáveis (jogador → saque; logo → editar).
-    if (etapa === 2) {
+    // PRÉ-JOGO: unidades tocáveis (jogador → saque, nomes opcionais; logo →
+    // editar). A pílula pulsa 2x na entrada e para.
+    if (prejogo) {
       const logoBtn = (
         <button type="button" onClick={editOnClick} aria-label="Editar nomes" className="shrink-0">
           {logoEl}
@@ -2431,7 +2446,7 @@ export default function JogoPage() {
         </button>
       )
       return (
-        <div className={pill}>
+        <div className={`${pill} serve-pill-pulse`}>
           {side === "left" ? (
             <>
               {logoBtn}
@@ -2449,7 +2464,8 @@ export default function JogoPage() {
       )
     }
 
-    // ETAPAS 1 e 3: pílula inteira → popup (etapa 1 pulsa).
+    // JOGO: pílula inteira → popup; sem pulso. Bola amarela migra sozinha
+    // conforme serverIdx = serverPlayerIdx(team) (rotação B2, item 3).
     const unitSpan = (idx: number) => (
       <span className="flex min-w-0 items-center gap-2">{unit(idx)}</span>
     )
@@ -2458,7 +2474,7 @@ export default function JogoPage() {
         type="button"
         onClick={editOnClick}
         aria-label="Editar nomes"
-        className={`${pill} ${etapa === 1 ? "serve-pill-pulse" : ""}`}
+        className={pill}
       >
         {side === "left" ? (
           <>

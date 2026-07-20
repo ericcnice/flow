@@ -511,8 +511,11 @@
   animation: glassPop 0.24s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-/* Pulso SUTIL das pílulas de nome na fase de seleção de sacador (B1b): comunica
-   "toque em quem saca" sem gritar. Para assim que o juiz escolhe. */
+/* Pulso SUTIL de entrada na fase pré-jogo (pílula/bolas): comunica "interaja
+   aqui" sem gritar. FINITO — pulsa 2x (~1,5s) e PARA estático (o 100% volta a
+   scale(1)); o estado permanente (fallback/bola cinza) segue comunicando. Não
+   re-pisca sozinho: o elemento persiste com a classe, então a animação só roda
+   ao ENTRAR na fase (classe aplicada). Idêntico nas duas orientações. */
 @keyframes servePillPulse {
   0%,
   100% {
@@ -523,7 +526,7 @@
   }
 }
 .serve-pill-pulse {
-  animation: servePillPulse 1.2s ease-in-out infinite;
+  animation: servePillPulse 0.75s ease-in-out 2;
 }
 
 /* --- Placar broadcast (overlay expandido, estilo transmissão Grand Slam) ----
