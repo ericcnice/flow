@@ -1921,10 +1921,10 @@ export default function JogoPage() {
 
   // BOLA DE SAQUE (SVG de tênis) COMPARTILHADA entre vertical e horizontal —
   // garante "bolas idênticas". Sacador = amarela #FEE100; demais = acinzentada.
-  const serveBola = (acesa: boolean, pulse: boolean, sizeClass = "h-9 w-9") => (
+  const serveBola = (acesa: boolean, pulse: boolean) => (
     <span
       aria-hidden
-      className={`block ${sizeClass} shrink-0 drop-shadow ${pulse ? "serve-pill-pulse" : ""}`}
+      className={`block h-9 w-9 shrink-0 drop-shadow ${pulse ? "serve-pill-pulse" : ""}`}
     >
       <svg viewBox="0 0 100 100" className="h-full w-full">
         <circle
@@ -2157,9 +2157,11 @@ export default function JogoPage() {
   // expansível antiga.
   // widthClass = largura MÁXIMA do painel (default max-w-md p/ o portrait, que
   // preenche quase toda a largura da tela estreita). O landscape passa uma largura
-  // menor (max-w-sm) → painel de PÍLULA centralizado, com margem lateral, sem
-  // esticar de ponta a ponta na tela larga.
-  const renderScorePanel = (widthClass = "max-w-md") => {
+  // menor (max-w-xs) → painel de PÍLULA centralizado, com margem lateral, sem
+  // esticar de ponta a ponta na tela larga. compact = altura MÍNIMA (py enxuto) p/
+  // devolver espaço vertical à área de jogo na paisagem. Ambos com DEFAULT que
+  // preserva o portrait byte-a-byte (mesma string de classe).
+  const renderScorePanel = (widthClass = "max-w-md", compact = false) => {
     const rows: { team: "blue" | "red"; key: "a" | "b" }[] = [
       { team: "blue", key: "a" },
       { team: "red", key: "b" },
@@ -2167,11 +2169,11 @@ export default function JogoPage() {
     const ordered = mirrored ? [rows[1], rows[0]] : rows
     return (
       <div
-        className="pointer-events-none w-full px-3 py-2"
+        className={`pointer-events-none w-full px-3 ${compact ? "py-1" : "py-2"}`}
         style={{ backgroundColor: INFO_BG }}
       >
         <div
-          className={`mx-auto grid ${widthClass} items-center gap-x-2 gap-y-1 rounded-2xl px-3 py-2 ring-1 ring-white/10`}
+          className={`mx-auto grid ${widthClass} items-center gap-x-2 ${compact ? "gap-y-0.5" : "gap-y-1"} rounded-2xl px-3 ${compact ? "py-1" : "py-2"} ring-1 ring-white/10`}
           style={{ gridTemplateColumns: "auto minmax(0,1fr) 1.4rem repeat(5, 1.05rem)" }}
         >
           {ordered.map(({ team, key }) => {
@@ -2400,129 +2402,11 @@ export default function JogoPage() {
     )
   }
 
-  /* ============ TELA HORIZONTAL (LANDSCAPE) — espelho da v2 ================
-     Mesma linguagem visual da v2, geometria adaptada. REUSA os handlers da v2
-     (etapa por gameType, chooseServer, popup, displayName, serveBola, menu). */
-
-  // FAIXA DE NOMES landscape: logo na extremidade EXTERNA (borda da tela). `side`
-  // "left" = logo à esquerda; "right" = ESPELHO (logo à direita, ordem reversa).
-  const renderNameFaixaLandscape = (team: "blue" | "red", side: "left" | "right") => {
-    const teamServing = team === "blue" ? blueServing : !blueServing
-    const serverIdx = serverPlayerIdx(team) // rotação individual de duplas (item 3)
-    const duplas = cfg.gameType === "duplas"
-    const raw =
-      team === "blue"
-        ? duplas
-          ? [cfg.players.blue1, cfg.players.blue2]
-          : [cfg.players.blue1]
-        : duplas
-          ? [cfg.players.red1, cfg.players.red2]
-          : [cfg.players.red1]
-    const names = raw.map((n, i) => displayName(n, team, i, true))
-    const prejogo = !started
-    const showAmarela = serverEverChosen || started
-    // Pulso da fase pré-jogo é da PÍLULA (bolas movem junto) — finito, 2x. Bolas
-    // menores que a vertical (h-8, item 2a) para dar respiro ao número gigante.
-    const bola = (idx: number) => serveBola(showAmarela && teamServing && idx === serverIdx, false, "h-8 w-8")
-    const logoEl = logoForTeam(team) ? (
-      <span className="relative block h-7 w-7 shrink-0 overflow-hidden rounded-full ring-1 ring-white/25">
-        <Image src={logoForTeam(team)!} alt="" fill sizes="28px" className="object-cover" />
-      </span>
-    ) : (
-      <span className="h-7 w-7 shrink-0" aria-hidden />
-    )
-    const nameEl = (n: string) => (
-      <span className="truncate text-sm font-bold uppercase tracking-wide text-white">{n}</span>
-    )
-    // Bola GRUDADA ao nome; left = [bola][nome], right = [nome][bola] (espelho).
-    const unit = (idx: number) =>
-      side === "left" ? (
-        <>
-          {bola(idx)}
-          {nameEl(names[idx])}
-        </>
-      ) : (
-        <>
-          {nameEl(names[idx])}
-          {bola(idx)}
-        </>
-      )
-    const editOnClick = (e: { stopPropagation: () => void }) => {
-      e.stopPropagation()
-      setEditingSide(team)
-    }
-    // min-h REDUZIDO (item 2a): 52→44px cria respiro entre a pílula e o número
-    // gigante sem mexer na fonte do número. Só landscape (a vertical usa 52px).
-    const pill =
-      "glass pointer-events-auto flex items-center gap-3 rounded-full px-3 py-1 shadow-lg ring-1 ring-white/10 min-h-[44px] max-w-full"
-
-    // PRÉ-JOGO: unidades tocáveis (jogador → saque, nomes opcionais; logo →
-    // editar). A pílula pulsa 2x na entrada e para.
-    if (prejogo) {
-      const logoBtn = (
-        <button type="button" onClick={editOnClick} aria-label="Editar nomes" className="shrink-0">
-          {logoEl}
-        </button>
-      )
-      const unitBtn = (idx: number) => (
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation()
-            chooseServer(team, idx)
-          }}
-          className="flex min-w-0 items-center gap-2"
-        >
-          {unit(idx)}
-        </button>
-      )
-      return (
-        <div className={`${pill} serve-pill-pulse`}>
-          {side === "left" ? (
-            <>
-              {logoBtn}
-              {unitBtn(0)}
-              {duplas && unitBtn(1)}
-            </>
-          ) : (
-            <>
-              {duplas && unitBtn(1)}
-              {unitBtn(0)}
-              {logoBtn}
-            </>
-          )}
-        </div>
-      )
-    }
-
-    // JOGO: pílula inteira → popup; sem pulso. Bola amarela migra sozinha
-    // conforme serverIdx = serverPlayerIdx(team) (rotação B2, item 3).
-    const unitSpan = (idx: number) => (
-      <span className="flex min-w-0 items-center gap-2">{unit(idx)}</span>
-    )
-    return (
-      <button
-        type="button"
-        onClick={editOnClick}
-        aria-label="Editar nomes"
-        className={pill}
-      >
-        {side === "left" ? (
-          <>
-            {logoEl}
-            {unitSpan(0)}
-            {duplas && unitSpan(1)}
-          </>
-        ) : (
-          <>
-            {duplas && unitSpan(1)}
-            {unitSpan(0)}
-            {logoEl}
-          </>
-        )}
-      </button>
-    )
-  }
+  /* ============ TELA HORIZONTAL (LANDSCAPE) — a VERTICAL deitada ============
+     Reusa a MESMA anatomia da v2 sem layout próprio: as pílulas de nome são o
+     renderNameFaixa da vertical (logo central, largura constante), o placar é o
+     renderScorePanel da vertical e o menu é bottom sheet. Só a geometria (dois
+     blocos lado a lado + painel estreito no rodapé) é específica da paisagem. */
 
   // BOTTOM SHEET landscape: UMA LINHA (a horizontal tem largura). Reusa runMenu +
   // menuBtn + o segmentado. Mesmo #0a1024 sólido, X + toque fora + auto-close.
@@ -2627,19 +2511,22 @@ export default function JogoPage() {
             swipeStartRef.current = null
           }}
         >
-          {/* Bloco ESQUERDO (order[0]): pílula flutuante hugando a borda esquerda. */}
+          {/* Bloco ESQUERDO (order[0]): MESMA pílula da vertical (renderNameFaixa —
+              logo CENTRAL, w-full → largura constante em simples/duplas),
+              centralizada no topo. padTop "4rem" = centralização óptica idêntica à
+              vertical (número centra no vão abaixo da pílula). */}
           <div className="relative flex min-h-0 flex-1 basis-0 overflow-hidden">
-            {renderTouchBlock(order[0], "min(38vw, 62vh)")}
-            <div className="pointer-events-none absolute left-3 top-3 z-10 flex max-w-[calc(100%-1.5rem)] justify-start">
-              {renderNameFaixaLandscape(order[0], "left")}
+            {renderTouchBlock(order[0], "min(38vw, 62vh)", "4rem")}
+            <div className="pointer-events-none absolute inset-x-0 top-3 z-10 flex justify-center px-3">
+              {renderNameFaixa(order[0])}
             </div>
           </div>
 
-          {/* Bloco DIREITO (order[1]): pílula hugando a borda direita + engrenagem. */}
+          {/* Bloco DIREITO (order[1]): idem + engrenagem flutuante. */}
           <div className="relative flex min-h-0 flex-1 basis-0 overflow-hidden">
-            {renderTouchBlock(order[1], "min(38vw, 62vh)")}
-            <div className="pointer-events-none absolute right-3 top-3 z-10 flex max-w-[calc(100%-1.5rem)] justify-end">
-              {renderNameFaixaLandscape(order[1], "right")}
+            {renderTouchBlock(order[1], "min(38vw, 62vh)", "4rem")}
+            <div className="pointer-events-none absolute inset-x-0 top-3 z-10 flex justify-center px-3">
+              {renderNameFaixa(order[1])}
             </div>
             <button
               type="button"
@@ -2655,11 +2542,12 @@ export default function JogoPage() {
           </div>
         </main>
         {/* PLACAR GERAL: mesmo painel da vertical (renderScorePanel — logos +
-            nomes + ponto + games/sets), encostado na base. Largura de PÍLULA
-            (max-w-sm centralizado) para NÃO esticar de ponta a ponta na tela
-            larga. Chrome inferior em flow → os dois blocos dividem o espaço acima
-            (50/50); a engrenagem (bottom-3 do bloco direito) fica logo acima. */}
-        <div className="shrink-0">{renderScorePanel("max-w-sm")}</div>
+            nomes + ponto + games/sets), encostado na base. ESTREITO (max-w-xs
+            centralizado, margem lateral) e BAIXO (compact = py enxuto) → devolve
+            espaço vertical à área de jogo. Chrome inferior em flow → os dois
+            blocos dividem o espaço acima (50/50); a engrenagem (bottom-3 do bloco
+            direito) fica logo acima. */}
+        <div className="shrink-0">{renderScorePanel("max-w-xs", true)}</div>
         {menuOpen && renderBottomSheetLandscape()}
       </>
     )
