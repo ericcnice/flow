@@ -2155,7 +2155,11 @@ export default function JogoPage() {
   // [logo] nome [ponto] [até 5 unidades]. Largura RESERVADA p/ 5 sets → o placar
   // NUNCA trunca; o nome usa o resto (regra broadcast). MATA a faixa central
   // expansível antiga.
-  const renderScorePanel = () => {
+  // widthClass = largura MÁXIMA do painel (default max-w-md p/ o portrait, que
+  // preenche quase toda a largura da tela estreita). O landscape passa uma largura
+  // menor (max-w-sm) → painel de PÍLULA centralizado, com margem lateral, sem
+  // esticar de ponta a ponta na tela larga.
+  const renderScorePanel = (widthClass = "max-w-md") => {
     const rows: { team: "blue" | "red"; key: "a" | "b" }[] = [
       { team: "blue", key: "a" },
       { team: "red", key: "b" },
@@ -2167,7 +2171,7 @@ export default function JogoPage() {
         style={{ backgroundColor: INFO_BG }}
       >
         <div
-          className="mx-auto grid max-w-md items-center gap-x-2 gap-y-1 rounded-2xl px-3 py-2 ring-1 ring-white/10"
+          className={`mx-auto grid ${widthClass} items-center gap-x-2 gap-y-1 rounded-2xl px-3 py-2 ring-1 ring-white/10`}
           style={{ gridTemplateColumns: "auto minmax(0,1fr) 1.4rem repeat(5, 1.05rem)" }}
         >
           {ordered.map(({ team, key }) => {
@@ -2520,70 +2524,6 @@ export default function JogoPage() {
     )
   }
 
-  // PÍLULA CENTRAL DE PLACAR GERAL (landscape): caixinha COMPACTA (estreita e
-  // alta) SOBRE A DIVISA dos dois lados (centro exato da tela, entre os números
-  // gigantes), fundo SÓLIDO #0a1024 (zona de informação, nunca glass). Formato
-  // ORIGINAL: duas linhas EMPILHADAS (lado A em cima, lado B embaixo), SEM nomes e
-  // SEM pontinhos de cor — só os números (ponto + games/sets). As colunas seguem
-  // broadcastCols (número variável de sets) → estreita no começo, cresce ao vivo;
-  // ponto/games/sets alinham em coluna entre as duas linhas. Cor por unidade
-  // (branco encerrada, amarelo current, dash esmaecido futura).
-  const renderCentralPillLandscape = () => {
-    const rows: { team: "blue" | "red"; key: "a" | "b" }[] = mirrored
-      ? [
-          { team: "red", key: "b" },
-          { team: "blue", key: "a" },
-        ]
-      : [
-          { team: "blue", key: "a" },
-          { team: "red", key: "b" },
-        ]
-    return (
-      <div className="pointer-events-none absolute left-1/2 top-1/2 z-20 -translate-x-1/2 -translate-y-1/2">
-        <div
-          className="grid items-center gap-x-2 gap-y-0.5 rounded-2xl px-3 py-2 ring-1 ring-white/10"
-          style={{
-            backgroundColor: INFO_BG,
-            gridTemplateColumns: `1.3rem repeat(${broadcastCols.length}, 1.15rem)`,
-          }}
-        >
-          {rows.map(({ team, key }) => {
-            const point = pointOf(sideOf(team))
-            return (
-              <Fragment key={team}>
-                <span className="text-center text-sm font-bold tabular-nums text-[#FEE100]">{point}</span>
-                {broadcastCols.map((c) => {
-                  const color = !c.played
-                    ? "rgba(255,255,255,0.35)"
-                    : c.current
-                      ? "#FEE100"
-                      : "#ffffff"
-                  return (
-                    <span
-                      key={c.setNum}
-                      className="text-center text-sm font-bold tabular-nums leading-none"
-                      style={{ color }}
-                    >
-                      {pillCell(c, key)}
-                    </span>
-                  )
-                })}
-              </Fragment>
-            )
-          })}
-          {isTiebreak && (
-            <span
-              className="col-span-full text-center text-[9px] font-bold tracking-widest"
-              style={{ color: "#FEE100" }}
-            >
-              TB
-            </span>
-          )}
-        </div>
-      </div>
-    )
-  }
-
   // BOTTOM SHEET landscape: UMA LINHA (a horizontal tem largura). Reusa runMenu +
   // menuBtn + o segmentado. Mesmo #0a1024 sólido, X + toque fora + auto-close.
   const renderBottomSheetLandscape = () => (
@@ -2714,7 +2654,12 @@ export default function JogoPage() {
             </button>
           </div>
         </main>
-        {renderCentralPillLandscape()}
+        {/* PLACAR GERAL: mesmo painel da vertical (renderScorePanel — logos +
+            nomes + ponto + games/sets), encostado na base. Largura de PÍLULA
+            (max-w-sm centralizado) para NÃO esticar de ponta a ponta na tela
+            larga. Chrome inferior em flow → os dois blocos dividem o espaço acima
+            (50/50); a engrenagem (bottom-3 do bloco direito) fica logo acima. */}
+        <div className="shrink-0">{renderScorePanel("max-w-sm")}</div>
         {menuOpen && renderBottomSheetLandscape()}
       </>
     )
@@ -2730,8 +2675,9 @@ export default function JogoPage() {
       {isPortrait && renderPortrait()}
 
       {/* LANDSCAPE (QUADRA 2.0): tela horizontal reescrita — espelho da vertical
-          v2. Pílulas de time nas extremidades, pílula central #0a1024, menu
-          bottom sheet. Só renderiza em paisagem. */}
+          v2. Pílulas de time nas extremidades, painel de placar geral no rodapé
+          (renderScorePanel, largura de pílula) e menu bottom sheet. Só renderiza
+          em paisagem. */}
       {!isPortrait && renderLandscape()}
 
       {/* AVISO "TROCA DE LADO" (A2): banner não-bloqueante, alto contraste (amarelo
