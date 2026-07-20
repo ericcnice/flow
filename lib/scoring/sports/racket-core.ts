@@ -185,7 +185,14 @@ function winGame(state: GameState, side: Side, rules: RacketRules, events: Scori
 function checkSetStatus(state: GameState, side: Side, rules: RacketRules, events: ScoringEvent[]): void {
   const me = state[side]
   const opp = state[other(side)]
-  const gps = rules.gamesPerSet
+  // COERÇÃO NUMÉRICA (bug do tiebreak de set): `gamesPerSet` pode chegar como
+  // STRING ("6") por config persistida/legada ou set_config externo. O gatilho do
+  // 6-6 comparava com `===` estrito, e `6 === "6"` é false → o tiebreak de set NÃO
+  // abria e o set seguia por vantagem (7-6, 8-6...). O super tiebreak nunca sofreu
+  // porque compara `currentSet` (number) com `bestOf` (number). Number() faz o 6-6
+  // disparar o MESMO caminho de tiebreak que o super já usa. Number(6) === 6 →
+  // nada muda para regras já numéricas.
+  const gps = Number(rules.gamesPerSet)
 
   // Empate em gamesPerSet-gamesPerSet (ex.: 6-6 ou 4-4) → tiebreak, se ligado.
   if (me.games === gps && opp.games === gps) {

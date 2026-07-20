@@ -274,3 +274,77 @@ test("undo profundo: sequência de pontos volta ao estado inicial", () => {
   assert.equal(s.currentSet, 1)
   assert.equal(engine.canUndo(), false)
 })
+
+// ---------- Tiebreak de SET no 6-6 (bug do gatilho + regressão de tipo) --------
+// Cobre exatamente o bug relatado: no 6-6 o tiebreak de set precisa abrir, contar
+// 1-0/2-1..., fechar em 7 com 2 de diferença (seguindo em 7-6, 8-7 quando preciso),
+// o set fechar 7-6 e a partida avançar. O super tiebreak sempre funcionou; aqui é
+// o tiebreak COMUM de set.
+
+test("tiebreak de set: 6-6 abre tiebreak, conta 1-0/2-1 e fecha 7-6", () => {
+  const engine = makeEngine() // gamesPerSet 6, tiebreak 7 by-two, bestOf 3
+  // Chega a 6-6 concedendo games alternados (mais rápido; mesmo caminho de winGame).
+  for (let i = 0; i < 6; i++) {
+    engine.awardGameFor("A")
+    engine.awardGameFor("B")
+  }
+  let s = engine.getState()
+  assert.equal(s.isTiebreak, true, "6-6 ENTRA em tiebreak de set")
+  assert.equal(s.isSuperTiebreak, false, "é tiebreak comum, não super")
+  assert.equal(s.A.games, 6)
+  assert.equal(s.B.games, 6)
+
+  // Conta os pontos do tiebreak: 1-0, 2-1...
+  score(engine, "A", 1) // 1-0
+  score(engine, "B", 1) // 1-1
+  score(engine, "A", 1) // 2-1
+  s = engine.getState()
+  assert.equal(s.A.tiebreakPoints, 2)
+  assert.equal(s.B.tiebreakPoints, 1)
+  assert.equal(s.isTiebreak, true, "ainda no tiebreak")
+
+  // Fecha em 7 com 2 de diferença. A já tem 2; leva a 7-1.
+  const ev = score(engine, "A", 5) // 7-1
+  assert.ok(has(ev, "SET"), "tiebreak de 7 fecha o set")
+  s = engine.getState()
+  assert.equal(s.isTiebreak, false, "tiebreak encerrado")
+  assert.equal(s.A.sets, 1, "set contabilizado")
+  assert.deepEqual(s.completedSets[0], { set: 1, A: 7, B: 6, tiebreak: true }, "set fecha 7-6")
+  assert.equal(s.currentSet, 2, "a partida avança para o próximo set")
+})
+
+test("tiebreak de set exige 2 de diferença: 7-6 e 8-7 não fecham; 8-6/9-7 fecham", () => {
+  const engine = makeEngine()
+  for (let i = 0; i < 6; i++) {
+    engine.awardGameFor("A")
+    engine.awardGameFor("B")
+  }
+  assert.equal(engine.getState().isTiebreak, true)
+
+  score(engine, "A", 6) // 6-0
+  score(engine, "B", 6) // 6-6
+  score(engine, "A", 1) // 7-6 → NÃO fecha (diff 1)
+  assert.equal(engine.getState().isTiebreak, true, "7-6 no tiebreak não fecha")
+  score(engine, "B", 1) // 7-7
+  score(engine, "B", 1) // 7-8 → NÃO fecha (diff 1 do outro lado)
+  assert.equal(engine.getState().isTiebreak, true, "8-7 no tiebreak não fecha")
+  const ev = score(engine, "B", 1) // 7-9 → fecha (diff 2)
+  assert.ok(has(ev, "SET"))
+  const s = engine.getState()
+  assert.equal(s.isTiebreak, false)
+  assert.deepEqual(s.completedSets[0], { set: 1, A: 6, B: 7, tiebreak: true }, "set fecha 6-7 (lado B)")
+})
+
+test("REGRESSÃO: gamesPerSet como STRING ('6') ainda abre o tiebreak no 6-6", () => {
+  // Reproduz o bug: config vindo como string fazia `me.games === gps` (6 === "6")
+  // falhar e o tiebreak NÃO abrir. A coerção Number() no gatilho corrige.
+  const engine = makeEngine({ gamesPerSet: "6" as unknown as number })
+  for (let i = 0; i < 6; i++) {
+    engine.awardGameFor("A")
+    engine.awardGameFor("B")
+  }
+  const s = engine.getState()
+  assert.equal(s.isTiebreak, true, "string '6' também dispara o tiebreak de set no 6-6")
+  assert.equal(s.A.games, 6)
+  assert.equal(s.B.games, 6)
+})

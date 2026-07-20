@@ -155,6 +155,10 @@ function rulesMatchFamily(rules: any, family: "tennis" | "rally" | "sideout"): b
 // nunca acontecem em <300ms).
 const DOUBLE_TAP_MS = 300
 
+// Janela entre toques do TRIPLO-TOQUE que dispara o sorteio de saque (B1c). Um
+// pouco mais folgada que o duplo-toque: são 3 toques deliberados na mesma bola.
+const TRIPLE_TAP_MS = 400
+
 // Quanto tempo o aviso "TROCA DE LADO" fica na tela antes de sumir sozinho.
 // Curto de propósito: é um lembrete discreto, não um banner que domina a tela.
 const SIDE_CHANGE_MS = 3000
@@ -336,6 +340,15 @@ export default function JogoPage() {
   // Último toque de marcação (lado + instante), para reconhecer o DUPLO-TOQUE
   // que desfaz. Não dispara re-render (é só detecção de gesto) → fica em ref.
   const lastTapRef = useRef<{ team: "blue" | "red"; time: number } | null>(null)
+
+  // SORTEIO DE SAQUE por TRIPLO-TOQUE numa bola (B1c). Contador de toques rápidos
+  // por bola (key `${team}-${idx}`) em ref (só detecção). `drawing` roda a
+  // animação; `drawHighlight` = bola destacada no frame atual do sorteio; o timer
+  // encadeia os frames (desacelerando) e é limpo no unmount.
+  const ballTapRef = useRef<{ key: string; count: number; time: number } | null>(null)
+  const drawTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [drawing, setDrawing] = useState(false)
+  const [drawHighlight, setDrawHighlight] = useState<{ team: "blue" | "red"; idx: number } | null>(null)
 
   // Aviso "TROCA DE LADO" (A2): disparado na TRANSIÇÃO por handleScoreClick,
   // some sozinho após SIDE_CHANGE_MS ou ao próximo toque. Só avisa — não troca
@@ -1082,6 +1095,10 @@ export default function JogoPage() {
       return
     }
 
+    // Durante o sorteio de saque (B1c) a tela está "animando" — ignora marcação
+    // acidental até o sorteio terminar (então volta ao normal, ainda pré-jogo).
+    if (drawing) return
+
     // Qualquer toque some com o aviso de troca de lado (some "ao próximo toque").
     // Se ESTE mesmo toque disparar uma nova troca, o flash reabre logo abaixo.
     hideSideChange()
@@ -1273,6 +1290,82 @@ export default function JogoPage() {
     setServerChosen(true) // para o pulso (landscape/B1b); a bola já salta
     setServerEverChosen(true) // portrait: escolha registrada até a próxima partida
   }
+
+  // Candidatos do sorteio = jogadores EXISTENTES: duplas → os 4; simples → os 2.
+  const drawCandidates = (): { team: "blue" | "red"; idx: number }[] => {
+    const duplas = gameConfigRef.current?.gameType === "duplas"
+    return duplas
+      ? [
+          { team: "blue", idx: 0 },
+          { team: "blue", idx: 1 },
+          { team: "red", idx: 0 },
+          { team: "red", idx: 1 },
+        ]
+      : [
+          { team: "blue", idx: 0 },
+          { team: "red", idx: 0 },
+        ]
+  }
+
+  // SORTEIO ANIMADO do sacador inicial (B1c). As bolas "piscam" alternando o
+  // destaque amarelo aleatoriamente entre os jogadores, DESACELERANDO (~1,5s), e
+  // param num sorteado. O resultado grava firstServer + initialServer pelo MESMO
+  // chooseServer do toque manual. Só pré-jogo; ignora se já estiver rodando.
+  const startServerDraw = () => {
+    if (drawing || started) return
+    const cands = drawCandidates()
+    // Intervalos crescentes (desaceleração), somando ~1,5s.
+    const steps = [55, 60, 65, 75, 90, 110, 135, 165, 200, 240, 285]
+    setDrawing(true)
+    let i = 0
+    let last = -1
+    const pick = () => {
+      // evita repetir o mesmo destaque duas vezes seguidas (leitura melhor).
+      let n = Math.floor(Math.random() * cands.length)
+      if (cands.length > 1 && n === last) n = (n + 1) % cands.length
+      last = n
+      return cands[n]
+    }
+    const tick = () => {
+      setDrawHighlight(pick())
+      i += 1
+      if (i < steps.length) {
+        drawTimerRef.current = setTimeout(tick, steps[i])
+      } else {
+        const winner = pick()
+        setDrawHighlight(winner)
+        drawTimerRef.current = setTimeout(() => {
+          setDrawing(false)
+          setDrawHighlight(null)
+          chooseServer(winner.team, winner.idx) // grava firstServer + initialServer
+        }, 380)
+      }
+    }
+    drawTimerRef.current = setTimeout(tick, steps[0])
+  }
+
+  // Toque numa BOLA de saque no pré-jogo: 1 toque escolhe aquele jogador
+  // (chooseServer); 3 toques rápidos na MESMA bola disparam o SORTEIO. Não colide
+  // com o duplo-toque→undo (que vive no bloco de toque, atrás da pílula).
+  const onServeBallTap = (team: "blue" | "red", idx: number) => {
+    if (started || drawing) return
+    const key = `${team}-${idx}`
+    const now = Date.now()
+    const prev = ballTapRef.current
+    const count = prev && prev.key === key && now - prev.time <= TRIPLE_TAP_MS ? prev.count + 1 : 1
+    ballTapRef.current = { key, count, time: now }
+    if (count >= 3) {
+      ballTapRef.current = null
+      startServerDraw()
+      return
+    }
+    chooseServer(team, idx)
+  }
+
+  // Limpa o timer do sorteio no unmount (evita setState após desmontar).
+  useEffect(() => () => {
+    if (drawTimerRef.current) clearTimeout(drawTimerRef.current)
+  }, [])
 
   // Toque numa pílula: pré-jogo (sem ações) escolhe o sacador; em jogo abre o
   // popup de nomes. actionsRef.length===0 é o mesmo sinal de pré-jogo que o
@@ -1978,7 +2071,15 @@ export default function JogoPage() {
 
     // Bola (compartilhada): acesa = sacador. O pulso da fase pré-jogo é da PÍLULA
     // (as bolas movem junto) — finito, 2x, na entrada; a bola não pulsa sozinha.
-    const bola = (idx: number) => serveBola(showAmarela && teamServing && idx === serverIdx, false)
+    // DURANTE O SORTEIO (B1c): a amarela segue o destaque aleatório (drawHighlight),
+    // ignorando o sacador normal, para "piscar" entre os jogadores.
+    const bola = (idx: number) => {
+      if (drawing) {
+        const on = drawHighlight?.team === team && drawHighlight?.idx === idx
+        return serveBola(on, false)
+      }
+      return serveBola(showAmarela && teamServing && idx === serverIdx, false)
+    }
     const logoEl = logoForTeam(team) ? (
       <span className="relative block h-7 w-7 shrink-0 overflow-hidden rounded-full ring-1 ring-white/25">
         <Image src={logoForTeam(team)!} alt="" fill sizes="28px" className="object-cover" />
@@ -2019,7 +2120,7 @@ export default function JogoPage() {
               type="button"
               onClick={(e) => {
                 e.stopPropagation()
-                chooseServer(team, 0)
+                onServeBallTap(team, 0)
               }}
               className="flex min-w-0 flex-1 items-center gap-2"
             >
@@ -2056,7 +2157,7 @@ export default function JogoPage() {
             type="button"
             onClick={(e) => {
               e.stopPropagation()
-              chooseServer(team, 0)
+              onServeBallTap(team, 0)
             }}
             className="flex min-w-0 items-center justify-between gap-2"
           >
@@ -2070,7 +2171,7 @@ export default function JogoPage() {
             type="button"
             onClick={(e) => {
               e.stopPropagation()
-              chooseServer(team, 1)
+              onServeBallTap(team, 1)
             }}
             className="flex min-w-0 items-center justify-between gap-2"
           >

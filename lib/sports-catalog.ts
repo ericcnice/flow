@@ -287,8 +287,11 @@ const racketControls = (): RuleControl[] => [
   },
 ]
 
-// Padel: igual ao racquete, mas o 40-40 é "ponto de ouro" (goldenPoint) no
-// lugar da vantagem.
+// Padel: igual ao racquete. No motor o 40-40 é modelado por `goldenPoint`, mas na
+// UI o controle se chama "Vantagem" (Com/Sem) — o MESMO rótulo do tênis/beach —
+// para não expor jargão. Com vantagem = deuce tradicional (goldenPoint=false);
+// Sem vantagem = ponto decisivo único no 40-40 (goldenPoint=true). Só o texto
+// muda; a lógica (advantage = !goldenPoint) é a mesma.
 const padelControls = (): RuleControl[] => [
   {
     key: "gamesPerSet",
@@ -302,13 +305,14 @@ const padelControls = (): RuleControl[] => [
   },
   {
     key: "goldenPoint",
-    label: "Ponto de ouro",
+    label: "Vantagem",
     options: [
-      { label: "Sim", value: true },
-      { label: "Não", value: false },
+      { label: "Com", value: true },
+      { label: "Sem", value: false },
     ],
-    get: (r) => r.goldenPoint,
-    set: (r, v) => ({ ...r, goldenPoint: v }),
+    // O valor da opção é o "tem vantagem?"; goldenPoint é o inverso.
+    get: (r) => !r.goldenPoint,
+    set: (r, v) => ({ ...r, goldenPoint: !v }),
   },
   {
     key: "tiebreak",
