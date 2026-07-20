@@ -35,6 +35,15 @@ PWA offline-first de placar para esportes de raquete (tênis, beach, padel, squa
 - Slug de venue idêntico nos dois sistemas: `CLUBS` estático (`lib/clubs-config.ts`) valida a jornada; `venues` (banco) serve o admin. Clube novo entra nos DOIS.
 - Slug travado no dashboard até a unificação. Rename futuro será com popup de aviso (QRs impressos param), NÃO redirect.
 
+## Modelo de identidade e negócio (Login Fase A)
+- **Hierarquia**: **Player** (todos; role padrão criado pela trigger `handle_new_user` no signup) → **Coach** (o super_admin promove via `members.role='coach'` no dashboard) → **Coach com marca+patrocinador no QR** (fatia futura; reusa `sponsors.member_id` apontando pro coach).
+- **Cadeia técnica existente**: `auth.users` → `profiles` (`id`, `name`, `email`, `phone`) → `members` (via `profile_id`, **hoje sempre null**) + `user_roles` (via `user_id`). A trigger de signup cria o `profile` + `user_roles='player'`; **NÃO cria `member`** e **NÃO promove coach**. `profiles.id = auth.users.id`; `user_roles` é a autorização de login (≠ `members.role`, que é atributo de pessoa).
+- **Allowlist = `members.role='coach'`** já setado pelo admin (onboarding CURADO; sem signup público de coach). Falta a **"ponte" no login**: quando o `email` do `profile` bate com um `member` coach, **vincular `members.profile_id`** (claim) + **promover `user_roles` a `coach`**. Match por **email VERIFICADO** (Google/OTP) é seguro — o provider já garantiu a posse do endereço.
+- **Vínculo coach→aluno**: `coach_id` em `members` (decisão da fatia A3; escopa o roster ao coach via RLS).
+- **`live_matches` = jogo AO VIVO (efêmero)**, canal de sync por tokens — **NÃO é histórico**. "Salvar histórico ao logar" é **tabela NOVA** (fatia futura), não reaproveita `live_matches`.
+- **Nomes do dashboard em inglês** (Players / Courts / Sponsors) por internacionalização — as colunas/rotas seguem esse padrão; o texto de UI voltado ao professor é PT-BR.
+- **Fatiamento Fase A**: **A1** login + perfil mínimo · **A2** ponte coach (claim + promoção) · **A3** roster escopado ao coach (`coach_id` + RLS) · **A4** slots de jogador com identidade (`member_id` aditivo na config; os 4 estados) · **A5** claim por celular (E.164 como ID; aluno anônimo reivindica ao logar).
+
 ## Fluxo de trabalho
 - **Claude Chat**: estratégia, decisões, prompts. **Claude Code**: executa código, commits, push. **IA do Supabase**: verifica e roda o SQL.
 - **Método por peça**: investigação read-only → decisão no chat → prompt com intocáveis explícitos → migração verificada antes de rodar → QA de produção no celular.
