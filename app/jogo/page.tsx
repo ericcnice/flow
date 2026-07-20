@@ -1903,10 +1903,10 @@ export default function JogoPage() {
 
   // BOLA DE SAQUE (SVG de tênis) COMPARTILHADA entre vertical e horizontal —
   // garante "bolas idênticas". Sacador = amarela #FEE100; demais = acinzentada.
-  const serveBola = (acesa: boolean, pulse: boolean) => (
+  const serveBola = (acesa: boolean, pulse: boolean, sizeClass = "h-9 w-9") => (
     <span
       aria-hidden
-      className={`block h-9 w-9 shrink-0 drop-shadow ${pulse ? "serve-pill-pulse" : ""}`}
+      className={`block ${sizeClass} shrink-0 drop-shadow ${pulse ? "serve-pill-pulse" : ""}`}
     >
       <svg viewBox="0 0 100 100" className="h-full w-full">
         <circle
@@ -2087,7 +2087,7 @@ export default function JogoPage() {
   // BLOCO DE TOQUE (absolute inset-0): número gigante; toda a área marca ponto.
   // Sem pílulas/bola (moram nas faixas). `numberFontSize` capa o número por
   // orientação (portrait: blocos menores; landscape: meia-largura, altura cheia).
-  const renderTouchBlock = (team: "blue" | "red", numberFontSize: string) => {
+  const renderTouchBlock = (team: "blue" | "red", numberFontSize: string, padTop = "0") => {
     const side = sideOf(team)
     const isA = team === "blue"
     const nameA = isA ? bluePlayerName : redPlayerName
@@ -2106,6 +2106,10 @@ export default function JogoPage() {
           ${animating ? "point-flash" : ""}`}
         style={
           {
+            // padTop (item 1, só vertical): reserva a faixa da pílula flutuante do
+            // topo para o justify-center centrar OPTICAMENTE o número no vão livre
+            // abaixo dela (não no bloco inteiro). Landscape usa "0" → sem efeito.
+            paddingTop: padTop,
             backgroundColor: `var(${bgVar})`,
             color: `var(${txtVar})`,
             "--blk-bg": `var(${bgVar})`,
@@ -2337,7 +2341,7 @@ export default function JogoPage() {
               pointer-events-auto (stopPropagation só na área dela). Blocos são
               flex-1/basis-0 → alturas IDÊNTICAS (as pílulas não roubam altura). */}
           <div className="relative flex min-h-0 flex-1 basis-0 overflow-hidden">
-            {renderTouchBlock(order[0], "min(42vw, 30vh)")}
+            {renderTouchBlock(order[0], "min(42vw, 30vh)", "4rem")}
             <div className="pointer-events-none absolute inset-x-0 top-3 z-10 flex justify-center px-3">
               {renderNameFaixa(order[0])}
             </div>
@@ -2349,7 +2353,7 @@ export default function JogoPage() {
               pílula apresenta seu bloco na ENTRADA, logo abaixo da divisória) +
               ENGRENAGEM flutuante no canto inferior direito (sem colisão). */}
           <div className="relative flex min-h-0 flex-1 basis-0 overflow-hidden">
-            {renderTouchBlock(order[1], "min(42vw, 30vh)")}
+            {renderTouchBlock(order[1], "min(42vw, 30vh)", "4rem")}
             <div className="pointer-events-none absolute inset-x-0 top-3 z-10 flex justify-center px-3">
               {renderNameFaixa(order[1])}
             </div>
@@ -2393,8 +2397,9 @@ export default function JogoPage() {
     const names = raw.map((n, i) => displayName(n, team, i, true))
     const prejogo = !started
     const showAmarela = serverEverChosen || started
-    // Pulso da fase pré-jogo é da PÍLULA (bolas movem junto) — finito, 2x.
-    const bola = (idx: number) => serveBola(showAmarela && teamServing && idx === serverIdx, false)
+    // Pulso da fase pré-jogo é da PÍLULA (bolas movem junto) — finito, 2x. Bolas
+    // menores que a vertical (h-8, item 2a) para dar respiro ao número gigante.
+    const bola = (idx: number) => serveBola(showAmarela && teamServing && idx === serverIdx, false, "h-8 w-8")
     const logoEl = logoForTeam(team) ? (
       <span className="relative block h-7 w-7 shrink-0 overflow-hidden rounded-full ring-1 ring-white/25">
         <Image src={logoForTeam(team)!} alt="" fill sizes="28px" className="object-cover" />
@@ -2422,8 +2427,10 @@ export default function JogoPage() {
       e.stopPropagation()
       setEditingSide(team)
     }
+    // min-h REDUZIDO (item 2a): 52→44px cria respiro entre a pílula e o número
+    // gigante sem mexer na fonte do número. Só landscape (a vertical usa 52px).
     const pill =
-      "glass pointer-events-auto flex items-center gap-3 rounded-full px-3 py-1 shadow-lg ring-1 ring-white/10 min-h-[52px] max-w-full"
+      "glass pointer-events-auto flex items-center gap-3 rounded-full px-3 py-1 shadow-lg ring-1 ring-white/10 min-h-[44px] max-w-full"
 
     // PRÉ-JOGO: unidades tocáveis (jogador → saque, nomes opcionais; logo →
     // editar). A pílula pulsa 2x na entrada e para.
@@ -2493,9 +2500,11 @@ export default function JogoPage() {
     )
   }
 
-  // PÍLULA CENTRAL DE PLACAR GERAL (landscape): posição central, fundo SÓLIDO
-  // #0a1024 (coerência com o painel da v2 — zona de informação sempre #0a1024,
-  // nunca glass), logo do clube por linha. Display puro (sem expandir/tocar).
+  // PÍLULA CENTRAL DE PLACAR GERAL (landscape): restaurada SOBRE A DIVISA dos dois
+  // lados (centro exato da tela, entre os dois números gigantes), fundo SÓLIDO
+  // #0a1024 (zona de informação, nunca glass). SÓ o placar (ponto + games/sets) —
+  // SEM nomes (já estão nas pílulas superiores de cada lado; zero duplicação). Um
+  // ponto na cor de acento do lado identifica a linha sem precisar de nome.
   const renderCentralPillLandscape = () => {
     const rows: { team: "blue" | "red"; key: "a" | "b" }[] = mirrored
       ? [
@@ -2507,39 +2516,24 @@ export default function JogoPage() {
           { team: "red", key: "b" },
         ]
     return (
-      <div className="pointer-events-none absolute left-1/2 top-2 z-20 -translate-x-1/2">
+      <div className="pointer-events-none absolute left-1/2 top-1/2 z-20 -translate-x-1/2 -translate-y-1/2">
         <div
           className="grid items-center gap-x-2 gap-y-1 rounded-2xl px-3 py-2 ring-1 ring-white/10"
           style={{
             backgroundColor: INFO_BG,
-            gridTemplateColumns: "auto minmax(4rem,1fr) 1.3rem repeat(5, 1rem)",
+            gridTemplateColumns: "0.7rem 1.3rem repeat(5, 1rem)",
           }}
         >
           {rows.map(({ team, key }) => {
-            const p = cfg.players
-            const combined =
-              cfg.gameType === "duplas"
-                ? `${displayName(team === "blue" ? p.blue1 : p.red1, team, 0, true)} / ${displayName(
-                    team === "blue" ? p.blue2 : p.red2,
-                    team,
-                    1,
-                    true,
-                  )}`
-                : displayName(team === "blue" ? p.blue1 : p.red1, team, 0, true)
-            const logo = logoForTeam(team)
+            const bgVar = team === "blue" ? "--lado-a-bg" : "--lado-b-bg"
             const point = pointOf(sideOf(team))
             return (
               <Fragment key={team}>
-                {logo ? (
-                  <span className="relative block h-4 w-4 shrink-0 overflow-hidden rounded-full ring-1 ring-white/15">
-                    <Image src={logo} alt="" fill sizes="16px" className="object-cover" />
-                  </span>
-                ) : (
-                  <span className="h-4 w-4 shrink-0" aria-hidden />
-                )}
-                <span className="min-w-0 truncate text-xs font-semibold uppercase tracking-wide text-white/90">
-                  {combined}
-                </span>
+                <span
+                  aria-hidden
+                  className="block h-2.5 w-2.5 shrink-0 rounded-full ring-1 ring-white/20"
+                  style={{ backgroundColor: `var(${bgVar})` }}
+                />
                 <span className="text-center text-sm font-bold tabular-nums text-[#FEE100]">{point}</span>
                 {Array.from({ length: 5 }).map((_, i) => {
                   const c = broadcastCols[i]
