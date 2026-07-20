@@ -2520,11 +2520,14 @@ export default function JogoPage() {
     )
   }
 
-  // PÍLULA CENTRAL DE PLACAR GERAL (landscape): restaurada SOBRE A DIVISA dos dois
-  // lados (centro exato da tela, entre os dois números gigantes), fundo SÓLIDO
-  // #0a1024 (zona de informação, nunca glass). SÓ o placar (ponto + games/sets) —
-  // SEM nomes (já estão nas pílulas superiores de cada lado; zero duplicação). Um
-  // ponto na cor de acento do lado identifica a linha sem precisar de nome.
+  // PÍLULA CENTRAL DE PLACAR GERAL (landscape): caixinha COMPACTA (estreita e
+  // alta) SOBRE A DIVISA dos dois lados (centro exato da tela, entre os números
+  // gigantes), fundo SÓLIDO #0a1024 (zona de informação, nunca glass). Formato
+  // ORIGINAL: duas linhas EMPILHADAS (lado A em cima, lado B embaixo), SEM nomes e
+  // SEM pontinhos de cor — só os números (ponto + games/sets). As colunas seguem
+  // broadcastCols (número variável de sets) → estreita no começo, cresce ao vivo;
+  // ponto/games/sets alinham em coluna entre as duas linhas. Cor por unidade
+  // (branco encerrada, amarelo current, dash esmaecido futura).
   const renderCentralPillLandscape = () => {
     const rows: { team: "blue" | "red"; key: "a" | "b" }[] = mirrored
       ? [
@@ -2538,35 +2541,30 @@ export default function JogoPage() {
     return (
       <div className="pointer-events-none absolute left-1/2 top-1/2 z-20 -translate-x-1/2 -translate-y-1/2">
         <div
-          className="grid items-center gap-x-2 gap-y-1 rounded-2xl px-3 py-2 ring-1 ring-white/10"
+          className="grid items-center gap-x-2 gap-y-0.5 rounded-2xl px-3 py-2 ring-1 ring-white/10"
           style={{
             backgroundColor: INFO_BG,
-            gridTemplateColumns: "0.7rem 1.3rem repeat(5, 1rem)",
+            gridTemplateColumns: `1.3rem repeat(${broadcastCols.length}, 1.15rem)`,
           }}
         >
           {rows.map(({ team, key }) => {
-            const bgVar = team === "blue" ? "--lado-a-bg" : "--lado-b-bg"
             const point = pointOf(sideOf(team))
             return (
               <Fragment key={team}>
-                <span
-                  aria-hidden
-                  className="block h-2.5 w-2.5 shrink-0 rounded-full ring-1 ring-white/20"
-                  style={{ backgroundColor: `var(${bgVar})` }}
-                />
                 <span className="text-center text-sm font-bold tabular-nums text-[#FEE100]">{point}</span>
-                {Array.from({ length: 5 }).map((_, i) => {
-                  const c = broadcastCols[i]
-                  const color = !c
-                    ? "transparent"
-                    : !c.played
-                      ? "rgba(255,255,255,0.35)"
-                      : c.current
-                        ? "#FEE100"
-                        : "#ffffff"
+                {broadcastCols.map((c) => {
+                  const color = !c.played
+                    ? "rgba(255,255,255,0.35)"
+                    : c.current
+                      ? "#FEE100"
+                      : "#ffffff"
                   return (
-                    <span key={i} className="text-center text-xs font-bold tabular-nums" style={{ color }}>
-                      {c ? pillCell(c, key) : ""}
+                    <span
+                      key={c.setNum}
+                      className="text-center text-sm font-bold tabular-nums leading-none"
+                      style={{ color }}
+                    >
+                      {pillCell(c, key)}
                     </span>
                   )
                 })}
