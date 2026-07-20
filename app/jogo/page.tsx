@@ -4,6 +4,7 @@ import { Fragment, useState, useEffect, useRef, type CSSProperties, type ReactNo
 import { useRouter, useSearchParams } from "next/navigation"
 import Image from "next/image"
 import { NameEditModal } from "@/components/name-edit-modal"
+import { ConfirmModal } from "@/components/confirm-modal"
 import { Settings, Volume2, VolumeX, Undo2, BarChart2, RotateCcw, LogOut, ArrowLeftRight, Share2, Users, UserMinus, X } from "lucide-react"
 import { ThirdSetModal } from "@/components/third-set-modal"
 import { ShareModal } from "@/components/share-modal"
@@ -299,6 +300,9 @@ export default function JogoPage() {
   // undo, as bolas do portrait NÃO re-pulsam se já houve escolha — mantêm a
   // amarela fixa e permitem re-escolha (regra do portrait). Reset em nova partida.
   const [serverEverChosen, setServerEverChosen] = useState(false)
+  // Confirmação de RECOMEÇAR (modal do app, não window.confirm): aberta pelo
+  // botão "Recomeçar" do bottom sheet.
+  const [confirmRestartOpen, setConfirmRestartOpen] = useState(false)
   // Nomes COMBINADOS para exibição em superfícies que não são as pílulas
   // (tela de fim, broadcast): simples = "Nome"; duplas = "Nome1/Nome2".
   const [bluePlayerName, setBluePlayerName] = useState("")
@@ -1351,13 +1355,27 @@ export default function JogoPage() {
     sendRealtimeAction({ kind: "set_config", patch: { gameType: newGt } })
   }
 
+  // RECOMEÇAR a partida: zera o placar MANTENDO a config (jogadores, gameType,
+  // initialServer, tema — tudo vive no gameConfig, fora do motor). Reconstrói o
+  // motor com ações vazias, permanece na tela de jogo e volta à fase PRÉ-JOGO
+  // (serverChosen/EverChosen = false → pode reescolher o saque). Sincroniza o
+  // reset pelo mesmo canal (o 2º aparelho zera junto). SEM confirm nativo — a
+  // confirmação é o ConfirmModal do app.
+  const restartMatch = () => {
+    localStorage.removeItem(`tennis_engine_${quadra}`)
+    localStorage.removeItem(`tennis_score_${quadra}`)
+    rebuildEngine(rulesRef.current, "A", [])
+    persist()
+    setServerChosen(false)
+    setServerEverChosen(false) // volta a convidar a escolha de saque
+    sendRealtimeAction({ kind: "reset" }) // zera a sala também (best-effort)
+  }
+
+  // Legado (overlay de setup): mantém o confirm nativo por ora — fora do escopo
+  // do menu de ações. Reaproveita restartMatch para não duplicar a reconstrução.
   const resetGame = () => {
     if (confirm("Tem certeza que deseja reiniciar o jogo? Todos os dados serão perdidos.")) {
-      localStorage.removeItem(`tennis_engine_${quadra}`)
-      rebuildEngine(rulesRef.current, "A", [])
-      persist()
-      setServerEverChosen(false) // partida nova → volta a convidar a escolha de saque
-      sendRealtimeAction({ kind: "reset" }) // zera a sala também (best-effort)
+      restartMatch()
     }
   }
 
@@ -2270,7 +2288,9 @@ export default function JogoPage() {
             </span>
             <span className="text-[10px] font-bold text-white">Compartilhar</span>
           </button>
-          {menuBtn(<LogOut className="h-6 w-6" />, "Sair", () => runMenu(endMatch))}
+          {menuBtn(<RotateCcw className="h-6 w-6" />, "Recomeçar", () =>
+            runMenu(() => setConfirmRestartOpen(true)),
+          )}
           {menuBtn(<Settings className="h-6 w-6" />, "Ajustes", () => runMenu(() => setSetupOpen(true)))}
         </div>
 
@@ -2604,7 +2624,9 @@ export default function JogoPage() {
           </span>
           <span className="text-[10px] font-bold text-white">Compartilhar</span>
         </button>
-        {menuBtn(<LogOut className="h-6 w-6" />, "Sair", () => runMenu(endMatch))}
+        {menuBtn(<RotateCcw className="h-6 w-6" />, "Recomeçar", () =>
+          runMenu(() => setConfirmRestartOpen(true)),
+        )}
         {menuBtn(<Settings className="h-6 w-6" />, "Ajustes", () => runMenu(() => setSetupOpen(true)))}
         {/* Segmentado na MESMA linha (flex-wrap cai abaixo se não couber). */}
         <div className="flex items-center gap-1 self-center rounded-full bg-white/10 p-1">
@@ -3107,6 +3129,16 @@ export default function JogoPage() {
           }
           onSave={(p1, p2) => saveNames(editingSide, p1, p2)}
           onClose={() => setEditingSide(null)}
+        />
+      )}
+
+      {/* Confirmação de RECOMEÇAR (modal do app, sem "flow.pwer.com.br diz"). */}
+      {confirmRestartOpen && (
+        <ConfirmModal
+          message="Recomeçar a partida? Os pontos serão perdidos."
+          confirmLabel="Recomeçar"
+          onConfirm={restartMatch}
+          onClose={() => setConfirmRestartOpen(false)}
         />
       )}
     </div>
