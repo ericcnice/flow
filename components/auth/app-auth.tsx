@@ -12,7 +12,7 @@
  */
 
 import { useEffect, useState } from 'react'
-import { LogIn } from 'lucide-react'
+import { Check, Loader2, LogIn } from 'lucide-react'
 import { createBrowserSupabaseClient } from '@/lib/supabase/browser-client'
 import { useSession } from '@/lib/hooks/use-session'
 import { LoginPanel } from './login-panel'
@@ -30,7 +30,12 @@ function useAppAuthFlag(): boolean {
   return on
 }
 
-export function AppAuthCta() {
+export function AppAuthCta({
+  saveState = 'idle',
+}: {
+  /** Estado do save do histórico (A1.3a), vindo da tela de jogo. */
+  saveState?: 'idle' | 'saving' | 'saved' | 'queued'
+}) {
   const flagOn = useAppAuthFlag()
   const { user, loading } = useSession()
 
@@ -68,14 +73,30 @@ export function AppAuthCta() {
   return (
     <>
       {!user ? (
+        // SEM sessão: o CTA promete o que agora cumpre. Ao logar, o jogo
+        // recém-terminado é salvo (o save da tela de jogo dispara com a sessão).
         <button
           type="button"
           onClick={() => setLoginAberto(true)}
           className="mt-1 inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-widest text-white/70 underline decoration-white/30 underline-offset-4 transition-colors hover:text-white"
         >
           <LogIn className="h-3.5 w-3.5" />
-          Criar sua conta no Flow
+          Salve este jogo no seu histórico
         </button>
+      ) : saveState === 'saved' ? (
+        <span className="mt-1 inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-widest text-primary">
+          <Check className="h-3.5 w-3.5" />
+          Jogo salvo no seu histórico
+        </span>
+      ) : saveState === 'queued' ? (
+        <span className="mt-1 text-[11px] uppercase tracking-widest text-white/60">
+          Será salvo quando houver conexão
+        </span>
+      ) : saveState === 'saving' ? (
+        <span className="mt-1 inline-flex items-center gap-1.5 text-[11px] uppercase tracking-widest text-white/50">
+          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          Salvando no seu histórico…
+        </span>
       ) : perfil?.completo ? (
         <span className="mt-1 text-[11px] uppercase tracking-widest text-white/50">
           Conectado{perfil.nome ? ` — ${perfil.nome}` : ''}

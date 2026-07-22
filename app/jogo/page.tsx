@@ -32,6 +32,8 @@ import { sportById, familyOf, formatPoint, defaultRulesFor, buildScoreCols, conc
 import { themeClassName, type ThemeId } from "@/lib/themes"
 import { clubFromCacheOrBundle } from "@/lib/supabase/club-catalog"
 import { AppAuthCta } from "@/components/auth/app-auth"
+import { useSession } from "@/lib/hooks/use-session"
+import { saveMatch, flushPendingMatches, type MatchRow } from "@/lib/supabase/matches"
 import { resolveSponsor, type Sponsor } from "@/lib/supabase/sponsors"
 import type { GameState, Side } from "@/lib/scoring/types"
 
@@ -1634,6 +1636,65 @@ export default function JogoPage() {
     }
   }
 
+  // HISTÓRICO (A1.3a): grava a partida ao encerrar QUANDO há sessão. Dono = quem
+  // encerrou logado; anônimo joga normal e não salva. Fire-and-forget + fila
+  // offline (lib/supabase/matches). `saveState` alimenta o CTA da tela de fim.
+  const { user: authUser } = useSession()
+  const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "queued">("idle")
+  const savedMatchRef = useRef(false)
+
+  // Nova partida (finished volta a false) → rearma o save para a próxima.
+  useEffect(() => {
+    if (!gameState?.finished) {
+      savedMatchRef.current = false
+      setSaveState("idle")
+    }
+  }, [gameState?.finished])
+
+  // Flush da fila pendente quando há sessão + rede. Não-bloqueante.
+  useEffect(() => {
+    if (authUser && (typeof navigator === "undefined" || navigator.onLine)) {
+      void flushPendingMatches()
+    }
+  }, [authUser])
+
+  // Save ao encerrar, UMA vez por partida: finished + vencedor + sessão. Dispara
+  // também quando a sessão CHEGA na tela de fim (login pelo CTA) — o jogo
+  // recém-terminado é salvo.
+  useEffect(() => {
+    if (!gameState?.finished || !gameState.winner || !authUser || savedMatchRef.current) return
+    savedMatchRef.current = true
+    const cfg = gameConfigRef.current
+    if (!cfg) return
+    const winnerName = gameState.winner === "B" ? redPlayerName : bluePlayerName
+    const loserName = gameState.winner === "B" ? bluePlayerName : redPlayerName
+    const row: MatchRow = {
+      owner_id: authUser.id,
+      sport: sportRef.current,
+      venue_slug: cfg.clube ?? null,
+      court_slug: cfg.quadra ?? null,
+      game_type: cfg.gameType ?? null,
+      result: {
+        players: cfg.players,
+        winner: gameState.winner,
+        winnerName,
+        loserName,
+        sets: gameState.completedSets.map((s) => ({
+          set: s.set,
+          a: s.A,
+          b: s.B,
+          ...(s.tiebreak ? { tiebreak: true } : {}),
+        })),
+        sportName: sportById(sportRef.current).name,
+        scoreType: cfg.scoreType,
+      },
+      started_at: startTime ? startTime.toISOString() : null,
+    }
+    setSaveState("saving")
+    saveMatch(row).then(setSaveState)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gameState?.finished, gameState?.winner, authUser])
+
   if (loadError) {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen gap-3 p-6 text-center">
@@ -2853,9 +2914,9 @@ export default function JogoPage() {
             </button>
           </div>
 
-          {/* CONTA (A1.2): CTA/saudação de login — ADITIVO, atrás de flag, FORA do
-              finishArtRef (não entra na imagem). Nunca gateia nada. */}
-          <AppAuthCta />
+          {/* CONTA (A1.2/A1.3a): CTA de login + feedback de "jogo salvo" — ADITIVO,
+              atrás de flag, FORA do finishArtRef (não entra na imagem). */}
+          <AppAuthCta saveState={saveState} />
 
           {/* Encerrar (voltar à home) — discreto, para não ficar preso na tela. */}
           <button
