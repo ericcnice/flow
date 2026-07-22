@@ -10,9 +10,10 @@
  * DADOS vêm prontos do server (page.tsx pré-computa os rollups por-quadra e
  * por-esporte); as ESCRITAS vão pelas Server Actions → RPCs inalteradas.
  *
- * ⚠️ IDENTIFICADOR: a GRADE usa slug de URL ("tenis","beachtennis","pingpong");
- * acessos e associações usam o sportId CANÔNICO ("tennis","beach","tabletennis").
- * sportIdFromSlug é a ÚNICA ponte — sem ela só "squash" casa por coincidência.
+ * ⚠️ IDENTIFICADOR: as quadras vêm de public.courts com `sport` CANÔNICO
+ * ("tennis","beach","tabletennis") — o MESMO que acessos e associações usam.
+ * O server já agrupa e resolve o slug de URL (esporteSlug) por grupo; aqui o
+ * canônico é a chave direta de stats/assoc (sem sportIdFromSlug intermediário).
  *
  * PRECEDÊNCIA (honesta, igual à get_sponsor_for_court): associação ATIVA da
  * quadra → default ATIVO do clube → nada. Associação INATIVA resolve em NADA
@@ -32,8 +33,6 @@ import {
   Share2,
   TriangleAlert,
 } from 'lucide-react'
-import { sportIdFromSlug } from '@/lib/clubs-config'
-import { GRADE } from '@/lib/courts-grid'
 import { courtKey, type ParTotais } from '@/lib/venue-stats'
 import { DOMINIO_PUBLICO } from '../constants'
 import { QrModal } from './qr-modal'
@@ -59,6 +58,19 @@ export type CourtAssoc = {
   court_slug: string
   sponsor_id: string
   sponsor_active: boolean
+}
+
+/**
+ * Grupo de quadras de um esporte, montado no server a partir de public.courts.
+ * `sport` = id CANÔNICO (chave de stats/assoc); `esporteSlug` = slug de URL
+ * (monta as URLs da jornada); `nome` = nome de exibição do esporte (catálogo);
+ * `quadras` = as quadras REAIS do venue (slug do QR + nome de exibição).
+ */
+export type CourtGroup = {
+  sport: string
+  esporteSlug: string
+  nome: string
+  quadras: { slug: string; name: string }[]
 }
 
 type Assoc = { sponsorId: string; active: boolean }
@@ -145,6 +157,7 @@ function CourtCard({
   esporteSlug,
   esporteNome,
   court,
+  courtName,
   stats,
   sponsors,
   valor,
@@ -158,6 +171,7 @@ function CourtCard({
   esporteSlug: string
   esporteNome: string
   court: string
+  courtName: string
   stats: ParTotais
   sponsors: SponsorOption[]
   valor: string
@@ -262,7 +276,8 @@ function CourtCard({
         <ChevronDown
           className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform ${aberto ? 'rotate-180' : ''}`}
         />
-        <span className="font-mono text-sm">{court}</span>
+        <span className="min-w-0 truncate text-sm font-medium">{courtName}</span>
+        <span className="font-mono text-xs text-muted-foreground">{court}</span>
         <div className="ml-auto flex items-center gap-3">
           <ParTotaisTexto total={stats.total} d7={stats.d7} />
           <LogoMini ef={efetivo} />
@@ -393,6 +408,7 @@ export function CourtsPanel({
   venueId,
   venueSlug,
   naJornada,
+  courtGroups,
   sponsors,
   defaultSponsorId,
   associations,
@@ -402,6 +418,7 @@ export function CourtsPanel({
   venueId: string
   venueSlug: string
   naJornada: boolean
+  courtGroups: CourtGroup[]
   sponsors: SponsorOption[]
   defaultSponsorId: string | null
   associations: CourtAssoc[]
@@ -434,15 +451,14 @@ export function CourtsPanel({
   const [campanha, setCampanha] = useState('')
   const campanhaSufixo = modoCampanha && campanha ? `/${campanha}` : ''
 
-  // Esportes abertos: por padrão só os que têm acesso OU associação.
+  // Esportes abertos: por padrão só os que têm acesso OU associação. Chaveado
+  // pelo id CANÔNICO do grupo (courts.sport) — chave direta dos rollups/assoc.
   const [abertos, setAbertos] = useState<Record<string, boolean>>(() => {
     const m: Record<string, boolean> = {}
-    for (const g of GRADE) {
-      const sportId = sportIdFromSlug(g.esporte)
-      if (!sportId) continue
-      const temAcesso = (statsByEsporte[sportId]?.total ?? 0) > 0
-      const temAssoc = g.quadras.some((court) => Boolean(assoc[courtKey(sportId, court)]))
-      m[g.esporte] = temAcesso || temAssoc
+    for (const g of courtGroups) {
+      const temAcesso = (statsByEsporte[g.sport]?.total ?? 0) > 0
+      const temAssoc = g.quadras.some((c) => Boolean(assoc[courtKey(g.sport, c.slug)]))
+      m[g.sport] = temAcesso || temAssoc
     }
     return m
   })
@@ -627,66 +643,76 @@ export function CourtsPanel({
         )}
       </div>
 
-      {/* Esportes colapsáveis → cards de quadra. */}
-      <div className="mt-4 flex flex-col gap-4">
-        {GRADE.map((g) => {
-          const sportId = sportIdFromSlug(g.esporte)
-          const esp = sportId ? (statsByEsporte[sportId] ?? { total: 0, d7: 0 }) : { total: 0, d7: 0 }
-          const aberto = abertos[g.esporte] ?? false
+      {/* Esportes colapsáveis → cards de quadra. Vazio = venue sem quadras em
+          public.courts (não cai mais na GRADE hardcoded). */}
+      {courtGroups.length === 0 ? (
+        <div className="mt-4 rounded-2xl border border-dashed border-border bg-card p-8 text-center">
+          <p className="text-sm font-medium">Nenhuma quadra cadastrada.</p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Este local ainda não tem quadras em <span className="font-mono text-xs">courts</span>.
+          </p>
+        </div>
+      ) : (
+        <div className="mt-4 flex flex-col gap-4">
+          {courtGroups.map((g) => {
+            const esp = statsByEsporte[g.sport] ?? { total: 0, d7: 0 }
+            const aberto = abertos[g.sport] ?? false
 
-          return (
-            <div key={g.esporte} className="rounded-2xl border border-border">
-              <button
-                type="button"
-                onClick={() => setAbertos((m) => ({ ...m, [g.esporte]: !aberto }))}
-                aria-expanded={aberto}
-                className="flex w-full items-center gap-3 px-4 py-3 text-left"
-              >
-                <ChevronDown
-                  className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform ${aberto ? 'rotate-180' : ''}`}
-                />
-                <h3 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
-                  {g.nome}
-                  <span className="ml-2 font-normal normal-case tracking-normal opacity-70">
-                    {g.quadras.length} {g.quadras.length === 1 ? 'quadra' : 'quadras'}
-                  </span>
-                </h3>
-                <div className="ml-auto">
-                  <ParTotaisTexto total={esp.total} d7={esp.d7} />
-                </div>
-              </button>
+            return (
+              <div key={g.sport} className="rounded-2xl border border-border">
+                <button
+                  type="button"
+                  onClick={() => setAbertos((m) => ({ ...m, [g.sport]: !aberto }))}
+                  aria-expanded={aberto}
+                  className="flex w-full items-center gap-3 px-4 py-3 text-left"
+                >
+                  <ChevronDown
+                    className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform ${aberto ? 'rotate-180' : ''}`}
+                  />
+                  <h3 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+                    {g.nome}
+                    <span className="ml-2 font-normal normal-case tracking-normal opacity-70">
+                      {g.quadras.length} {g.quadras.length === 1 ? 'quadra' : 'quadras'}
+                    </span>
+                  </h3>
+                  <div className="ml-auto">
+                    <ParTotaisTexto total={esp.total} d7={esp.d7} />
+                  </div>
+                </button>
 
-              {aberto && (
-                <div className="flex flex-col gap-2 px-3 pb-3">
-                  {g.quadras.map((court) => {
-                    const key = sportId ? courtKey(sportId, court) : ''
-                    const stats = (key && statsByCourt[key]) || { total: 0, d7: 0 }
-                    const valor = key ? (assoc[key]?.sponsorId ?? '') : ''
+                {aberto && (
+                  <div className="flex flex-col gap-2 px-3 pb-3">
+                    {g.quadras.map((c) => {
+                      const key = courtKey(g.sport, c.slug)
+                      const stats = statsByCourt[key] || { total: 0, d7: 0 }
+                      const valor = assoc[key]?.sponsorId ?? ''
 
-                    return (
-                      <CourtCard
-                        key={court}
-                        venueSlug={venueSlug}
-                        esporteSlug={g.esporte}
-                        esporteNome={g.nome}
-                        court={court}
-                        stats={stats}
-                        sponsors={sponsors}
-                        valor={valor}
-                        onChangeSponsor={(v) => sportId && onChangeCourt(sportId, court, v)}
-                        salvando={savingKey === key}
-                        erro={key ? errors[key] : undefined}
-                        efetivo={key ? efetivoDe(key) : { sponsor: null, herdado: false }}
-                        campanhaSufixo={campanhaSufixo}
-                      />
-                    )
-                  })}
-                </div>
-              )}
-            </div>
-          )
-        })}
-      </div>
+                      return (
+                        <CourtCard
+                          key={c.slug}
+                          venueSlug={venueSlug}
+                          esporteSlug={g.esporteSlug}
+                          esporteNome={g.nome}
+                          court={c.slug}
+                          courtName={c.name}
+                          stats={stats}
+                          sponsors={sponsors}
+                          valor={valor}
+                          onChangeSponsor={(v) => onChangeCourt(g.sport, c.slug, v)}
+                          salvando={savingKey === key}
+                          erro={errors[key]}
+                          efetivo={efetivoDe(key)}
+                          campanhaSufixo={campanhaSufixo}
+                        />
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      )}
     </section>
   )
 }

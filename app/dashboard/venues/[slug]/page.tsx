@@ -19,13 +19,14 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { ArrowLeft, ImageOff, MapPin } from 'lucide-react'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
-import { clubBySlug } from '@/lib/clubs-config'
+import { clubBySlug, SPORT_SLUG_TO_ID } from '@/lib/clubs-config'
+import { sportById } from '@/lib/sports-catalog'
 import { requireSuperAdmin } from '../../guard'
 import { TIPOS } from '../constants'
 import { type Endereco } from '../../address-fields'
 import { VenueImage } from './venue-image'
 import { VenueOverview } from './venue-overview'
-import { CourtsPanel, type CourtAssoc, type SponsorOption } from './courts-panel'
+import { CourtsPanel, type CourtAssoc, type CourtGroup, type SponsorOption } from './courts-panel'
 import {
   combinarJanelas,
   porEsporte,
@@ -60,6 +61,16 @@ type SponsorRow = {
 const ROTULO_TIPO: Record<string, string> = Object.fromEntries(
   TIPOS.map((t) => [t.valor, t.rotulo]),
 )
+
+// INVERSO de SPORT_SLUG_TO_ID: id canônico ('tennis') → slug de URL ('tenis').
+// courts.sport é canônico; as URLs da jornada usam o slug de URL. Este mapa é a
+// ponte canônico→slug (sem tocar lib/clubs-config: só LÊ o mapa de lá).
+const CANONICAL_TO_SLUG: Record<string, string> = Object.fromEntries(
+  Object.entries(SPORT_SLUG_TO_ID).map(([slug, id]) => [id, slug]),
+)
+
+/** Linha crua de public.courts (o que a página consome dela). */
+type CourtRow = { sport: string; slug: string; name: string; sort: number }
 
 /**
  * Endereço em linhas legíveis. Cada campo do jsonb é opcional (o formulário
@@ -161,9 +172,40 @@ export default async function VenueDetailPage({
   const rows7d = (stats7d.data ?? []) as VisitRow[]
   const courtAssocs = (courtSponsors.data ?? []) as CourtAssoc[]
 
+  // QUADRAS deste venue — FONTE DE VERDADE (Fatia 1): antes vinham da GRADE
+  // hardcoded (15 quadras iguais p/ todo venue); agora de public.courts, por
+  // venue. RLS super_admin (leitura direta com a sessão). Ordenado por sport,
+  // sort, slug. Erro/tabela ausente → lista vazia → o painel mostra estado
+  // vazio (não a GRADE). Agrupado por esporte CANÔNICO; o slug de URL e o nome
+  // de exibição do esporte vêm do catálogo/mapa (para montar URLs da jornada).
+  const { data: courtsData } = await supabase
+    .from('courts')
+    .select('sport, slug, name, sort')
+    .eq('venue_id', venue.id)
+    .eq('active', true)
+    .order('sport', { ascending: true })
+    .order('sort', { ascending: true })
+    .order('slug', { ascending: true })
+
+  const courtRows = (courtsData ?? []) as CourtRow[]
+  const courtGroups: CourtGroup[] = []
+  for (const c of courtRows) {
+    let g = courtGroups.find((x) => x.sport === c.sport)
+    if (!g) {
+      g = {
+        sport: c.sport,
+        esporteSlug: CANONICAL_TO_SLUG[c.sport] ?? c.sport,
+        nome: sportById(c.sport).name,
+        quadras: [],
+      }
+      courtGroups.push(g)
+    }
+    g.quadras.push({ slug: c.slug, name: c.name })
+  }
+
   // Rollups pré-computados no SERVER (o client fica burro). Chaveados pelo id
-  // CANÔNICO (por-esporte) e por courtKey(canônico, court) — o CourtsPanel
-  // converte o slug da GRADE com sportIdFromSlug antes de ler estes mapas.
+  // CANÔNICO (por-esporte) e por courtKey(canônico, court). Como courts.sport já
+  // é canônico, o CourtsPanel lê estes mapas DIRETO (sem sportIdFromSlug).
   const statsByEsporte: Record<string, ParTotais> = combinarJanelas(porEsporte, rowsTotal, rows7d)
   const statsByCourt: Record<string, ParTotais> = combinarJanelas(porQuadra, rowsTotal, rows7d)
 
@@ -240,6 +282,7 @@ export default async function VenueDetailPage({
         venueId={venue.id}
         venueSlug={venue.slug}
         naJornada={naJornada}
+        courtGroups={courtGroups}
         sponsors={sponsorOptions}
         defaultSponsorId={venue.default_sponsor_id}
         associations={courtAssocs}

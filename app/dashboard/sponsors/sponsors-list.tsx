@@ -14,22 +14,19 @@ import { useMemo, useState } from 'react'
 import { Check, ImageOff, Link2, Megaphone, Pencil, Plus, Search } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { CLUBS } from '@/lib/clubs-config'
-import { GRADE } from '@/lib/courts-grid'
 import { DOMINIO_PUBLICO } from '../venues/constants'
 import { ActiveToggle } from './active-toggle'
 import { SponsorFormModal, type MemberOption, type SponsorFormData } from './sponsor-form'
 
 /**
  * URL de campanha de EXEMPLO para um slug de patrocinador. A URL real varia por
- * clube × esporte × quadra; aqui montamos um exemplo concreto e copiável com a
- * primeira quadra da grade do primeiro clube — útil de imediato, e o admin troca
- * esporte/quadra à mão. Base de domínio idêntica à do preview de venues.
+ * clube × esporte × quadra; aqui montamos um exemplo ESTÁTICO e copiável de uma
+ * rota real da jornada (spac/beachtennis/q1) — útil de imediato, e o admin troca
+ * clube/esporte/quadra à mão. Base de domínio idêntica à do preview de venues.
+ * (Antes vinha de GRADE[0], removida na Fatia 1 da unificação de quadras.)
  */
 function urlCampanhaExemplo(slug: string): string {
-  const clube = Object.values(CLUBS)[0]?.id ?? 'spac'
-  const g0 = GRADE[0]
-  return `https://${DOMINIO_PUBLICO}/${clube}/${g0.esporte}/${g0.quadras[0]}/${slug}`
+  return `https://${DOMINIO_PUBLICO}/spac/beachtennis/q1/${slug}`
 }
 
 /** Copia a URL de campanha de exemplo, com feedback de "copiado". */
