@@ -22,6 +22,12 @@ revoke all on public.profiles from anon;
 revoke all on public.profiles from authenticated;
 grant select, update on public.profiles to authenticated;
 
+-- Remove policies FANTASMA criadas à mão fora do versionamento
+-- (profiles_select_own / profiles_update_own) — funcionalmente idênticas às
+-- self abaixo. Já removidas no banco; ficam aqui para o repo espelhar.
+drop policy if exists "profiles_select_own" on public.profiles;
+drop policy if exists "profiles_update_own" on public.profiles;
+
 -- SELF-ACCESS: cada um lê e edita SÓ o próprio perfil (auth.uid() = id). O
 -- dashboard (guard.ts) lê o profile do PRÓPRIO super_admin (eq id = user.id),
 -- então esta policy self já o cobre — sem policy extra de super_admin.
