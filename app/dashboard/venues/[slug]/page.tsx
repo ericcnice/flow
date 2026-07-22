@@ -70,7 +70,7 @@ const CANONICAL_TO_SLUG: Record<string, string> = Object.fromEntries(
 )
 
 /** Linha crua de public.courts (o que a página consome dela). */
-type CourtRow = { sport: string; slug: string; name: string; sort: number }
+type CourtRow = { id: string; sport: string; slug: string; name: string; active: boolean; sort: number }
 
 /**
  * Endereço em linhas legíveis. Cada campo do jsonb é opcional (o formulário
@@ -172,17 +172,17 @@ export default async function VenueDetailPage({
   const rows7d = (stats7d.data ?? []) as VisitRow[]
   const courtAssocs = (courtSponsors.data ?? []) as CourtAssoc[]
 
-  // QUADRAS deste venue — FONTE DE VERDADE (Fatia 1): antes vinham da GRADE
-  // hardcoded (15 quadras iguais p/ todo venue); agora de public.courts, por
-  // venue. RLS super_admin (leitura direta com a sessão). Ordenado por sport,
-  // sort, slug. Erro/tabela ausente → lista vazia → o painel mostra estado
-  // vazio (não a GRADE). Agrupado por esporte CANÔNICO; o slug de URL e o nome
-  // de exibição do esporte vêm do catálogo/mapa (para montar URLs da jornada).
+  // QUADRAS deste venue — FONTE DE VERDADE (Fatia 1): de public.courts, por
+  // venue (antes: GRADE hardcoded, 15 iguais p/ todo venue). RLS super_admin
+  // (leitura direta com a sessão). Ordenado por sport, sort, slug. Fatia 2:
+  // busca TODAS (inclui INATIVAS) — a OPERAÇÃO (cards) usa só as ativas, a
+  // GESTÃO enxerga as inativas para reativar. Erro/tabela ausente → lista vazia
+  // → o painel mostra estado vazio (não a GRADE). Agrupado por esporte CANÔNICO;
+  // slug de URL e nome de exibição vêm do catálogo/mapa (p/ montar as URLs).
   const { data: courtsData } = await supabase
     .from('courts')
-    .select('sport, slug, name, sort')
+    .select('id, sport, slug, name, active, sort')
     .eq('venue_id', venue.id)
-    .eq('active', true)
     .order('sport', { ascending: true })
     .order('sort', { ascending: true })
     .order('slug', { ascending: true })
@@ -200,7 +200,7 @@ export default async function VenueDetailPage({
       }
       courtGroups.push(g)
     }
-    g.quadras.push({ slug: c.slug, name: c.name })
+    g.quadras.push({ id: c.id, slug: c.slug, name: c.name, active: c.active, sort: c.sort })
   }
 
   // Rollups pré-computados no SERVER (o client fica burro). Chaveados pelo id

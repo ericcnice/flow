@@ -29,6 +29,7 @@ import {
   Download,
   ImageOff,
   Loader2,
+  Plus,
   QrCode,
   Share2,
   TriangleAlert,
@@ -42,6 +43,8 @@ import {
   setVenueDefaultSponsor,
   type FormState,
 } from './court-sponsors-actions'
+import { ManageCourts } from './courts-manage'
+import { seedDefaultCourts } from './courts-actions'
 
 /** Patrocinador para os dropdowns e a miniatura (subconjunto da list_sponsors). */
 export type SponsorOption = {
@@ -60,17 +63,27 @@ export type CourtAssoc = {
   sponsor_active: boolean
 }
 
+/** Uma quadra do venue (id/active/sort p/ a gestão; slug+name p/ operação). */
+export type ManagedCourt = {
+  id: string
+  slug: string
+  name: string
+  active: boolean
+  sort: number
+}
+
 /**
  * Grupo de quadras de um esporte, montado no server a partir de public.courts.
  * `sport` = id CANÔNICO (chave de stats/assoc); `esporteSlug` = slug de URL
  * (monta as URLs da jornada); `nome` = nome de exibição do esporte (catálogo);
- * `quadras` = as quadras REAIS do venue (slug do QR + nome de exibição).
+ * `quadras` = TODAS as quadras do venue (ativas + inativas) — a OPERAÇÃO filtra
+ * as ativas; a GESTÃO enxerga todas.
  */
 export type CourtGroup = {
   sport: string
   esporteSlug: string
   nome: string
-  quadras: { slug: string; name: string }[]
+  quadras: ManagedCourt[]
 }
 
 type Assoc = { sponsorId: string; active: boolean }
@@ -444,6 +457,20 @@ export function CourtsPanel({
   const [savingKey, setSavingKey] = useState<string | null>(null)
   const [errors, setErrors] = useState<Record<string, string>>({})
 
+  // Seed de quadras padrão (estado vazio). Opt-in explícito — nunca automático.
+  const [seeding, setSeeding] = useState(false)
+  const [seedErro, setSeedErro] = useState<string | null>(null)
+  async function criarQuadrasPadrao() {
+    setSeeding(true)
+    setSeedErro(null)
+    try {
+      const r = await seedDefaultCourts(venueId, venueSlug)
+      if (!r.ok) setSeedErro(r.erro ?? 'Erro ao criar as quadras padrão.')
+    } finally {
+      setSeeding(false)
+    }
+  }
+
   // Modo campanha (herdado do share-links): recolhido por padrão; ativo, injeta
   // o sufixo /[slug] em TODAS as URLs dos cards. `campanha` guarda o SLUG do
   // sponsor — o mesmo segmento /[ad] que a jornada resolve.
@@ -457,7 +484,7 @@ export function CourtsPanel({
     const m: Record<string, boolean> = {}
     for (const g of courtGroups) {
       const temAcesso = (statsByEsporte[g.sport]?.total ?? 0) > 0
-      const temAssoc = g.quadras.some((c) => Boolean(assoc[courtKey(g.sport, c.slug)]))
+      const temAssoc = g.quadras.some((c) => c.active && Boolean(assoc[courtKey(g.sport, c.slug)]))
       m[g.sport] = temAcesso || temAssoc
     }
     return m
@@ -651,10 +678,31 @@ export function CourtsPanel({
           <p className="mt-1 text-sm text-muted-foreground">
             Este local ainda não tem quadras em <span className="font-mono text-xs">courts</span>.
           </p>
+          <button
+            type="button"
+            onClick={criarQuadrasPadrao}
+            disabled={seeding}
+            className="mt-4 inline-flex items-center gap-1.5 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
+          >
+            {seeding ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+            Criar quadras padrão (q1 e q2 dos 6 esportes)
+          </button>
+          {seedErro && (
+            <p role="alert" className="mt-2 text-sm text-destructive">
+              {seedErro}
+            </p>
+          )}
+          <p className="mt-3 text-xs text-muted-foreground">
+            Ou use “Gerenciar quadras” abaixo para adicionar uma a uma.
+          </p>
         </div>
       ) : (
         <div className="mt-4 flex flex-col gap-4">
           {courtGroups.map((g) => {
+            // OPERAÇÃO: só as quadras ATIVAS. Grupo sem ativas não vira acordeão
+            // de operação (aparece só na gestão, para reativar).
+            const ativas = g.quadras.filter((c) => c.active)
+            if (ativas.length === 0) return null
             const esp = statsByEsporte[g.sport] ?? { total: 0, d7: 0 }
             const aberto = abertos[g.sport] ?? false
 
@@ -672,7 +720,7 @@ export function CourtsPanel({
                   <h3 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
                     {g.nome}
                     <span className="ml-2 font-normal normal-case tracking-normal opacity-70">
-                      {g.quadras.length} {g.quadras.length === 1 ? 'quadra' : 'quadras'}
+                      {ativas.length} {ativas.length === 1 ? 'quadra' : 'quadras'}
                     </span>
                   </h3>
                   <div className="ml-auto">
@@ -682,7 +730,7 @@ export function CourtsPanel({
 
                 {aberto && (
                   <div className="flex flex-col gap-2 px-3 pb-3">
-                    {g.quadras.map((c) => {
+                    {ativas.map((c) => {
                       const key = courtKey(g.sport, c.slug)
                       const stats = statsByCourt[key] || { total: 0, d7: 0 }
                       const valor = assoc[key]?.sponsorId ?? ''
@@ -713,6 +761,9 @@ export function CourtsPanel({
           })}
         </div>
       )}
+
+      {/* GESTÃO (estrutural) — separada da operação acima. */}
+      <ManageCourts venueId={venueId} venueSlug={venueSlug} courtGroups={courtGroups} />
     </section>
   )
 }
