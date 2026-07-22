@@ -31,6 +31,7 @@ import { ScoringEngine } from "@/lib/scoring/engine"
 import { sportById, familyOf, formatPoint, defaultRulesFor, buildScoreCols, concededUnitFlags, displayServer, sideChangeOf, migrateRacketRules, type SideChangeMode, type SportId } from "@/lib/sports-catalog"
 import { themeClassName, type ThemeId } from "@/lib/themes"
 import { clubFromCacheOrBundle } from "@/lib/supabase/club-catalog"
+import { AppAuthCta } from "@/components/auth/app-auth"
 import { resolveSponsor, type Sponsor } from "@/lib/supabase/sponsors"
 import type { GameState, Side } from "@/lib/scoring/types"
 
@@ -2851,6 +2852,10 @@ export default function JogoPage() {
               {sharing ? "Gerando…" : "Compartilhar"}
             </button>
           </div>
+
+          {/* CONTA (A1.2): CTA/saudação de login — ADITIVO, atrás de flag, FORA do
+              finishArtRef (não entra na imagem). Nunca gateia nada. */}
+          <AppAuthCta />
 
           {/* Encerrar (voltar à home) — discreto, para não ficar preso na tela. */}
           <button
