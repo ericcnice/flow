@@ -30,7 +30,7 @@ import { createSpeechSynthesisSpeaker, type Speaker } from "@/lib/voice/speaker"
 import { ScoringEngine } from "@/lib/scoring/engine"
 import { sportById, familyOf, formatPoint, defaultRulesFor, buildScoreCols, concededUnitFlags, displayServer, sideChangeOf, migrateRacketRules, type SideChangeMode, type SportId } from "@/lib/sports-catalog"
 import { themeClassName, type ThemeId } from "@/lib/themes"
-import { clubBySlug } from "@/lib/clubs-config"
+import { clubFromCacheOrBundle } from "@/lib/supabase/club-catalog"
 import { resolveSponsor, type Sponsor } from "@/lib/supabase/sponsors"
 import type { GameState, Side } from "@/lib/scoring/types"
 
@@ -1760,7 +1760,7 @@ export default function JogoPage() {
   const loserName = gs.winner === "B" ? bluePlayerName : redPlayerName
   // Logo do clube: SEMPRE que houver clube. O do patrocinador vem do estado
   // `finishAd` (resolvido no effect lá em cima — ver comentário de lá).
-  const finishClub = clube ? clubBySlug(clube) : null
+  const finishClub = clube ? clubFromCacheOrBundle(clube) : null
 
   // --- Dados extra da ARTE de fim de jogo (design azul-marinho FIXO) ---------
   // Nome AMIGÁVEL do esporte (dinâmico p/ o título da arte): "Tênis", "Beach
@@ -1809,7 +1809,7 @@ export default function JogoPage() {
   /** Logo do clube p/ o time (por ora o do clube da quadra nos dois; visitante é
    *  slot futuro sem UI). null = jogo genérico sem clube. */
   const logoForTeam = (team: "blue" | "red"): string | null => {
-    const home = clube ? (clubBySlug(clube)?.logo ?? null) : null
+    const home = clube ? (clubFromCacheOrBundle(clube)?.logo || null) : null
     return team === "red" && cfg.visitorClubLogo ? cfg.visitorClubLogo : home
   }
 

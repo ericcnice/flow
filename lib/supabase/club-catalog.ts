@@ -17,6 +17,7 @@
  */
 
 import { supabase } from "@/lib/supabase/client"
+import { clubBySlug } from "@/lib/clubs-config"
 import type { SportId } from "@/lib/sports-catalog"
 
 /**
@@ -146,6 +147,24 @@ export async function fetchPublicClub(slug: string | null | undefined): Promise<
   } finally {
     clearTimeout(timer)
   }
+}
+
+/**
+ * Nome + logo do clube para superfícies FORA da jornada (tela de fim do /jogo,
+ * logo do espectador no broadcast). BUNDLE primeiro (piso): clube do bundle
+ * mostra o logo local de sempre (spac inalterado). Cache como FALLBACK: um clube
+ * NOVO (só no banco) usa o logo do cache — quente porque a jornada acabou de o
+ * gravar. Cache frio / clube desconhecido → null (o caller já trata: sem logo).
+ * Só LÊ (bundle síncrono + localStorage); nunca busca rede.
+ */
+export function clubFromCacheOrBundle(
+  slug: string | null | undefined,
+): { nome: string; logo: string } | null {
+  const bundle = clubBySlug(slug)
+  if (bundle) return { nome: bundle.nome, logo: bundle.logo }
+  const cat = readClubCache(slug)
+  if (cat) return { nome: cat.nome, logo: cat.logoUrl ?? "" }
+  return null
 }
 
 /**

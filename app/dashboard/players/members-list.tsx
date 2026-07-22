@@ -17,7 +17,6 @@ import { useMemo, useState } from 'react'
 import { Pencil, Plus, Search, Users } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { clubBySlug } from '@/lib/clubs-config'
 import { ActiveToggle } from './active-toggle'
 import { MemberFormModal, type MemberFormData } from './member-form'
 
@@ -112,12 +111,6 @@ function BotaoEditar({ onClick }: { onClick: () => void }) {
   )
 }
 
-/** Nome amigável do clube; cai no slug cru se não estiver no clubs-config. */
-function nomeClube(slug: string | null) {
-  if (!slug) return '—'
-  return clubBySlug(slug)?.nome ?? slug
-}
-
 export function MembersList({
   members,
   clubes,
@@ -128,6 +121,11 @@ export function MembersList({
   const [busca, setBusca] = useState('')
   const [clubeFiltro, setClubeFiltro] = useState('todos')
   const [modal, setModal] = useState<Modal>({ tipo: 'fechado' })
+
+  // Nome amigável do clube a partir da lista `clubes` (que agora vem de `venues`,
+  // Fatia 3b — não mais do CLUBS estático). Cai no slug cru se não estiver lá.
+  const nomePorSlug = useMemo(() => new Map(clubes.map((c) => [c.slug, c.nome])), [clubes])
+  const nomeClube = (slug: string | null) => (slug ? (nomePorSlug.get(slug) ?? slug) : '—')
 
   // Opções do filtro = os club_slug DISTINTOS que existem nos registros, não o
   // catálogo inteiro: filtrar por um clube sem ninguém cadastrado só produziria

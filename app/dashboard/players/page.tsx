@@ -11,7 +11,6 @@
 
 import Link from 'next/link'
 import { ArrowLeft } from 'lucide-react'
-import { CLUBS } from '@/lib/clubs-config'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
 import { requireSuperAdmin } from '../guard'
 import { MembersList, type Member } from './members-list'
@@ -33,7 +32,15 @@ export default async function PlayersPage() {
     .order('created_at', { ascending: false })
 
   const members = (data ?? []) as Member[]
-  const clubes = Object.values(CLUBS).map((c) => ({ slug: c.id, nome: c.nome }))
+  // Clubes vêm de `venues` (banco), não mais do CLUBS estático (Fatia 3b): o
+  // dropdown/rótulos do dashboard passam a refletir os clubes reais, incluindo os
+  // criados no dashboard. RLS super_admin (leitura direta com a sessão).
+  const { data: venuesData } = await supabase
+    .from('venues')
+    .select('slug, name')
+    .eq('active', true)
+    .order('name', { ascending: true })
+  const clubes = (venuesData ?? []).map((v) => ({ slug: v.slug as string, nome: v.name as string }))
 
   return (
     <main className="mx-auto max-w-6xl px-5 py-10">

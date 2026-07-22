@@ -20,9 +20,11 @@
  */
 
 import { useEffect, useMemo, useRef, useState } from "react"
-import { useParams, useRouter } from "next/navigation"
+import { useParams, useRouter, useSearchParams } from "next/navigation"
 import Image from "next/image"
-import { resolveClubContext } from "@/lib/clubs-config"
+import type { ClubContext } from "@/lib/clubs-config"
+import { resolveClubContextLayered } from "@/lib/club-context"
+import { readClubCache, fetchPublicClub } from "@/lib/supabase/club-catalog"
 import { resolveSponsor, resolveSponsorForCourt, type Sponsor } from "@/lib/supabase/sponsors"
 import { supabase } from "@/lib/supabase/client"
 import { defaultRulesFor } from "@/lib/sports-catalog"
@@ -81,14 +83,124 @@ function logCourtVisit(
     )
 }
 
+/**
+ * FEATURE FLAG da resolução em camadas (Fatia 3b). Default OFF = bundle puro
+ * (comportamento de hoje). Liga com env NEXT_PUBLIC_CLUB_CATALOG='1'. Override de
+ * QA por query-param (?catalog=1 liga, ?catalog=0 desliga) — SSR-safe (a URL
+ * existe no servidor, então não há mismatch de hidratação). Recebe o valor do
+ * param já lido para ser puro/determinístico.
+ */
+function catalogFlagOn(catalogParam: string | null): boolean {
+  if (catalogParam === "1") return true
+  if (catalogParam === "0") return false
+  return process.env.NEXT_PUBLIC_CLUB_CATALOG === "1"
+}
+
+/**
+ * Logo do clube com CASCATA de fallback (Fatia 3b): tenta cada src em ordem
+ * (banco/cache → path do bundle) e, se TODAS falharem no onError, mostra a
+ * inicial do nome. A Tela 1 nunca fica vazia. Mantém as MESMAS props visuais do
+ * <Image> de antes (fill/sizes/priority/object-cover) — com a flag OFF a cascata
+ * tem só o path do bundle, então o render é o de hoje + um onError inerte.
+ */
+function ClubLogo({ cascade, nome }: { cascade: string[]; nome: string }) {
+  const [idx, setIdx] = useState(0)
+  const src = cascade[idx]
+  if (!src) {
+    return (
+      <div className="flex h-full w-full items-center justify-center">
+        <span className="text-[28vw] font-black leading-none opacity-80 landscape:text-[30vh]">
+          {nome.trim().charAt(0).toUpperCase() || "?"}
+        </span>
+      </div>
+    )
+  }
+  return (
+    <Image
+      key={src}
+      src={src}
+      alt={nome}
+      fill
+      sizes="60vw"
+      priority
+      className="object-cover"
+      onError={() => setIdx((i) => i + 1)}
+    />
+  )
+}
+
 export function ClubOpening({ ad }: { ad?: string }) {
   const router = useRouter()
   const params = useParams<{ clube: string; esporte: string; quadra: string }>()
+  const searchParams = useSearchParams()
+  const catalogOn = catalogFlagOn(searchParams.get("catalog"))
 
-  const ctx = useMemo(
-    () => resolveClubContext(params?.clube, params?.esporte, params?.quadra),
+  // PISO SÍNCRONO (bundle) — puro, SSR-safe (sem localStorage no render). É este
+  // que garante t=0/zero-rede para o QR impresso, idêntico a hoje. O catálogo
+  // (cache local) NÃO entra no render (evita mismatch de hidratação); ele entra
+  // no effect abaixo, pós-mount, só quando o bundle NÃO reconheceu.
+  const bundle = useMemo(
+    () => resolveClubContextLayered(params?.clube, params?.esporte, params?.quadra, { catalog: null }),
     [params?.clube, params?.esporte, params?.quadra],
   )
+
+  // MÁQUINA DE 3 ESTADOS (Fatia 3b):
+  //  - 'resolved'  : bundle OU cache reconheceram → Tela 1 + timers (como hoje).
+  //  - 'checking'  : bundle não achou E flag ON → vai ler o cache no effect (tick
+  //                  sub-ms, sem rede). Não redireciona ainda (evita flash).
+  //  - 'resolving' : cache também não achou E online → Tela 1 NEUTRA + busca (3s).
+  //  - 'notFound'  : nada reconheceu (ou flag OFF sem bundle) → redirect pra home.
+  // Bundle NUNCA entra em 'checking'/'resolving' — resolve no primeiro paint.
+  const [ctx, setCtx] = useState<ClubContext | null>(bundle.ctx)
+  const [logoCascade, setLogoCascade] = useState<string[]>(bundle.logoCascade)
+  const [estado, setEstado] = useState<"resolved" | "checking" | "resolving" | "notFound">(
+    bundle.ctx ? "resolved" : catalogOn ? "checking" : "notFound",
+  )
+
+  // 'checking' (bundle miss + flag ON): lê o CACHE local (síncrono, offline). Se
+  // reconhecer → resolved. Senão: online → 'resolving' + busca (3s); offline →
+  // notFound. Só roda pós-mount (localStorage/navigator client-only).
+  useEffect(() => {
+    if (estado !== "checking") return
+    const viaCache = resolveClubContextLayered(params?.clube, params?.esporte, params?.quadra, {
+      catalog: readClubCache(params?.clube),
+    })
+    if (viaCache.ctx) {
+      setCtx(viaCache.ctx)
+      setLogoCascade(viaCache.logoCascade)
+      setEstado("resolved")
+      return
+    }
+    if (typeof navigator !== "undefined" && !navigator.onLine) {
+      setEstado("notFound")
+      return
+    }
+    setEstado("resolving")
+    let alive = true
+    fetchPublicClub(params?.clube).then((cat) => {
+      if (!alive) return
+      const r = resolveClubContextLayered(params?.clube, params?.esporte, params?.quadra, { catalog: cat })
+      if (r.ctx) {
+        setCtx(r.ctx)
+        setLogoCascade(r.logoCascade)
+        setEstado("resolved")
+      } else {
+        setEstado("notFound")
+      }
+    })
+    return () => {
+      alive = false
+    }
+  }, [estado, params?.clube, params?.esporte, params?.quadra])
+
+  // BACKGROUND stale-while-revalidate: com a flag ON e já resolvido, atualiza o
+  // cache daquele clube para o PRÓXIMO acesso. Fire-and-forget — NÃO mexe em
+  // ctx/estado, então NÃO re-arma os timers da jornada em curso.
+  useEffect(() => {
+    if (!catalogOn || estado !== "resolved") return
+    void fetchPublicClub(params?.clube)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [catalogOn, estado, params?.clube])
 
   // Patrocinador da abertura. DUAS fontes, escolhidas pela presença de `ad`:
   //  - `ad` presente (rota /[ad], cartaz impresso legado): resolve por SLUG, com
@@ -183,22 +295,25 @@ export function ClubOpening({ ad }: { ad?: string }) {
     router.push(`/jogo?quadra=${quadra}&sport=${sportId}`)
   }
 
+  // Redirect pra home SÓ quando nada reconheceu (piso + cache + busca falharam).
+  // Nunca durante 'checking'/'resolving' — é isso que evita o redirect prematuro.
   useEffect(() => {
-    // Rota inválida (clube/esporte/quadra) → volta pra home.
-    if (!ctx) {
-      router.replace("/")
-      return
-    }
-    // O relógio arma SEMPRE em t=0, sem esperar a resolução do patrocinador — é
-    // isso que mantém a jornada instantânea (a rota base não ganha nenhuma
-    // latência de rede antes da Tela 1 começar). A decisão fica para o FIM dos
-    // 4s, lida via adCfgRef para a closure não congelar um adCfg velho.
+    if (estado === "notFound") router.replace("/")
+  }, [estado, router])
+
+  useEffect(() => {
+    // Timers da jornada armam quando o contexto está RESOLVIDO: bundle no t=0
+    // (QR impresso, zero rede, idêntico a hoje), ou no instante em que o cache/
+    // busca resolveu um clube novo. NUNCA durante 'resolving'/'checking'.
+    if (estado !== "resolved") return
+    // O relógio arma SEM esperar a resolução do patrocinador — é isso que mantém
+    // a jornada instantânea. A decisão fica para o FIM dos 4s, via adCfgRef.
     const timers: ReturnType<typeof setTimeout>[] = []
     timers.push(
       setTimeout(() => {
-        // t+4s: a resolução (teto de 2s nas resolveSponsor*) já terminou no
-        // caminho normal. Se uma rede patológica passou dos 4s, adCfgRef ainda é
-        // null → joga sem patrocinador. NUNCA segura o jogador esperando rede.
+        // t+4s: a resolução do patrocinador (teto de 2s) já terminou no caminho
+        // normal. Rede patológica passou dos 4s → adCfgRef null → joga sem
+        // patrocinador. NUNCA segura o jogador esperando rede.
         if (adCfgRef.current) {
           setPhase("two")
           timers.push(setTimeout(() => setSplit(true), SCREEN_MS))
@@ -209,8 +324,26 @@ export function ClubOpening({ ad }: { ad?: string }) {
     )
     return () => timers.forEach(clearTimeout)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ctx])
+  }, [estado])
 
+  // 'notFound' redireciona (efeito acima) → renderiza null enquanto isso, como
+  // hoje. 'checking' é um tick sub-ms (leitura de cache) → null também.
+  if (estado === "notFound" || estado === "checking") return null
+
+  // 'resolving' (clube novo, buscando no banco): Tela 1 NEUTRA — moldura do palco
+  // + skeleton do logo, SEM o auto-avanço de 4s (os timers só armam em resolved).
+  if (estado === "resolving") {
+    return (
+      <div
+        className="tema-neutro palco-main flex h-[100dvh] w-screen items-center justify-center"
+        style={{ backgroundColor: "var(--palco-fundo)", color: "var(--palco-texto)" }}
+      >
+        <div className="h-24 w-24 animate-pulse rounded-full bg-white/10" aria-label="Carregando" />
+      </div>
+    )
+  }
+
+  // estado === 'resolved' → ctx é não-nulo (setados juntos). Narrowing p/ o TS.
   if (!ctx) return null
 
   // ---------------------------------------------------------------- TELA 2 (ad)
@@ -281,7 +414,7 @@ export function ClubOpening({ ad }: { ad?: string }) {
             caixa é quadrada e limitada pela menor dimensão da metade (altura em
             retrato, largura em paisagem). */}
         <div className="relative aspect-square rounded-full overflow-hidden portrait:h-[58%] landscape:w-[64%] max-h-[82%] max-w-[82%]">
-          <Image src={ctx.club.logo} alt={ctx.club.nome} fill sizes="60vw" priority className="object-cover" />
+          <ClubLogo cascade={logoCascade} nome={ctx.club.nome} />
         </div>
       </div>
 

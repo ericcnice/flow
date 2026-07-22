@@ -25,7 +25,7 @@ import { useRouter, useSearchParams } from "next/navigation"
 import { ScoringEngine } from "@/lib/scoring/engine"
 import { sportById, familyOf, formatPoint, defaultRulesFor, buildScoreCols, concededUnitFlags, displayServer, type SportId } from "@/lib/sports-catalog"
 import { themeClassName, type ThemeId } from "@/lib/themes"
-import { clubBySlug } from "@/lib/clubs-config"
+import { clubFromCacheOrBundle } from "@/lib/supabase/club-catalog"
 import { resolveSponsor, type Sponsor } from "@/lib/supabase/sponsors"
 import type { GameState, Side } from "@/lib/scoring/types"
 import { getLiveMatchState } from "@/lib/supabase/live-match"
@@ -385,7 +385,7 @@ export function BroadcastView() {
     actionsRef.current,
   )
   const pointOf = (side: Side): string => (finished ? "" : formatPoint(sport, gs[side], isTiebreak))
-  const viewClub = clube ? clubBySlug(clube) : null
+  const viewClub = clube ? clubFromCacheOrBundle(clube) : null
   const winnerName = gs.winner === "B" ? nameB : gs.winner === "A" ? nameA : ""
 
   return (
