@@ -47,6 +47,20 @@ export const CLUBS: Record<string, ClubConfig> = {
       "q5-saibro", "q6-saibro", "q7-saibro", "q8-rapida",
     ],
   },
+  // CLUBE DEMO para marketing (posts de Instagram por esporte) e demonstrações
+  // comerciais. O venue "flow" já existe no banco (criado pelo dashboard); esta
+  // entrada é o que a JORNADA valida (Pacto Rule 1: slug idêntico nos dois).
+  // TODOS os seis esportes; DUAS quadras planas por esporte — q1 = QRs dos posts
+  // de Instagram, q2 = demonstrações ao vivo. Separar os canais mantém a
+  // telemetria limpa (court_visits grava venue+sport+court). Logo: adicionar
+  // public/flow.png (senão a abertura mostra logo vazio).
+  flow: {
+    id: "flow",
+    nome: "Flow Club",
+    logo: "/flow.png",
+    esportes: ["tennis", "beach", "padel", "squash", "tabletennis", "pickleball"],
+    quadras: ["q1", "q2"],
+  },
 }
 
 /**
