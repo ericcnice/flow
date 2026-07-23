@@ -44,6 +44,12 @@ PWA offline-first de placar para esportes de raquete (tênis, beach, padel, squa
 - **Nomes do dashboard em inglês** (Players / Courts / Sponsors) por internacionalização — as colunas/rotas seguem esse padrão; o texto de UI voltado ao professor é PT-BR.
 - **Fatiamento Fase A**: **A1** login + perfil mínimo · **A2** ponte coach (claim + promoção) · **A3** roster escopado ao coach (`coach_id` + RLS) · **A4** slots de jogador com identidade (`member_id` aditivo na config; os 4 estados) · **A5** claim por celular (E.164 como ID; aluno anônimo reivindica ao logar).
 
+## Tick de verificação + nome verificado vs digitado (implementado no Passo 1a)
+- TICK VERDE de "verificado pelo Flow": o slot do jogador LOGADO ganha um selo verde (identidade ancorada em email/celular reais). É estratégia de AQUISIÇÃO de custo zero: verificação é aspiracional (estilo Instagram), e sendo grátis — só logar — incentiva o cadastro. "Quero meu selo" vira motor de login.
+- DISTINÇÃO CONCEITUAL dos slots: nome VERIFICADO (dono logado — travado no jogo, editável só no /perfil que é a fonte da verdade, com tick) vs nome DIGITADO (string livre, sem garantia, editável). Terceiros nunca alteram um nome verificado (evita falsa atribuição / risco legal).
+- O convite do oponente (Passo 2 do A4) é o que transforma um nome DIGITADO num VERIFICADO: em vez de eu escrever o nome do adversário, ele loga e afirma o próprio nome (resolve o cheiro de falsa atribuição que o "digitar nome do adversário" tem hoje).
+- Confiabilidade: nome verificado é prova de quem jogou — essencial para torneio/ranking/histórico com valor. O tick aparece também no link de transmissão (espectador vê a credibilidade).
+
 ## Fluxo de trabalho
 - **Claude Chat**: estratégia, decisões, prompts. **Claude Code**: executa código, commits, push. **IA do Supabase**: verifica e roda o SQL.
 - **Método por peça**: investigação read-only → decisão no chat → prompt com intocáveis explícitos → migração verificada antes de rodar → QA de produção no celular.
