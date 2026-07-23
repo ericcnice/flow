@@ -18,6 +18,8 @@ import { AsYouType, isValidPhoneNumber, parsePhoneNumber } from 'libphonenumber-
 import { Check, Loader2 } from 'lucide-react'
 import type { User } from '@supabase/supabase-js'
 import { createBrowserSupabaseClient } from '@/lib/supabase/browser-client'
+import { TOS_VERSION } from '@/lib/legal'
+import { saveConsentInitial } from '@/lib/supabase/consents'
 
 const DEFAULT_COUNTRY = 'BR' as const
 const USERNAME_RE = /^[a-z0-9][a-z0-9-]{2,29}$/
@@ -124,6 +126,10 @@ export function ProfileForm({
   const [erro, setErro] = useState<string | null>(null)
   const [ok, setOk] = useState(false)
 
+  // CONSENTIMENTOS (só no cadastro): T&C obrigatório, marketing opcional.
+  const [aceiteTos, setAceiteTos] = useState(false)
+  const [marketing, setMarketing] = useState(false)
+
   // No modo editar o usuário já "tocou" (não auto-sugere sobre o valor atual).
   const usernameTocado = useRef(mode === 'editar')
   const variacaoTentada = useRef(false)
@@ -161,6 +167,7 @@ export function ProfileForm({
     usernameAvail === 'ok' &&
     phoneValido &&
     phoneAvail === 'ok' &&
+    (mode === 'editar' || aceiteTos) && // T&C obrigatório no cadastro
     !salvando
 
   async function salvar() {
@@ -185,6 +192,16 @@ export function ProfileForm({
       setErro(uErr.message)
       setSalvando(false)
       return
+    }
+    // Grava o aceite de T&C (versionado) + marketing SÓ no cadastro; no editar,
+    // consentimentos vivem na sua própria seção do /perfil.
+    if (mode === 'cadastro') {
+      const { error: cErr } = await saveConsentInitial(user.id, { tosVersion: TOS_VERSION, marketing })
+      if (cErr) {
+        setErro(cErr)
+        setSalvando(false)
+        return
+      }
     }
     setSalvando(false)
     setOk(true)
@@ -259,6 +276,41 @@ export function ProfileForm({
           <span className="text-xs text-white/50">Número inválido. Use +código para outros países.</span>
         )}
       </label>
+
+      {mode === 'cadastro' && (
+        <div className="flex flex-col gap-2.5 rounded-lg border border-white/10 bg-white/5 p-3">
+          <label className="flex cursor-pointer items-start gap-2.5 text-sm text-white/80">
+            <input
+              type="checkbox"
+              checked={aceiteTos}
+              onChange={(e) => setAceiteTos(e.target.checked)}
+              className="mt-0.5 h-4 w-4 shrink-0 accent-white"
+            />
+            <span>
+              Li e aceito os{' '}
+              <a href="/termos" target="_blank" rel="noreferrer" className="underline underline-offset-2 hover:text-white">
+                Termos de Uso
+              </a>{' '}
+              e a{' '}
+              <a href="/privacidade" target="_blank" rel="noreferrer" className="underline underline-offset-2 hover:text-white">
+                Política de Privacidade
+              </a>
+              . <span className="text-white/50">(obrigatório)</span>
+            </span>
+          </label>
+          <label className="flex cursor-pointer items-start gap-2.5 text-sm text-white/80">
+            <input
+              type="checkbox"
+              checked={marketing}
+              onChange={(e) => setMarketing(e.target.checked)}
+              className="mt-0.5 h-4 w-4 shrink-0 accent-white"
+            />
+            <span>
+              Quero receber novidades do Flow por email. <span className="text-white/50">(opcional)</span>
+            </span>
+          </label>
+        </div>
+      )}
 
       {erro && (
         <p role="alert" className="text-sm text-destructive">

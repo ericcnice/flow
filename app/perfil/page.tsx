@@ -14,13 +14,16 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { formatDistanceToNow } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import { parsePhoneNumber } from 'libphonenumber-js'
-import { ArrowLeft, Loader2, Trophy } from 'lucide-react'
+import { AlertTriangle, ArrowLeft, Loader2, ShieldCheck, Trash2, Trophy } from 'lucide-react'
 import type { User } from '@supabase/supabase-js'
 import { createBrowserSupabaseClient } from '@/lib/supabase/browser-client'
 import { avatarUrlOf } from '@/lib/auth-avatar'
+import { TOS_VERSION } from '@/lib/legal'
+import { acceptTos, getConsent, setMarketing, type Consent } from '@/lib/supabase/consents'
 import { useSession } from '@/lib/hooks/use-session'
 import { LoginPanel } from '@/components/auth/login-panel'
 import { ProfileForm } from '@/components/auth/profile-form'
@@ -209,6 +212,262 @@ function MeusJogos({ userId }: { userId: string }) {
   )
 }
 
+// --------------------------------------------------------------- consentimentos
+function Consentimentos({ user }: { user: User }) {
+  const [consent, setConsent] = useState<Consent | null | undefined>(undefined) // undefined = carregando
+  const [salvando, setSalvando] = useState(false)
+
+  useEffect(() => {
+    let alive = true
+    getConsent(user.id).then((c) => {
+      if (alive) setConsent(c)
+    })
+    return () => {
+      alive = false
+    }
+  }, [user.id])
+
+  const aceitou = consent?.tosVersion != null
+  const desatualizado = aceitou && consent?.tosVersion !== TOS_VERSION
+  const dataAceite = (() => {
+    if (!consent?.tosAcceptedAt) return ''
+    try {
+      return new Date(consent.tosAcceptedAt).toLocaleDateString('pt-BR')
+    } catch {
+      return ''
+    }
+  })()
+
+  async function toggleMarketing() {
+    const novo = !(consent?.marketingOptIn ?? false)
+    setSalvando(true)
+    const { error } = await setMarketing(user.id, novo)
+    setSalvando(false)
+    if (!error) {
+      setConsent((c) => ({
+        tosVersion: c?.tosVersion ?? null,
+        tosAcceptedAt: c?.tosAcceptedAt ?? null,
+        marketingOptIn: novo,
+      }))
+    }
+  }
+
+  async function reaceitar() {
+    setSalvando(true)
+    const { error } = await acceptTos(user.id, TOS_VERSION)
+    setSalvando(false)
+    if (!error) {
+      setConsent((c) => ({
+        tosVersion: TOS_VERSION,
+        tosAcceptedAt: new Date().toISOString(),
+        marketingOptIn: c?.marketingOptIn ?? false,
+      }))
+    }
+  }
+
+  if (consent === undefined) {
+    return <div className="h-28 animate-pulse rounded-2xl bg-neutral-900" />
+  }
+
+  return (
+    <div className="flex flex-col gap-3 rounded-2xl border border-white/10 bg-neutral-900 p-4">
+      {/* Estado do aceite de T&C */}
+      <div className="flex items-start gap-2.5 text-sm">
+        <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-white/50" />
+        <div className="min-w-0">
+          {aceitou ? (
+            <p className="text-white/80">
+              Termos aceitos — versão <span className="font-mono">{consent?.tosVersion}</span>
+              {dataAceite ? ` em ${dataAceite}` : ''}.
+            </p>
+          ) : (
+            <p className="text-white/60">Nenhum aceite de termos registrado.</p>
+          )}
+          <p className="mt-0.5 text-xs text-white/40">
+            Versão vigente: <span className="font-mono">{TOS_VERSION}</span> ·{' '}
+            <a href="/termos" target="_blank" rel="noreferrer" className="underline underline-offset-2 hover:text-white/70">
+              Termos
+            </a>{' '}
+            ·{' '}
+            <a href="/privacidade" target="_blank" rel="noreferrer" className="underline underline-offset-2 hover:text-white/70">
+              Privacidade
+            </a>
+          </p>
+        </div>
+      </div>
+
+      {/* Re-aceite quando os termos mudaram desde o último aceite */}
+      {desatualizado && (
+        <div className="rounded-lg border border-amber-400/30 bg-amber-400/10 p-3">
+          <p className="mb-2 text-sm text-amber-200/90">
+            Os termos foram atualizados desde o seu último aceite. Revise e confirme para continuar.
+          </p>
+          <button
+            type="button"
+            onClick={reaceitar}
+            disabled={salvando}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-white px-3 py-1.5 text-sm font-bold text-neutral-900 transition hover:bg-white/90 disabled:opacity-40"
+          >
+            {salvando && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+            Aceitar a nova versão
+          </button>
+        </div>
+      )}
+
+      {/* Marketing (opt-in editável) */}
+      <label className="flex cursor-pointer items-start gap-2.5 border-t border-white/10 pt-3 text-sm text-white/80">
+        <input
+          type="checkbox"
+          checked={consent?.marketingOptIn ?? false}
+          onChange={toggleMarketing}
+          disabled={salvando}
+          className="mt-0.5 h-4 w-4 shrink-0 accent-white"
+        />
+        <span>
+          Receber novidades do Flow por email.{' '}
+          <span className="text-white/45">Opcional — você pode mudar quando quiser.</span>
+        </span>
+      </label>
+    </div>
+  )
+}
+
+// ------------------------------------------------------------- excluir conta
+function ExcluirConta({ user }: { user: User }) {
+  const router = useRouter()
+  const [aberto, setAberto] = useState(false)
+  const [texto, setTexto] = useState('')
+  const [excluindo, setExcluindo] = useState(false)
+  const [erro, setErro] = useState<string | null>(null)
+  const [excluido, setExcluido] = useState(false)
+
+  async function excluir() {
+    setExcluindo(true)
+    setErro(null)
+    const supabase = createBrowserSupabaseClient()
+    const { error } = await supabase.rpc('delete_my_account')
+    if (error) {
+      setErro(error.message)
+      setExcluindo(false)
+      return
+    }
+    await supabase.auth.signOut()
+    setExcluindo(false)
+    setExcluido(true)
+  }
+
+  // Despedida após a exclusão (a sessão já foi encerrada).
+  if (excluido) {
+    return (
+      <div className="rounded-2xl border border-white/10 bg-neutral-900 p-8 text-center">
+        <p className="text-base font-semibold">Sua conta foi excluída.</p>
+        <p className="mx-auto mt-2 max-w-xs text-sm text-white/55">
+          Seus dados pessoais foram apagados. Obrigado por jogar com a gente — as quadras seguem abertas quando quiser
+          voltar.
+        </p>
+        <button
+          type="button"
+          onClick={() => router.push('/')}
+          className="mt-5 rounded-full border border-white/20 px-5 py-2 text-sm font-medium text-white/80 transition hover:bg-white/5"
+        >
+          Voltar ao início
+        </button>
+      </div>
+    )
+  }
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => {
+          setAberto(true)
+          setTexto('')
+          setErro(null)
+        }}
+        className="inline-flex items-center gap-2 text-sm font-medium text-red-400/80 transition hover:text-red-400"
+      >
+        <Trash2 className="h-4 w-4" />
+        Excluir minha conta
+      </button>
+
+      {aberto && (
+        <div
+          className="fixed inset-0 z-[80] flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Excluir minha conta"
+          onClick={() => !excluindo && setAberto(false)}
+        >
+          <div
+            className="w-full max-w-md rounded-2xl border border-white/10 bg-neutral-900 p-6 text-white shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-3 flex items-center gap-2 text-red-400">
+              <AlertTriangle className="h-5 w-5" />
+              <h3 className="text-lg font-bold">Excluir minha conta</h3>
+            </div>
+            <p className="text-sm text-white/70">Esta ação é permanente. Ao excluir:</p>
+            <ul className="mt-2 space-y-1.5 text-sm text-white/70">
+              <li className="flex gap-2">
+                <span className="text-red-400">•</span>
+                seus <strong>dados pessoais</strong> (nome, email, celular, username, foto) são apagados;
+              </li>
+              <li className="flex gap-2">
+                <span className="text-red-400">•</span>
+                seus jogos <strong>somem do seu histórico</strong> (a posse é anulada);
+              </li>
+              <li className="flex gap-2">
+                <span className="text-white/40">•</span>
+                <span className="text-white/60">
+                  os <strong>placares e os nomes nas súmulas são preservados</strong> — são registro histórico esportivo
+                  e direito dos demais participantes.
+                </span>
+              </li>
+            </ul>
+
+            <label className="mt-4 block text-sm text-white/70">
+              Para confirmar, digite <span className="font-mono font-bold text-white">EXCLUIR</span>:
+              <input
+                value={texto}
+                onChange={(e) => setTexto(e.target.value)}
+                autoFocus
+                className="mt-1.5 h-11 w-full rounded-lg border border-white/20 bg-white/10 px-3 font-mono text-base tracking-widest"
+              />
+            </label>
+
+            {erro && (
+              <p role="alert" className="mt-2 text-sm text-red-400">
+                {erro}
+              </p>
+            )}
+
+            <div className="mt-5 flex gap-2">
+              <button
+                type="button"
+                onClick={() => setAberto(false)}
+                disabled={excluindo}
+                className="h-11 flex-1 rounded-lg bg-white/10 text-sm font-bold text-white transition hover:bg-white/15 disabled:opacity-40"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={excluir}
+                disabled={texto !== 'EXCLUIR' || excluindo}
+                className="inline-flex h-11 flex-1 items-center justify-center gap-2 rounded-lg bg-red-600 text-sm font-bold text-white transition hover:bg-red-500 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                {excluindo ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                Excluir definitivamente
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  )
+}
+
 // ------------------------------------------------------------- página / header
 function PerfilLogado({ user }: { user: User }) {
   const [perfil, setPerfil] = useState<Perfil | null>(null)
@@ -291,6 +550,21 @@ function PerfilLogado({ user }: { user: User }) {
             <div className="h-40 animate-pulse rounded-lg bg-white/5" />
           )}
         </div>
+      </section>
+
+      {/* CONSENTIMENTOS */}
+      <section className="mt-8">
+        <h2 className="mb-3 text-xs font-semibold uppercase tracking-widest text-white/50">Consentimentos</h2>
+        <Consentimentos user={user} />
+      </section>
+
+      {/* ZONA DE PERIGO — excluir conta */}
+      <section className="mt-8 border-t border-white/10 pt-6">
+        <h2 className="mb-1 text-xs font-semibold uppercase tracking-widest text-red-400/70">Zona de perigo</h2>
+        <p className="mb-3 text-sm text-white/45">
+          Apaga seus dados pessoais e desvincula seus jogos. Placares e nomes nas súmulas são preservados.
+        </p>
+        <ExcluirConta user={user} />
       </section>
     </main>
   )
