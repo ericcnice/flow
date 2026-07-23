@@ -12,23 +12,13 @@
  */
 
 import { useEffect, useState } from 'react'
+import Link from 'next/link'
 import { Check, Loader2, LogIn } from 'lucide-react'
 import { createBrowserSupabaseClient } from '@/lib/supabase/browser-client'
 import { useSession } from '@/lib/hooks/use-session'
+import { useAppAuthFlag } from '@/lib/hooks/use-app-auth-flag'
 import { LoginPanel } from './login-panel'
 import { ProfileModal } from './profile-modal'
-
-/** Flag: env NEXT_PUBLIC_APP_AUTH='1' + override de QA por query-param (SSR-safe:
- *  o inicial vem do env; o override é aplicado pós-mount, sem mismatch). */
-function useAppAuthFlag(): boolean {
-  const [on, setOn] = useState(process.env.NEXT_PUBLIC_APP_AUTH === '1')
-  useEffect(() => {
-    const q = new URLSearchParams(window.location.search).get('auth')
-    if (q === '1') setOn(true)
-    else if (q === '0') setOn(false)
-  }, [])
-  return on
-}
 
 export function AppAuthCta({
   saveState = 'idle',
@@ -84,10 +74,14 @@ export function AppAuthCta({
           Salve este jogo no seu histórico
         </button>
       ) : saveState === 'saved' ? (
-        <span className="mt-1 inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-widest text-primary">
+        // Salvo → vira o ATALHO para ver o histórico (o ponto de entrada do /perfil).
+        <Link
+          href="/perfil"
+          className="mt-1 inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-widest text-primary underline decoration-primary/30 underline-offset-4"
+        >
           <Check className="h-3.5 w-3.5" />
-          Jogo salvo no seu histórico
-        </span>
+          Jogo salvo — ver meus jogos
+        </Link>
       ) : saveState === 'queued' ? (
         <span className="mt-1 text-[11px] uppercase tracking-widest text-white/60">
           Será salvo quando houver conexão
@@ -98,9 +92,9 @@ export function AppAuthCta({
           Salvando no seu histórico…
         </span>
       ) : perfil?.completo ? (
-        <span className="mt-1 text-[11px] uppercase tracking-widest text-white/50">
-          Conectado{perfil.nome ? ` — ${perfil.nome}` : ''}
-        </span>
+        <Link href="/perfil" className="mt-1 text-[11px] uppercase tracking-widest text-white/50 underline decoration-white/20 underline-offset-4">
+          Conectado{perfil.nome ? ` — ${perfil.nome}` : ''} · meu perfil
+        </Link>
       ) : null}
 
       {loginAberto && !user && (
