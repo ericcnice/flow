@@ -33,6 +33,8 @@ import { themeClassName, type ThemeId } from "@/lib/themes"
 import { clubFromCacheOrBundle } from "@/lib/supabase/club-catalog"
 import { AppAuthCta } from "@/components/auth/app-auth"
 import { useSession } from "@/lib/hooks/use-session"
+import { useAppAuthFlag } from "@/lib/hooks/use-app-auth-flag"
+import { createBrowserSupabaseClient } from "@/lib/supabase/browser-client"
 import { saveMatch, flushPendingMatches, type MatchRow } from "@/lib/supabase/matches"
 import { resolveSponsor, type Sponsor } from "@/lib/supabase/sponsors"
 import type { GameState, Side } from "@/lib/scoring/types"
@@ -1640,6 +1642,7 @@ export default function JogoPage() {
   // encerrou logado; anônimo joga normal e não salva. Fire-and-forget + fila
   // offline (lib/supabase/matches). `saveState` alimenta o CTA da tela de fim.
   const { user: authUser } = useSession()
+  const appAuthFlag = useAppAuthFlag()
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "queued">("idle")
   const savedMatchRef = useRef(false)
 
@@ -1694,6 +1697,55 @@ export default function JogoPage() {
     saveMatch(row).then(setSaveState)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [gameState?.finished, gameState?.winner, authUser])
+
+  // PASSO 1a (A4): o DONO logado se VÊ no placar — o nome dele pré-preenche o
+  // slot blue1 (o "Player 1"/"Jogador 1"). Aditivo, atrás da flag; anônimo não
+  // muda. É só uma string em config.players.blue1 (a pílula a exibe como
+  // qualquer nome; motor/sync/save intocados). GUARDAS:
+  //  (a) LOGADO   — só com flag + authUser (sem sessão nada acontece);
+  //  (b) FALLBACK — só enquanto blue1 for "Player/Jogador N" (nunca sobrescreve
+  //      nome digitado); re-checa após o fetch (respeita edição durante o await);
+  //  (c) IDEMPOTENTE — prefillDoneRef trava a UMA execução por partida, antes do
+  //      await, então não re-dispara a cada render/ponto;
+  //  (d) RESPEITA EDIÇÃO — travado o ref, se o dono editar depois, não força de novo.
+  const prefillDoneRef = useRef(false)
+  useEffect(() => {
+    if (!appAuthFlag || !authUser || prefillDoneRef.current) return
+    const cfg = gameConfigRef.current
+    if (!cfg) return // config ainda não carregou — re-tenta quando gameConfig chegar
+    if (!isFallbackName(cfg.players.blue1)) {
+      prefillDoneRef.current = true // já tem nome (digitado/pré) → nada a fazer, não re-tenta
+      return
+    }
+    prefillDoneRef.current = true // trava ANTES do await: roda uma vez só
+    let alive = true
+    void (async () => {
+      // FONTE: profiles.name (canônico, editado no /perfil) → fallback metadata.
+      // Leitura não-bloqueante; o jogo já está pronto e nunca espera por isto.
+      let nome = ""
+      try {
+        const supabase = createBrowserSupabaseClient()
+        const { data } = await supabase.from("profiles").select("name").eq("id", authUser.id).maybeSingle()
+        nome = (data?.name ?? "").trim()
+      } catch {
+        // offline/erro: cai no metadata do OAuth
+      }
+      if (!nome) {
+        const meta = (authUser.user_metadata ?? {}) as Record<string, unknown>
+        nome = (((meta.full_name as string) ?? (meta.name as string)) ?? "").trim()
+      }
+      if (!alive || !nome) return
+      // Re-checa: se o dono editou o blue1 durante o fetch, respeita a edição.
+      const cur = gameConfigRef.current
+      if (!cur || !isFallbackName(cur.players.blue1)) return
+      // Mesmo caminho do saveNames: persiste + deriva nomes + propaga set_config.
+      saveNames("blue", nome, cur.players.blue2)
+    })()
+    return () => {
+      alive = false
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [appAuthFlag, authUser, gameConfig])
 
   if (loadError) {
     return (
