@@ -98,6 +98,7 @@ export function ProfileForm({
   mode,
   initial,
   ownUsername,
+  currentPhone,
   onDone,
   onCancel,
 }: {
@@ -107,6 +108,8 @@ export function ProfileForm({
   initial?: { nome: string; sobrenome: string; username: string; phone: string }
   /** Username atual — ignorado no check de disponibilidade. */
   ownUsername?: string
+  /** Celular atual em E.164 — ignorado no check (não acusa o próprio número). */
+  currentPhone?: string
   onDone: () => void
   onCancel?: () => void
 }) {
@@ -146,7 +149,10 @@ export function ProfileForm({
     ? (parsePhoneNumber(phone, DEFAULT_COUNTRY)?.number ?? '')
     : ''
   const phoneValido = e164 !== ''
-  const phoneAvail = useAvailability('check_phone_available', 'p_phone', e164, phoneValido, initial?.phone)
+  // `currentPhone` (E.164) é o próprio número do usuário — se o digitado
+  // (normalizado) for igual, é "disponível" na hora (não acusa o próprio como
+  // ocupado). No cadastro currentPhone é undefined → check normal via RPC.
+  const phoneAvail = useAvailability('check_phone_available', 'p_phone', e164, phoneValido, currentPhone)
 
   const podeSalvar =
     nome.trim() !== '' &&

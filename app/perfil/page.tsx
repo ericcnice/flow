@@ -20,6 +20,7 @@ import { parsePhoneNumber } from 'libphonenumber-js'
 import { ArrowLeft, Loader2, Trophy } from 'lucide-react'
 import type { User } from '@supabase/supabase-js'
 import { createBrowserSupabaseClient } from '@/lib/supabase/browser-client'
+import { avatarUrlOf } from '@/lib/auth-avatar'
 import { useSession } from '@/lib/hooks/use-session'
 import { LoginPanel } from '@/components/auth/login-panel'
 import { ProfileForm } from '@/components/auth/profile-form'
@@ -47,6 +48,29 @@ type MatchRow = {
   ended_at: string
 }
 type Perfil = { nome: string | null; phone: string | null; username: string }
+
+// -------------------------------------------------------------------- avatar
+/** Foto do Google (se houver) com fallback para a inicial. next.config tem
+ *  images unoptimized → URL remota não exige allowlist; onError cai na inicial. */
+function Avatar({ url, inicial }: { url: string | null; inicial: string }) {
+  const [erro, setErro] = useState(false)
+  if (url && !erro) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={url}
+        alt=""
+        onError={() => setErro(true)}
+        className="h-16 w-16 shrink-0 rounded-full object-cover ring-1 ring-white/15"
+      />
+    )
+  }
+  return (
+    <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-white/10 text-2xl font-black">
+      {inicial}
+    </div>
+  )
+}
 
 // ---------------------------------------------------------------- item de jogo
 function MatchItem({ m }: { m: MatchRow }) {
@@ -230,11 +254,10 @@ function PerfilLogado({ user }: { user: User }) {
         Início
       </Link>
 
-      {/* HEADER: avatar (placeholder) + nome + @username + celular mascarado. */}
+      {/* HEADER: avatar (foto do Google, fallback inicial) + nome + @username +
+          celular mascarado. */}
       <header className="mt-6 flex items-center gap-4">
-        <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-white/10 text-2xl font-black">
-          {inicial}
-        </div>
+        <Avatar url={avatarUrlOf(user)} inicial={inicial} />
         <div className="min-w-0">
           <h1 className="truncate text-xl font-bold">{perfil?.nome ?? 'Meu perfil'}</h1>
           {perfil?.username && <p className="truncate font-mono text-sm text-white/60">@{perfil.username}</p>}
@@ -258,6 +281,7 @@ function PerfilLogado({ user }: { user: User }) {
               mode="editar"
               initial={{ nome, sobrenome, username: perfil.username, phone: telFmt }}
               ownUsername={perfil.username}
+              currentPhone={perfil.phone ?? undefined}
               onDone={() => {
                 // Re-lê para refletir no header.
                 setPerfil(null)
