@@ -14,7 +14,6 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
 import { formatDistanceToNow } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import { parsePhoneNumber } from 'libphonenumber-js'
@@ -22,7 +21,6 @@ import { ArrowLeft, Loader2, Trophy } from 'lucide-react'
 import type { User } from '@supabase/supabase-js'
 import { createBrowserSupabaseClient } from '@/lib/supabase/browser-client'
 import { useSession } from '@/lib/hooks/use-session'
-import { useAppAuthFlag } from '@/lib/hooks/use-app-auth-flag'
 import { LoginPanel } from '@/components/auth/login-panel'
 import { ProfileForm } from '@/components/auth/profile-form'
 import { splitName } from '@/components/auth/profile-form'
@@ -275,15 +273,13 @@ function PerfilLogado({ user }: { user: User }) {
 }
 
 export default function PerfilPage() {
-  const flagOn = useAppAuthFlag()
-  const router = useRouter()
+  // Guardada SÓ pela SESSÃO — NUNCA redireciona para a home (era o bug: o
+  // redirect por flag disparava no 1º paint, antes de o ?auth=1 assentar). A
+  // flag NEXT_PUBLIC_APP_AUTH gateia os LINKS que levam aqui (CTA da tela de
+  // fim), não a página em si: quem tem a URL acessa; sem sessão vê o login.
   const { user, loading } = useSession()
 
-  useEffect(() => {
-    if (!flagOn) router.replace('/')
-  }, [flagOn, router])
-
-  if (!flagOn || loading) {
+  if (loading) {
     return (
       <div className="flex min-h-[100dvh] items-center justify-center bg-neutral-950 text-white">
         <Loader2 className="h-6 w-6 animate-spin text-white/60" />
