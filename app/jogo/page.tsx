@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation"
 import Image from "next/image"
 import { NameEditModal } from "@/components/name-edit-modal"
 import { ConfirmModal } from "@/components/confirm-modal"
-import { Settings, Volume2, VolumeX, Undo2, BarChart2, RotateCcw, LogOut, ArrowLeftRight, Share2, Users, UserMinus, X } from "lucide-react"
+import { Settings, Volume2, VolumeX, Undo2, BarChart2, RotateCcw, LogOut, ArrowLeftRight, Share2, Users, UserMinus, X, BadgeCheck } from "lucide-react"
 import { ThirdSetModal } from "@/components/third-set-modal"
 import { ShareModal } from "@/components/share-modal"
 // Superfície de configuração ÚNICA: a MESMA tela de setup (esporte + regras),
@@ -64,6 +64,12 @@ type GameConfig = {
     red1: string
     red2: string
   }
+  /** blue1 é a IDENTIDADE VERIFICADA do dono logado (Passo 1a/A4): pré-preenchida
+   *  do profiles.name, TRAVADA no jogo (edita-se no /perfil, a fonte da verdade) e
+   *  com tick verde. LOCAL a este device (persiste no localStorage; NÃO viaja no
+   *  set_config — o sync só carrega `players`, que já existe). Ausente/false =
+   *  nome comum, editável. Só vira true com a flag ligada. */
+  ownerVerified?: boolean
   /** Sacador individual INICIAL por lado (0 = blue1/red1, 1 = blue2/red2). Campo
    *  aditivo do B1: aqui é só criado/persistido/propagado — a UI de escolha vem
    *  no B1b e a rotação derivada no B2. `firstServer` (Side, na semente do motor)
@@ -1738,8 +1744,20 @@ export default function JogoPage() {
       // Re-checa: se o dono editou o blue1 durante o fetch, respeita a edição.
       const cur = gameConfigRef.current
       if (!cur || !isFallbackName(cur.players.blue1)) return
-      // Mesmo caminho do saveNames: persiste + deriva nomes + propaga set_config.
-      saveNames("blue", nome, cur.players.blue2)
+      // Aplica o nome verificado + marca o slot como IDENTIDADE VERIFICADA (local).
+      // Persiste, deriva o nome combinado e propaga SÓ `players` (nome) via
+      // set_config — `ownerVerified` fica local (sync intocado).
+      const players = { ...cur.players, blue1: nome }
+      const newConfig: GameConfig = { ...cur, players, ownerVerified: true }
+      setGameConfig(newConfig)
+      gameConfigRef.current = newConfig
+      try {
+        localStorage.setItem(`tennis_match_${quadra}`, JSON.stringify(newConfig))
+      } catch {
+        // aba privada / cota: segue só em memória
+      }
+      setBluePlayerName(cur.gameType === "duplas" ? `${players.blue1}/${players.blue2}` : players.blue1)
+      sendRealtimeAction({ kind: "set_config", patch: { players } })
     })()
     return () => {
       alive = false
@@ -2037,9 +2055,25 @@ export default function JogoPage() {
     ) : (
       <span className="h-7 w-7 shrink-0" aria-hidden />
     )
-    const nameEl = (n: string) => (
-      <span className="truncate text-sm font-bold uppercase tracking-wide text-white">{n}</span>
+    // TICK VERDE de identidade VERIFICADA (Passo 1a/A4): só no slot 0 do time do
+    // dono (blue1) quando ownerVerified. Discreto, DENTRO do espaço do nome (não
+    // desloca logo do clube nem a bola) — a Quadra 2.0 não muda de layout.
+    const verifiedSlot0 = team === "blue" && cfg.ownerVerified === true
+    const tick = (
+      <BadgeCheck
+        className="h-3.5 w-3.5 shrink-0 text-emerald-400"
+        aria-label="Identidade verificada pelo Flow"
+      />
     )
+    const nameEl = (n: string, verified = false) =>
+      verified ? (
+        <span className="inline-flex min-w-0 items-center gap-1">
+          <span className="truncate text-sm font-bold uppercase tracking-wide text-white">{n}</span>
+          {tick}
+        </span>
+      ) : (
+        <span className="truncate text-sm font-bold uppercase tracking-wide text-white">{n}</span>
+      )
 
     // Pílula FLUTUANTE: glass, rounded-full, sombra. `pointer-events-auto` (o
     // container ao redor é pointer-events-none → tocar fora da pílula marca ponto).
@@ -2049,7 +2083,12 @@ export default function JogoPage() {
       e.stopPropagation()
       setEditingSide(team)
     }
-    const nameCentered = (
+    const nameCentered = verifiedSlot0 ? (
+      <span className="flex min-w-0 flex-1 items-center justify-center gap-1">
+        <span className="truncate text-sm font-bold uppercase tracking-wide text-white">{names[0]}</span>
+        {tick}
+      </span>
+    ) : (
       <span className="min-w-0 flex-1 truncate text-center text-sm font-bold uppercase tracking-wide text-white">
         {names[0]}
       </span>
@@ -2112,7 +2151,7 @@ export default function JogoPage() {
             className="flex min-w-0 items-center justify-between gap-2"
           >
             {bola(0)}
-            {nameEl(names[0])}
+            {nameEl(names[0], verifiedSlot0)}
           </button>
           <button type="button" onClick={editOnClick} aria-label="Editar nomes" className="shrink-0">
             {logoEl}
@@ -2142,7 +2181,7 @@ export default function JogoPage() {
       >
         <span className="flex min-w-0 items-center justify-between gap-2">
           {bola(0)}
-          {nameEl(names[0])}
+          {nameEl(names[0], verifiedSlot0)}
         </span>
         {logoEl}
         <span className="flex min-w-0 items-center justify-between gap-2">
@@ -3018,6 +3057,8 @@ export default function JogoPage() {
               ? [cfg.players.blue1, cfg.players.blue2]
               : [cfg.players.red1, cfg.players.red2]
           }
+          // Só o blue1 do dono verificado trava; os demais slots editam normal.
+          verifiedFirstName={editingSide === "blue" && cfg.ownerVerified ? cfg.players.blue1 : null}
           onSave={(p1, p2) => saveNames(editingSide, p1, p2)}
           onClose={() => setEditingSide(null)}
         />

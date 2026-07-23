@@ -1,7 +1,7 @@
 "use client"
 
 import { useRef, useState } from "react"
-import { X, Check } from "lucide-react"
+import { X, Check, BadgeCheck } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 
@@ -22,6 +22,7 @@ export function NameEditModal({
   gameType,
   onGameTypeChange,
   initialNames,
+  verifiedFirstName,
   onSave,
   onClose,
 }: {
@@ -34,19 +35,27 @@ export function NameEditModal({
   onGameTypeChange: (gameType: string) => void
   /** [nome1, nome2] atuais; nome2 ignorado em simples. */
   initialNames: [string, string]
+  /** IDENTIDADE VERIFICADA do dono (A4): quando presente, o 1º nome é o dono
+   *  logado — TRAVADO aqui (edita-se no /perfil), com tick verde. null = nome
+   *  comum, editável. O 2º nome (duplas) segue editável. */
+  verifiedFirstName?: string | null
   onSave: (p1: string, p2: string) => void
   onClose: () => void
 }) {
   const [gt, setGt] = useState(gameType)
   const duplas = gt === "duplas"
+  const verified = Boolean(verifiedFirstName)
   const [p1, setP1] = useState(initialNames[0] ?? "")
   const [p2, setP2] = useState(initialNames[1] ?? "")
 
   // Valores da ABERTURA (capturados uma vez): base para habilitar o Salvar só
   // quando algo diverge.
   const [orig] = useState(() => ({ p1: initialNames[0] ?? "", p2: initialNames[1] ?? "" }))
-  const changed =
-    p1.trim() !== orig.p1.trim() || (duplas && p2.trim() !== orig.p2.trim())
+  // Verificado: o 1º nome está travado (não conta como mudança); só o 2º (duplas)
+  // pode divergir. Comum: qualquer campo que divirja habilita o Salvar.
+  const changed = verified
+    ? duplas && p2.trim() !== orig.p2.trim()
+    : p1.trim() !== orig.p1.trim() || (duplas && p2.trim() !== orig.p2.trim())
 
   const p2Ref = useRef<HTMLInputElement>(null)
   // Seleciona o texto ao focar (item 3): um toque substitui tudo, editar 1 letra
@@ -62,7 +71,8 @@ export function NameEditModal({
 
   const salvar = () => {
     if (!changed) return
-    onSave(p1.trim(), p2.trim())
+    // Verificado: o 1º nome vai INTACTO (o dono edita no /perfil); só o 2º muda.
+    onSave(verified ? (verifiedFirstName as string) : p1.trim(), p2.trim())
     onClose()
   }
 
@@ -121,26 +131,46 @@ export function NameEditModal({
             ))}
           </div>
 
-          <label className="flex flex-col gap-1.5">
-            <span className="text-xs font-semibold uppercase tracking-wide text-white/60">
-              {duplas ? "Player 1" : "Nome"}
-            </span>
-            <Input
-              value={p1}
-              onChange={(e) => setP1(e.target.value)}
-              onFocus={selectAll}
-              onKeyDown={(e) => {
-                if (e.key !== "Enter") return
-                // Enter/OK: em duplas avança p/ o campo 2 (foco + select); em
-                // simples salva.
-                if (duplas) p2Ref.current?.focus()
-                else salvar()
-              }}
-              autoFocus
-              placeholder="Nome"
-              className="h-12 border-white/20 bg-white/10 text-base text-white placeholder:text-white/40"
-            />
-          </label>
+          {verified ? (
+            // 1º nome TRAVADO: é a identidade VERIFICADA do dono. Não editável
+            // aqui — a fonte da verdade é o /perfil. Terceiros nunca a alteram.
+            <div className="flex flex-col gap-1.5">
+              <span className="text-xs font-semibold uppercase tracking-wide text-white/60">
+                {duplas ? "Player 1" : "Nome"}
+              </span>
+              <div className="flex h-12 items-center gap-2 rounded-md border border-emerald-400/30 bg-emerald-400/5 px-3">
+                <BadgeCheck className="h-4 w-4 shrink-0 text-emerald-400" aria-hidden />
+                <span className="truncate text-base font-semibold text-white">{verifiedFirstName}</span>
+              </div>
+              <a
+                href="/perfil"
+                className="text-xs text-white/60 underline underline-offset-2 hover:text-white"
+              >
+                Identidade verificada — edite seu nome no perfil
+              </a>
+            </div>
+          ) : (
+            <label className="flex flex-col gap-1.5">
+              <span className="text-xs font-semibold uppercase tracking-wide text-white/60">
+                {duplas ? "Player 1" : "Nome"}
+              </span>
+              <Input
+                value={p1}
+                onChange={(e) => setP1(e.target.value)}
+                onFocus={selectAll}
+                onKeyDown={(e) => {
+                  if (e.key !== "Enter") return
+                  // Enter/OK: em duplas avança p/ o campo 2 (foco + select); em
+                  // simples salva.
+                  if (duplas) p2Ref.current?.focus()
+                  else salvar()
+                }}
+                autoFocus
+                placeholder="Nome"
+                className="h-12 border-white/20 bg-white/10 text-base text-white placeholder:text-white/40"
+              />
+            </label>
+          )}
 
           {duplas && (
             <label className="flex flex-col gap-1.5">
@@ -155,6 +185,8 @@ export function NameEditModal({
                 onKeyDown={(e) => {
                   if (e.key === "Enter") salvar()
                 }}
+                // Verificado: o 1º campo está travado → o foco começa no 2º.
+                autoFocus={verified}
                 placeholder="Nome"
                 className="h-12 border-white/20 bg-white/10 text-base text-white placeholder:text-white/40"
               />
@@ -162,15 +194,18 @@ export function NameEditModal({
           )}
 
           {/* Salvar CONDICIONADO a mudança: nasce desabilitado (claro) e só ativa
-              quando algum campo diverge do valor da abertura. */}
-          <Button
-            onClick={salvar}
-            disabled={!changed}
-            className="mt-1 h-12 gap-2 bg-white text-base font-bold text-neutral-900 hover:bg-white/90 disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            <Check className="h-5 w-5" />
-            Salvar
-          </Button>
+              quando algum campo diverge do valor da abertura. Verificado+simples
+              não tem nada a salvar (o nome edita-se no /perfil) → sem botão. */}
+          {(!verified || duplas) && (
+            <Button
+              onClick={salvar}
+              disabled={!changed}
+              className="mt-1 h-12 gap-2 bg-white text-base font-bold text-neutral-900 hover:bg-white/90 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <Check className="h-5 w-5" />
+              Salvar
+            </Button>
+          )}
         </div>
       </div>
     </div>
