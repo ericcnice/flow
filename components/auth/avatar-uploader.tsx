@@ -15,7 +15,7 @@
 import { useRef, useState } from 'react'
 import Cropper, { type Area } from 'react-easy-crop'
 import { Camera, Check, Loader2, X } from 'lucide-react'
-import { createClient, type User } from '@supabase/supabase-js'
+import type { User } from '@supabase/supabase-js'
 import { createBrowserSupabaseClient } from '@/lib/supabase/browser-client'
 
 const MAX_FILE = 10 * 1024 * 1024 // 10MB — rejeita arquivos absurdos antes do crop
@@ -107,34 +107,35 @@ export function AvatarUploader({
         return
       }
 
-      // FIX: o createBrowserClient (@supabase/ssr) NÃO estava anexando a
-      // Authorization na request ao Storage (o PostgREST/.from() anexa — por isso
-      // DB funciona e Storage não). Cliente DEDICADO ao upload com o token do
-      // usuário explicitamente no header → auth.uid() disponível na policy de
-      // storage.objects. persistSession:false → não conflita com o singleton.
-      const authed = createClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-        {
-          auth: { persistSession: false, autoRefreshToken: false },
-          global: { headers: { Authorization: `Bearer ${session.access_token}` } },
-        },
-      )
-
       // Path versionado (cache-bust) na pasta do próprio uid — a policy da 1a permite.
       const path = `avatars/${user.id}/${Date.now()}.jpg`
-      const { error: upErr } = await authed.storage
-        .from('flow-images')
-        .upload(path, blob, { upsert: true, contentType: 'image/jpeg' })
-      if (upErr) {
-        // DEBUG (temporário): confirma se o header explícito resolveu.
-        console.error('[avatar] upload error:', JSON.stringify(upErr))
+      const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!
+
+      // UPLOAD via fetch DIRETO ao endpoint do Storage, com o Bearer do usuário
+      // EXPLÍCITO no header — elimina a incerteza sobre o supabase-js anexar (ou
+      // não) o token ao Storage. `apikey` (anon) passa o gateway; a Authorization
+      // (JWT do usuário) é o que a RLS usa para auth.uid(). `x-upsert` = upsert.
+      const res = await fetch(`${SUPABASE_URL}/storage/v1/object/flow-images/${path}`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+          apikey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+          'Content-Type': 'image/jpeg',
+          'x-upsert': 'true',
+        },
+        body: blob,
+      })
+      if (!res.ok) {
+        // DEBUG (temporário): status + texto REAL do servidor (não o genérico do SDK).
+        const txt = await res.text()
+        console.error('[avatar] upload', res.status, txt)
         setErro('Não deu para enviar a foto agora. Tente novamente.')
         setEnviando(false)
         return
       }
-      const { data: pub } = authed.storage.from('flow-images').getPublicUrl(path)
-      const url = pub.publicUrl
+
+      // URL pública construível direto (o bucket é público; getPublicUrl faria o mesmo).
+      const url = `${SUPABASE_URL}/storage/v1/object/public/flow-images/${path}`
       // DB continua no singleton (as escritas em profiles já funcionavam).
       const { error: dbErr } = await supabase.from('profiles').update({ avatar_url: url }).eq('id', user.id)
       if (dbErr) {
