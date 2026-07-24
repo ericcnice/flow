@@ -18,7 +18,7 @@ import { useRouter } from 'next/navigation'
 import { formatDistanceToNow } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import { parsePhoneNumber } from 'libphonenumber-js'
-import { AlertTriangle, ArrowLeft, Loader2, ShieldCheck, Trash2, Trophy } from 'lucide-react'
+import { AlertTriangle, ArrowLeft, Check, Loader2, LogOut, ShieldCheck, Trash2, Trophy } from 'lucide-react'
 import type { User } from '@supabase/supabase-js'
 import { createBrowserSupabaseClient } from '@/lib/supabase/browser-client'
 import { avatarUrlOf } from '@/lib/auth-avatar'
@@ -216,6 +216,9 @@ function MeusJogos({ userId }: { userId: string }) {
 function Consentimentos({ user }: { user: User }) {
   const [consent, setConsent] = useState<Consent | null | undefined>(undefined) // undefined = carregando
   const [salvando, setSalvando] = useState(false)
+  // Estado do TOGGLE de marketing (salva na hora, mecanismo próprio — não depende
+  // do Salvar de "Meus dados"). O feedback deixa isso óbvio ao usuário.
+  const [mktEstado, setMktEstado] = useState<'idle' | 'salvando' | 'salvo' | 'erro'>('idle')
 
   useEffect(() => {
     let alive = true
@@ -241,18 +244,28 @@ function Consentimentos({ user }: { user: User }) {
     }
   })()
 
+  // Salva na HORA (upsert self em consents) — sem depender do Salvar de "Meus
+  // dados". Otimista (o checkbox reflete já) + feedback; reverte em erro.
   async function toggleMarketing() {
     const novo = !(consent?.marketingOptIn ?? false)
-    setSalvando(true)
+    setConsent((c) => ({
+      tosVersion: c?.tosVersion ?? null,
+      tosAcceptedAt: c?.tosAcceptedAt ?? null,
+      marketingOptIn: novo,
+    }))
+    setMktEstado('salvando')
     const { error } = await setMarketing(user.id, novo)
-    setSalvando(false)
-    if (!error) {
+    if (error) {
+      // Reverte o otimismo e sinaliza — a preferência não foi persistida.
       setConsent((c) => ({
         tosVersion: c?.tosVersion ?? null,
         tosAcceptedAt: c?.tosAcceptedAt ?? null,
-        marketingOptIn: novo,
+        marketingOptIn: !novo,
       }))
+      setMktEstado('erro')
+      return
     }
+    setMktEstado('salvo')
   }
 
   async function reaceitar() {
@@ -328,20 +341,38 @@ function Consentimentos({ user }: { user: User }) {
         </div>
       )}
 
-      {/* Marketing (opt-in editável) */}
-      <label className="flex cursor-pointer items-start gap-2.5 border-t border-white/10 pt-3 text-sm text-white/80">
-        <input
-          type="checkbox"
-          checked={consent?.marketingOptIn ?? false}
-          onChange={toggleMarketing}
-          disabled={salvando}
-          className="mt-0.5 h-4 w-4 shrink-0 accent-white"
-        />
-        <span>
-          Receber novidades do Flow por email.{' '}
-          <span className="text-white/45">Opcional — você pode mudar quando quiser.</span>
-        </span>
-      </label>
+      {/* Marketing (opt-in que salva na hora — sem depender de nenhum "Salvar"). */}
+      <div className="border-t border-white/10 pt-3">
+        <label className="flex cursor-pointer items-start gap-2.5 text-sm text-white/80">
+          <input
+            type="checkbox"
+            checked={consent?.marketingOptIn ?? false}
+            onChange={toggleMarketing}
+            disabled={mktEstado === 'salvando'}
+            className="mt-0.5 h-4 w-4 shrink-0 accent-white"
+          />
+          <span>
+            Receber novidades do Flow por email.{' '}
+            <span className="text-white/45">Opcional — salva automaticamente ao marcar/desmarcar.</span>
+          </span>
+        </label>
+        {/* Feedback: deixa claro que a preferência foi (ou não) persistida. */}
+        {mktEstado === 'salvando' && (
+          <p className="mt-1.5 inline-flex items-center gap-1.5 pl-7 text-xs text-white/50">
+            <Loader2 className="h-3 w-3 animate-spin" /> Salvando…
+          </p>
+        )}
+        {mktEstado === 'salvo' && (
+          <p className="mt-1.5 inline-flex items-center gap-1.5 pl-7 text-xs text-emerald-400">
+            <Check className="h-3 w-3" /> Preferência salva.
+          </p>
+        )}
+        {mktEstado === 'erro' && (
+          <p role="alert" className="mt-1.5 pl-7 text-xs text-red-400">
+            Não deu para salvar agora. Tente de novo.
+          </p>
+        )}
+      </div>
     </div>
   )
 }
@@ -484,7 +515,18 @@ function ExcluirConta({ user }: { user: User }) {
 
 // ------------------------------------------------------------- página / header
 function PerfilLogado({ user }: { user: User }) {
+  const router = useRouter()
   const [perfil, setPerfil] = useState<Perfil | null>(null)
+  const [saindo, setSaindo] = useState(false)
+
+  // Logout: encerra a sessão e volta à home. (A ponte do coach e o pré-preench.
+  // reagem à ausência de sessão normalmente; nada a "desfazer" aqui.)
+  async function sair() {
+    setSaindo(true)
+    const supabase = createBrowserSupabaseClient()
+    await supabase.auth.signOut()
+    router.push('/')
+  }
 
   useEffect(() => {
     let alive = true
@@ -570,6 +612,19 @@ function PerfilLogado({ user }: { user: User }) {
       <section className="mt-8">
         <h2 className="mb-3 text-xs font-semibold uppercase tracking-widest text-white/50">Consentimentos</h2>
         <Consentimentos user={user} />
+      </section>
+
+      {/* SAIR — logout (ação benigna de conta, antes da zona de perigo). */}
+      <section className="mt-8">
+        <button
+          type="button"
+          onClick={sair}
+          disabled={saindo}
+          className="inline-flex items-center gap-2 rounded-lg border border-white/15 px-4 py-2.5 text-sm font-semibold text-white/80 transition hover:bg-white/5 hover:text-white disabled:opacity-40"
+        >
+          {saindo ? <Loader2 className="h-4 w-4 animate-spin" /> : <LogOut className="h-4 w-4" />}
+          Sair da conta
+        </button>
       </section>
 
       {/* ZONA DE PERIGO — excluir conta */}
