@@ -22,6 +22,7 @@ import { AlertTriangle, ArrowLeft, BadgeCheck, Check, Loader2, LogOut, Pencil, P
 import type { User } from '@supabase/supabase-js'
 import { createBrowserSupabaseClient } from '@/lib/supabase/browser-client'
 import { avatarUrlOf } from '@/lib/auth-avatar'
+import { AvatarUploader } from '@/components/auth/avatar-uploader'
 import { TOS_VERSION } from '@/lib/legal'
 import { acceptTos, getConsent, setMarketing, type Consent } from '@/lib/supabase/consents'
 import { useSession } from '@/lib/hooks/use-session'
@@ -50,30 +51,7 @@ type MatchRow = {
   started_at: string | null
   ended_at: string
 }
-type Perfil = { nome: string | null; phone: string | null; username: string }
-
-// -------------------------------------------------------------------- avatar
-/** Foto do Google (se houver) com fallback para a inicial. next.config tem
- *  images unoptimized → URL remota não exige allowlist; onError cai na inicial. */
-function Avatar({ url, inicial }: { url: string | null; inicial: string }) {
-  const [erro, setErro] = useState(false)
-  if (url && !erro) {
-    return (
-      // eslint-disable-next-line @next/next/no-img-element
-      <img
-        src={url}
-        alt=""
-        onError={() => setErro(true)}
-        className="h-16 w-16 shrink-0 rounded-full object-cover ring-1 ring-white/15"
-      />
-    )
-  }
-  return (
-    <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-white/10 text-2xl font-black">
-      {inicial}
-    </div>
-  )
-}
+type Perfil = { nome: string | null; phone: string | null; username: string; avatarUrl: string | null }
 
 // ---------------------------------------------------------------- item de jogo
 function MatchItem({ m }: { m: MatchRow }) {
@@ -954,7 +932,7 @@ function PerfilLogado({ user }: { user: User }) {
     const supabase = createBrowserSupabaseClient()
     supabase
       .from('profiles')
-      .select('name, phone')
+      .select('name, phone, avatar_url')
       .eq('id', user.id)
       .maybeSingle()
       .then(({ data }) => {
@@ -964,6 +942,7 @@ function PerfilLogado({ user }: { user: User }) {
           nome: data?.name ?? null,
           phone: data?.phone ?? null,
           username: (meta.username as string) ?? '',
+          avatarUrl: data?.avatar_url ?? null,
         })
       })
     return () => {
@@ -1010,7 +989,14 @@ function PerfilLogado({ user }: { user: User }) {
       {/* HEADER: avatar + nome + badges (tick verde verificado + pílula Coach
           laranja só p/ coach) + @username + celular mascarado. */}
       <header className="mt-6 flex items-center gap-4">
-        <Avatar url={avatarUrlOf(user)} inicial={inicial} />
+        {/* Cascata desta fatia: profiles.avatar_url (Storage) → Google → inicial.
+            A cascata completa em todo lugar é a 1c. */}
+        <AvatarUploader
+          user={user}
+          displayUrl={perfil?.avatarUrl ?? avatarUrlOf(user)}
+          inicial={inicial}
+          onUploaded={(url) => setPerfil((p) => (p ? { ...p, avatarUrl: url } : p))}
+        />
         <div className="min-w-0">
           <div className="flex items-center gap-1.5">
             <h1 className="truncate text-xl font-bold">{perfil?.nome ?? 'Meu perfil'}</h1>
