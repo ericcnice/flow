@@ -2,6 +2,7 @@ import type React from "react"
 import "@/app/globals.css"
 import { Inter } from "next/font/google"
 import { ThemeProvider } from "@/components/theme-provider"
+import { CoachBridge } from "@/components/auth/coach-bridge"
 
 const inter = Inter({ subsets: ["latin"] })
 
@@ -21,6 +22,9 @@ export default function RootLayout({
       <body className={inter.className}>
         <ThemeProvider attribute="class" defaultTheme="light" enableSystem disableTransitionOnChange>
           {children}
+          {/* Ponte do coach (A2.2): pós-login, chama claim_coach_membership.
+              Inerte para anônimo/jogador comum; mostra o feedback só ao promover. */}
+          <CoachBridge />
         </ThemeProvider>
       </body>
     </html>
