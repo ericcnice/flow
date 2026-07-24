@@ -23,9 +23,25 @@
 
 import { createBrowserClient } from '@supabase/ssr'
 
-export function createBrowserSupabaseClient() {
+// Fábrica interna: o tipo do cliente é INFERIDO daqui (concreto). `ReturnType`
+// sobre `createBrowserClient` genérico degradaria o tipo p/ any e quebraria a
+// inferência dos `.then` — por isso o tipo do singleton vem de `typeof criar`.
+function criar() {
   return createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
   )
+}
+
+// SINGLETON (uma instância por aba). Antes era factory (uma instância NOVA a
+// cada chamada) → múltiplos GoTrueClient (warning + CORRIDA de hidratação da
+// sessão). O sintoma: um cliente recém-criado num handler de clique disparava o
+// Storage upload ANTES de hidratar a sessão do cookie → a request ia sem token →
+// auth.uid() NULL → a policy de storage.objects recusava (403 mascarado de 400).
+// Uma instância única, já hidratada pelo useSession, anexa o token de forma
+// consistente a TODAS as chamadas (DB e Storage).
+let client: ReturnType<typeof criar> | undefined
+
+export function createBrowserSupabaseClient() {
+  return (client ??= criar())
 }

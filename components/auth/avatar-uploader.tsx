@@ -36,9 +36,6 @@ async function recortarParaBlob(src: string, area: Area): Promise<Blob | null> {
   const ctx = canvas.getContext('2d')
   if (!ctx) return null
   ctx.drawImage(img, area.x, area.y, area.width, area.height, 0, 0, LADO, LADO)
-  // DEBUG (temporário): dimensões naturais + área de recorte → detecta área
-  // degenerada (width/height 0) que faria o draw não desenhar nada.
-  console.log('[avatar] draw', { natW: img.naturalWidth, natH: img.naturalHeight, area })
   return new Promise((resolve) => canvas.toBlob((b) => resolve(b), 'image/jpeg', 0.85))
 }
 
@@ -89,23 +86,29 @@ export function AvatarUploader({
     setErro(null)
     try {
       const blob = await recortarParaBlob(cropSrc, areaPx)
-      // DEBUG (temporário): o blob tem tamanho > 0 e type image/jpeg? size 0/undef
-      // → culpado é o canvas/blob (vazio/tainted). Ver antes do upload.
-      console.log('[avatar] blob', { size: blob?.size, type: blob?.type })
       if (!blob) {
         setErro('Não deu para processar a imagem. Tente outra.')
         setEnviando(false)
         return
       }
       const supabase = createBrowserSupabaseClient()
+      // Garante a sessão (cookie → token) ANTES do upload — sem isto, uma request
+      // ao Storage podia sair sem auth (auth.uid() null → RLS recusa). Força a
+      // resolução do token na instância antes da chamada.
+      const {
+        data: { session },
+      } = await supabase.auth.getSession()
+      if (!session) {
+        setErro('Sua sessão expirou. Entre novamente para trocar a foto.')
+        setEnviando(false)
+        return
+      }
       // Path versionado (cache-bust) na pasta do próprio uid — a policy da 1a permite.
       const path = `avatars/${user.id}/${Date.now()}.jpg`
       const { error: upErr } = await supabase.storage
         .from('flow-images')
         .upload(path, blob, { upsert: true, contentType: 'image/jpeg' })
       if (upErr) {
-        // DEBUG (temporário): mensagem REAL do 400 (o supabase-js às vezes engole).
-        console.error('[avatar] upload error:', JSON.stringify(upErr), upErr)
         setErro('Não deu para enviar a foto agora. Tente novamente.')
         setEnviando(false)
         return
