@@ -16,7 +16,8 @@
  */
 
 import { useEffect, useState } from 'react'
-import { PartyPopper, X } from 'lucide-react'
+import Link from 'next/link'
+import { Check, PartyPopper } from 'lucide-react'
 import { createBrowserSupabaseClient } from '@/lib/supabase/browser-client'
 
 // Guard de MÓDULO: no máximo UMA tentativa por uid por carga de página (várias
@@ -68,34 +69,63 @@ export function CoachBridge() {
     }
   }, [])
 
-  // Auto-dismiss do feedback (o momento é comemorativo, não um alerta a resolver).
-  useEffect(() => {
-    if (!promoted) return
-    const t = setTimeout(() => setPromoted(false), 6000)
-    return () => clearTimeout(t)
-  }, [promoted])
-
   if (!promoted) return null
 
+  // MODAL GENEROSO da promoção (à altura do momento — virou status). Aparece UMA
+  // vez (a RPC só retorna 'promoted' na 1ª promoção; idempotente depois). Não
+  // auto-fecha: é ponto de decisão (CTA para a área do coach).
   return (
     <div
-      role="status"
-      aria-live="polite"
-      className="fixed inset-x-0 bottom-5 z-[90] flex justify-center px-4"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Você agora é Professor no Flow"
+      className="fixed inset-0 z-[95] flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm"
+      onClick={() => setPromoted(false)}
     >
-      <div className="pointer-events-auto flex items-center gap-2.5 rounded-full border border-emerald-400/30 bg-neutral-900/95 px-4 py-2.5 text-sm font-semibold text-white shadow-2xl ring-1 ring-white/10 backdrop-blur">
-        <PartyPopper className="h-4 w-4 shrink-0 text-emerald-400" aria-hidden />
-        <span>
-          Você agora é <span className="text-emerald-400">Professor no Flow</span> 🎾
-        </span>
-        <button
-          type="button"
-          onClick={() => setPromoted(false)}
-          aria-label="Fechar"
-          className="ml-1 rounded-full p-0.5 text-white/50 transition hover:bg-white/10 hover:text-white"
-        >
-          <X className="h-4 w-4" />
-        </button>
+      <div
+        className="w-full max-w-sm overflow-hidden rounded-2xl border border-emerald-400/20 bg-neutral-900 text-white shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Hero comemorativo — brilho sutil, sem exageros. */}
+        <div className="relative flex flex-col items-center gap-3 bg-gradient-to-b from-emerald-500/15 to-transparent px-6 pt-8 pb-5 text-center">
+          <span className="flex h-14 w-14 items-center justify-center rounded-full bg-emerald-500/15 ring-1 ring-emerald-400/30">
+            <PartyPopper className="h-7 w-7 text-emerald-400" aria-hidden />
+          </span>
+          <h2 className="text-xl font-bold tracking-tight">
+            Você agora é <span className="text-emerald-400">Professor no Flow</span> 🎾
+          </h2>
+        </div>
+
+        {/* 3 benefícios punchy. */}
+        <ul className="flex flex-col gap-3 px-6 pb-2 text-sm">
+          {[
+            'Gerencie seus alunos num só lugar',
+            'Sua marca e seu patrocinador no placar',
+            'Resultados ao vivo para pais e sua rede',
+          ].map((b) => (
+            <li key={b} className="flex items-start gap-2.5">
+              <Check className="mt-0.5 h-4 w-4 shrink-0 text-emerald-400" aria-hidden />
+              <span className="text-white/85">{b}</span>
+            </li>
+          ))}
+        </ul>
+
+        <div className="flex flex-col gap-2 px-6 pb-6 pt-4">
+          <Link
+            href="/perfil"
+            onClick={() => setPromoted(false)}
+            className="flex h-12 items-center justify-center rounded-lg bg-emerald-500 text-base font-bold text-neutral-950 transition hover:bg-emerald-400"
+          >
+            Ir para minha área
+          </Link>
+          <button
+            type="button"
+            onClick={() => setPromoted(false)}
+            className="h-10 text-sm font-medium text-white/50 transition hover:text-white/80"
+          >
+            Agora não
+          </button>
+        </div>
       </div>
     </div>
   )

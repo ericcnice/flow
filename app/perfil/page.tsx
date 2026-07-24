@@ -18,7 +18,7 @@ import { useRouter } from 'next/navigation'
 import { formatDistanceToNow } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import { parsePhoneNumber } from 'libphonenumber-js'
-import { AlertTriangle, ArrowLeft, Check, Loader2, LogOut, ShieldCheck, Trash2, Trophy } from 'lucide-react'
+import { AlertTriangle, ArrowLeft, BadgeCheck, Check, Loader2, LogOut, ShieldCheck, Trash2, Trophy, Users } from 'lucide-react'
 import type { User } from '@supabase/supabase-js'
 import { createBrowserSupabaseClient } from '@/lib/supabase/browser-client'
 import { avatarUrlOf } from '@/lib/auth-avatar'
@@ -518,6 +518,12 @@ function PerfilLogado({ user }: { user: User }) {
   const router = useRouter()
   const [perfil, setPerfil] = useState<Perfil | null>(null)
   const [saindo, setSaindo] = useState(false)
+  // Papel do PRÓPRIO usuário (user_roles tem policy SELECT self → leitura direta,
+  // sem RPC). undefined = carregando; coach revela a aba/badge. Todo coach é
+  // também jogador (a aba Jogador nunca some).
+  const [role, setRole] = useState<string | null | undefined>(undefined)
+  const [aba, setAba] = useState<'jogador' | 'coach'>('jogador')
+  const isCoach = role === 'coach'
 
   // Logout: encerra a sessão e volta à home. (A ponte do coach e o pré-preench.
   // reagem à ausência de sessão normalmente; nada a "desfazer" aqui.)
@@ -550,6 +556,23 @@ function PerfilLogado({ user }: { user: User }) {
     }
   }, [user])
 
+  // Lê o papel do próprio usuário (RLS self em user_roles). Não-bloqueante.
+  useEffect(() => {
+    let alive = true
+    const supabase = createBrowserSupabaseClient()
+    supabase
+      .from('user_roles')
+      .select('role')
+      .eq('user_id', user.id)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (alive) setRole((data?.role as string) ?? null)
+      })
+    return () => {
+      alive = false
+    }
+  }, [user])
+
   const telFmt = useMemo(() => {
     if (!perfil?.phone) return ''
     try {
@@ -569,22 +592,54 @@ function PerfilLogado({ user }: { user: User }) {
         Início
       </Link>
 
-      {/* HEADER: avatar (foto do Google, fallback inicial) + nome + @username +
-          celular mascarado. */}
+      {/* HEADER: avatar + nome + badges (tick verde verificado + pílula Coach
+          laranja só p/ coach) + @username + celular mascarado. */}
       <header className="mt-6 flex items-center gap-4">
         <Avatar url={avatarUrlOf(user)} inicial={inicial} />
         <div className="min-w-0">
-          <h1 className="truncate text-xl font-bold">{perfil?.nome ?? 'Meu perfil'}</h1>
+          <div className="flex items-center gap-1.5">
+            <h1 className="truncate text-xl font-bold">{perfil?.nome ?? 'Meu perfil'}</h1>
+            {/* Verificado = tem sessão/conta (identidade ancorada em email real). */}
+            <BadgeCheck className="h-4 w-4 shrink-0 text-emerald-400" aria-label="Identidade verificada pelo Flow" />
+            {isCoach && (
+              <span className="shrink-0 rounded-full bg-orange-500/15 px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide text-orange-400 ring-1 ring-orange-400/30">
+                Coach
+              </span>
+            )}
+          </div>
           {perfil?.username && <p className="truncate font-mono text-sm text-white/60">@{perfil.username}</p>}
           {telFmt && <p className="truncate text-sm text-white/50">{telFmt}</p>}
         </div>
       </header>
 
-      {/* MEUS JOGOS */}
-      <section className="mt-8">
-        <h2 className="mb-3 text-xs font-semibold uppercase tracking-widest text-white/50">Meus jogos</h2>
-        <MeusJogos userId={user.id} />
-      </section>
+      {/* ABAS [Jogador | Coach] — SÓ para coach (jogador comum não vê seletor). */}
+      {isCoach && (
+        <div className="mt-6 flex rounded-full bg-white/10 p-1 text-sm font-semibold">
+          {(['jogador', 'coach'] as const).map((t) => (
+            <button
+              key={t}
+              type="button"
+              onClick={() => setAba(t)}
+              aria-pressed={aba === t}
+              className={`flex-1 rounded-full px-3 py-1.5 capitalize transition ${
+                aba === t ? 'bg-white text-neutral-900' : 'text-white/70 hover:text-white'
+              }`}
+            >
+              {t}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* ABA JOGADOR — o perfil atual, comportamento IDÊNTICO (coach também é
+          jogador; esta aba nunca some). Só reorganizado sob a condição da aba. */}
+      {(!isCoach || aba === 'jogador') && (
+        <>
+          {/* MEUS JOGOS */}
+          <section className="mt-8">
+            <h2 className="mb-3 text-xs font-semibold uppercase tracking-widest text-white/50">Meus jogos</h2>
+            <MeusJogos userId={user.id} />
+          </section>
 
       {/* MEUS DADOS (edição, reusa o ProfileForm) */}
       <section className="mt-8">
@@ -627,14 +682,29 @@ function PerfilLogado({ user }: { user: User }) {
         </button>
       </section>
 
-      {/* ZONA DE PERIGO — excluir conta */}
-      <section className="mt-8 border-t border-white/10 pt-6">
-        <h2 className="mb-1 text-xs font-semibold uppercase tracking-widest text-red-400/70">Zona de perigo</h2>
-        <p className="mb-3 text-sm text-white/45">
-          Apaga seus dados pessoais e desvincula seus jogos. Placares e nomes nas súmulas são preservados.
-        </p>
-        <ExcluirConta user={user} />
-      </section>
+          {/* ZONA DE PERIGO — excluir conta */}
+          <section className="mt-8 border-t border-white/10 pt-6">
+            <h2 className="mb-1 text-xs font-semibold uppercase tracking-widest text-red-400/70">Zona de perigo</h2>
+            <p className="mb-3 text-sm text-white/45">
+              Apaga seus dados pessoais e desvincula seus jogos. Placares e nomes nas súmulas são preservados.
+            </p>
+            <ExcluirConta user={user} />
+          </section>
+        </>
+      )}
+
+      {/* ABA COACH — esqueleto (só coach vê; a casca da A2, o roster real é a A3). */}
+      {isCoach && aba === 'coach' && (
+        <section className="mt-6">
+          <div className="rounded-2xl border border-dashed border-orange-400/25 bg-orange-400/5 p-8 text-center">
+            <Users className="mx-auto mb-3 h-8 w-8 text-orange-400/70" />
+            <p className="text-base font-semibold">Sua área de professor</p>
+            <p className="mx-auto mt-1.5 max-w-xs text-sm text-white/55">
+              Em breve você vai gerenciar seus alunos aqui.
+            </p>
+          </div>
+        </section>
+      )}
     </main>
   )
 }
