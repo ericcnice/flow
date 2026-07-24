@@ -212,6 +212,120 @@ function MeusJogos({ userId }: { userId: string }) {
   )
 }
 
+// ------------------------------------------------------------------ meus alunos
+type Aluno = {
+  id: string
+  name: string | null
+  phone: string | null
+  level: string | null
+  member_number: string | null
+  class_schedule: string | null
+}
+
+// Card de aluno (A3.2 — só leitura). Mostra o nome em destaque e, abaixo, só os
+// campos preenchidos (nível/sócio/aula) + o celular discreto. Estilo dark alinhado
+// aos cards de "Meus jogos".
+function AlunoCard({ a }: { a: Aluno }) {
+  const tel = (() => {
+    if (!a.phone) return ''
+    try {
+      return parsePhoneNumber(a.phone)?.formatInternational() ?? a.phone
+    } catch {
+      return a.phone
+    }
+  })()
+  const detalhes = [
+    a.level ? { label: 'Nível', valor: a.level } : null,
+    a.member_number ? { label: 'Sócio', valor: a.member_number } : null,
+    a.class_schedule ? { label: 'Aula', valor: a.class_schedule } : null,
+  ].filter(Boolean) as { label: string; valor: string }[]
+
+  return (
+    <div className="rounded-xl border border-white/10 bg-neutral-900 p-4">
+      <p className="truncate text-base font-bold">{a.name ?? '—'}</p>
+      {tel && <p className="mt-0.5 text-sm text-white/50">{tel}</p>}
+      {detalhes.length > 0 && (
+        <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-white/60">
+          {detalhes.map((d) => (
+            <span key={d.label}>
+              <span className="text-white/40">{d.label}:</span> {d.valor}
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// Roster do coach: os alunos DELE (a SELECT policy "members coach select own"
+// escopa por coach_id = auth.uid() — nenhum vazamento entre coaches). Só leitura.
+function MeusAlunos({ userId }: { userId: string }) {
+  const [alunos, setAlunos] = useState<Aluno[]>([])
+  const [estado, setEstado] = useState<'carregando' | 'ok' | 'erro'>('carregando')
+
+  useEffect(() => {
+    let alive = true
+    const supabase = createBrowserSupabaseClient()
+    supabase
+      .from('members')
+      .select('id, name, phone, level, member_number, class_schedule')
+      .eq('coach_id', userId)
+      .eq('active', true)
+      .order('name')
+      .then(({ data, error }) => {
+        if (!alive) return
+        if (error) {
+          setEstado('erro')
+          return
+        }
+        setAlunos((data ?? []) as Aluno[])
+        setEstado('ok')
+      })
+    return () => {
+      alive = false
+    }
+  }, [userId])
+
+  if (estado === 'carregando') {
+    return (
+      <div className="flex flex-col gap-3">
+        {[0, 1, 2].map((i) => (
+          <div key={i} className="h-20 animate-pulse rounded-xl bg-neutral-900" />
+        ))}
+      </div>
+    )
+  }
+  if (estado === 'erro') {
+    return (
+      <p className="rounded-xl border border-white/10 bg-neutral-900 p-4 text-sm text-white/60">
+        Não deu para carregar seus alunos agora. Tente novamente com conexão.
+      </p>
+    )
+  }
+  if (alunos.length === 0) {
+    return (
+      <div className="rounded-2xl border border-dashed border-orange-400/25 bg-orange-400/5 p-8 text-center">
+        <Users className="mx-auto mb-3 h-8 w-8 text-orange-400/70" />
+        <p className="text-base font-semibold">Você ainda não tem alunos cadastrados.</p>
+        <p className="mx-auto mt-1.5 max-w-xs text-sm text-white/55">
+          Em breve você poderá adicioná-los aqui.
+        </p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex flex-col gap-3">
+      <p className="text-xs uppercase tracking-widest text-white/40">
+        {alunos.length} {alunos.length === 1 ? 'aluno' : 'alunos'}
+      </p>
+      {alunos.map((a) => (
+        <AlunoCard key={a.id} a={a} />
+      ))}
+    </div>
+  )
+}
+
 // --------------------------------------------------------------- consentimentos
 function Consentimentos({ user }: { user: User }) {
   const [consent, setConsent] = useState<Consent | null | undefined>(undefined) // undefined = carregando
@@ -693,16 +807,12 @@ function PerfilLogado({ user }: { user: User }) {
         </>
       )}
 
-      {/* ABA COACH — esqueleto (só coach vê; a casca da A2, o roster real é a A3). */}
+      {/* ABA COACH — roster do professor (A3.2: só leitura). Adicionar/editar/
+          remover são A3.3/A3.4. Só coach vê. */}
       {isCoach && aba === 'coach' && (
         <section className="mt-6">
-          <div className="rounded-2xl border border-dashed border-orange-400/25 bg-orange-400/5 p-8 text-center">
-            <Users className="mx-auto mb-3 h-8 w-8 text-orange-400/70" />
-            <p className="text-base font-semibold">Sua área de professor</p>
-            <p className="mx-auto mt-1.5 max-w-xs text-sm text-white/55">
-              Em breve você vai gerenciar seus alunos aqui.
-            </p>
-          </div>
+          <h2 className="mb-3 text-xs font-semibold uppercase tracking-widest text-white/50">Meus alunos</h2>
+          <MeusAlunos userId={user.id} />
         </section>
       )}
     </main>
