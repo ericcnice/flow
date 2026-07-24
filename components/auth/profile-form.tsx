@@ -221,21 +221,23 @@ export function ProfileForm({
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex gap-2">
-        <label className="flex flex-1 flex-col gap-1">
+      {/* EMPILHADOS (largura total) — lado a lado estourava a largura no mobile
+          (scroll horizontal) com sobrenomes longos. */}
+      <div className="flex flex-col gap-3">
+        <label className="flex flex-col gap-1">
           <span className="text-xs font-semibold uppercase tracking-wide text-white/60">Nome</span>
           <input
             value={nome}
             onChange={(e) => setNome(e.target.value)}
-            className="h-11 rounded-lg border border-white/20 bg-white/10 px-3 text-base"
+            className="h-11 w-full rounded-lg border border-white/20 bg-white/10 px-3 text-base"
           />
         </label>
-        <label className="flex flex-1 flex-col gap-1">
+        <label className="flex flex-col gap-1">
           <span className="text-xs font-semibold uppercase tracking-wide text-white/60">Sobrenome</span>
           <input
             value={sobrenome}
             onChange={(e) => setSobrenome(e.target.value)}
-            className="h-11 rounded-lg border border-white/20 bg-white/10 px-3 text-base"
+            className="h-11 w-full rounded-lg border border-white/20 bg-white/10 px-3 text-base"
           />
         </label>
       </div>
