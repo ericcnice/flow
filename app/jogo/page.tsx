@@ -168,6 +168,23 @@ const DOUBLE_TAP_MS = 300
 // pouco mais folgada que o duplo-toque: são 3 toques deliberados na mesma bola.
 const TRIPLE_TAP_MS = 400
 
+// CARÊNCIA do toast de "aparelho saiu" (A4/polimento): na abertura, uma presença
+// FANTASMA da sessão anterior (ainda não expirada no Realtime) pode fazer o
+// editorCount cair 2→1 e disparar um alerta falso. Suprimimos quedas dentro
+// desta janela após conectar — churn de abertura é ruído; a saída REAL de um
+// aparelho no meio do jogo acontece bem depois. (Só o GATE do toast; a lógica de
+// presença em use-realtime-match não muda.)
+const DISCONNECT_GRACE_MS = 5000
+
+// Peek SÍNCRONO e barato: "há sessão provável?" — o browser-client (@supabase/ssr)
+// guarda a sessão em COOKIE `sb-<ref>-auth-token`. Serve só para decidir mostrar o
+// placeholder do slot do dono em vez do "Player 1" piscando (Passo 1a). Não é
+// autenticação: o pré-preenchimento real continua gated por flag + authUser.
+function hasProbableSession(): boolean {
+  if (typeof document === "undefined") return false
+  return document.cookie.includes("-auth-token")
+}
+
 // Quanto tempo o aviso "TROCA DE LADO" fica na tela antes de sumir sozinho.
 // Curto de propósito: é um lembrete discreto, não um banner que domina a tela.
 const SIDE_CHANGE_MS = 3000
@@ -320,6 +337,12 @@ export default function JogoPage() {
   // (tela de fim, broadcast): simples = "Nome"; duplas = "Nome1/Nome2".
   const [bluePlayerName, setBluePlayerName] = useState("")
   const [redPlayerName, setRedPlayerName] = useState("")
+  // PLACEHOLDER do slot do dono (Passo 1a): enquanto o nome do dono logado ainda
+  // não resolveu, o slot blue1 mostra um traço/skeleton discreto em vez do
+  // "Player 1" piscando. Só liga no device logado (flag + sessão provável +
+  // blue1 fallback); anônimo nunca liga → "Player 1" como hoje.
+  const [ownerNamePending, setOwnerNamePending] = useState(false)
+  const ownerPendingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [animatingBlue, setAnimatingBlue] = useState(false)
   const [animatingRed, setAnimatingRed] = useState(false)
   // Overlay de configuração (a mesma tela de setup, aberta dentro do jogo).
@@ -388,6 +411,10 @@ export default function JogoPage() {
   const disconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const prevEditorCountRef = useRef(0)
   const dropDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // Instante da 1ª conexão (para a CARÊNCIA do toast): quedas dentro de
+  // DISCONNECT_GRACE_MS após conectar são churn de abertura (fantasma expirando),
+  // não saída real → suprimidas.
+  const connectedAtRef = useRef<number | null>(null)
 
   const openScoreboard = () => {
     // Garantir que a URL tenha o parâmetro quadra corretamente
@@ -575,6 +602,18 @@ export default function JogoPage() {
     if (storedConfig) {
       const config = JSON.parse(storedConfig)
       setGameConfig(config)
+
+      // PASSO 1a — placeholder do slot do dono: se a flag está ligada, há sessão
+      // provável (cookie) e o blue1 ainda é fallback, mostra o skeleton discreto
+      // em vez do "Player 1" até o nome resolver (evita o flicker). Batched com o
+      // setGameConfig acima → o 1º render da pílula já nasce sem "Player 1".
+      // Anônimo (sem cookie) ou flag off → não liga. Timer de segurança solta o
+      // placeholder em DISCONNECT_GRACE... na verdade em 4s, se o nome não vier.
+      if (appAuthFlag && hasProbableSession() && isFallbackName(config.players.blue1)) {
+        setOwnerNamePending(true)
+        if (ownerPendingTimerRef.current) clearTimeout(ownerPendingTimerRef.current)
+        ownerPendingTimerRef.current = setTimeout(() => setOwnerNamePending(false), 4000)
+      }
 
       // Resolve o esporte ANTES de (re)construir o motor: config tem prioridade
       // (persiste), com a query como dica e tênis como fallback (partidas antigas).
@@ -958,9 +997,18 @@ export default function JogoPage() {
       if (sideChangeTimerRef.current) clearTimeout(sideChangeTimerRef.current)
       if (disconnectTimerRef.current) clearTimeout(disconnectTimerRef.current)
       if (dropDebounceRef.current) clearTimeout(dropDebounceRef.current)
+      if (ownerPendingTimerRef.current) clearTimeout(ownerPendingTimerRef.current)
       speakerRef.current?.cancel()
     }
   }, [])
+
+  // Marca o instante da 1ª conexão (base da CARÊNCIA do toast de saída). Uma vez
+  // só: churn de reconexão posterior não rearma a carência.
+  useEffect(() => {
+    if (rt.status === "connected" && connectedAtRef.current === null) {
+      connectedAtRef.current = Date.now()
+    }
+  }, [rt.status])
 
   // Queda de conexão no placar compartilhado: quando editorCount DIMINUI e não
   // recupera dentro do debounce (~1,5s → filtra o refresh do outro aparelho, que
@@ -977,7 +1025,13 @@ export default function JogoPage() {
       if (dropDebounceRef.current) clearTimeout(dropDebounceRef.current)
       dropDebounceRef.current = setTimeout(() => {
         dropDebounceRef.current = null
+        // CARÊNCIA: quedas nos primeiros segundos após conectar são churn de
+        // abertura (presença FANTASMA da sessão anterior expirando) — não a saída
+        // real de um aparelho. Suprime. A saída real acontece bem depois.
+        const dentroCarencia =
+          connectedAtRef.current === null || Date.now() - connectedAtRef.current < DISCONNECT_GRACE_MS
         if (
+          !dentroCarencia &&
           prevEditorCountRef.current < baseline && // ainda caído (não recuperou)
           baseline >= 2 && // havia outro aparelho
           prevEditorCountRef.current >= 1 // nós seguimos conectados
@@ -1704,6 +1758,41 @@ export default function JogoPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [gameState?.finished, gameState?.winner, authUser])
 
+  // Solta o placeholder do slot do dono (limpa o estado + o timer de segurança).
+  const soltarPlaceholder = () => {
+    if (ownerPendingTimerRef.current) {
+      clearTimeout(ownerPendingTimerRef.current)
+      ownerPendingTimerRef.current = null
+    }
+    setOwnerNamePending(false)
+  }
+
+  // Aplica o nome do dono no slot blue1 + marca IDENTIDADE VERIFICADA (local).
+  // Persiste, deriva o nome combinado, propaga SÓ `players` (nome) via set_config
+  // (ownerVerified fica local, sync intocado) e SOLTA o placeholder. Idempotente:
+  // se o nome já é o atual, só solta o placeholder (sem set_config redundante). O
+  // chamador garante que o slot ainda é do dono (nunca sobrescreve edição).
+  const aplicarNomeDono = (nome: string) => {
+    const cur = gameConfigRef.current
+    if (!cur) return
+    if (nome === cur.players.blue1) {
+      soltarPlaceholder()
+      return
+    }
+    const players = { ...cur.players, blue1: nome }
+    const newConfig: GameConfig = { ...cur, players, ownerVerified: true }
+    setGameConfig(newConfig)
+    gameConfigRef.current = newConfig
+    try {
+      localStorage.setItem(`tennis_match_${quadra}`, JSON.stringify(newConfig))
+    } catch {
+      // aba privada / cota: segue só em memória
+    }
+    setBluePlayerName(cur.gameType === "duplas" ? `${players.blue1}/${players.blue2}` : players.blue1)
+    sendRealtimeAction({ kind: "set_config", patch: { players } })
+    soltarPlaceholder()
+  }
+
   // PASSO 1a (A4): o DONO logado se VÊ no placar — o nome dele pré-preenche o
   // slot blue1 (o "Player 1"/"Jogador 1"). Aditivo, atrás da flag; anônimo não
   // muda. É só uma string em config.players.blue1 (a pílula a exibe como
@@ -1714,6 +1803,8 @@ export default function JogoPage() {
   //  (c) IDEMPOTENTE — prefillDoneRef trava a UMA execução por partida, antes do
   //      await, então não re-dispara a cada render/ponto;
   //  (d) RESPEITA EDIÇÃO — travado o ref, se o dono editar depois, não força de novo.
+  // FLICKER: preenche RÁPIDO com user_metadata (já disponível com a sessão, sem o
+  // 2º hop de rede) e refina com profiles.name; o placeholder some numa troca só.
   const prefillDoneRef = useRef(false)
   useEffect(() => {
     if (!appAuthFlag || !authUser || prefillDoneRef.current) return
@@ -1721,43 +1812,36 @@ export default function JogoPage() {
     if (!cfg) return // config ainda não carregou — re-tenta quando gameConfig chegar
     if (!isFallbackName(cfg.players.blue1)) {
       prefillDoneRef.current = true // já tem nome (digitado/pré) → nada a fazer, não re-tenta
+      soltarPlaceholder()
       return
     }
     prefillDoneRef.current = true // trava ANTES do await: roda uma vez só
+
+    // FILL RÁPIDO: nome do user_metadata (OAuth), disponível já com o authUser —
+    // vira o nome sem esperar o profiles.name (rede). Solta o placeholder.
+    const meta = (authUser.user_metadata ?? {}) as Record<string, unknown>
+    const nomeMeta = (((meta.full_name as string) ?? (meta.name as string)) ?? "").trim()
+    if (nomeMeta) aplicarNomeDono(nomeMeta)
+
     let alive = true
     void (async () => {
-      // FONTE: profiles.name (canônico, editado no /perfil) → fallback metadata.
-      // Leitura não-bloqueante; o jogo já está pronto e nunca espera por isto.
+      // REFINO: profiles.name (canônico, editado no /perfil). Não-bloqueante.
       let nome = ""
       try {
         const supabase = createBrowserSupabaseClient()
         const { data } = await supabase.from("profiles").select("name").eq("id", authUser.id).maybeSingle()
         nome = (data?.name ?? "").trim()
       } catch {
-        // offline/erro: cai no metadata do OAuth
+        // offline/erro: fica com o do metadata (ou o fallback)
       }
-      if (!nome) {
-        const meta = (authUser.user_metadata ?? {}) as Record<string, unknown>
-        nome = (((meta.full_name as string) ?? (meta.name as string)) ?? "").trim()
-      }
-      if (!alive || !nome) return
-      // Re-checa: se o dono editou o blue1 durante o fetch, respeita a edição.
+      if (!alive) return
       const cur = gameConfigRef.current
-      if (!cur || !isFallbackName(cur.players.blue1)) return
-      // Aplica o nome verificado + marca o slot como IDENTIDADE VERIFICADA (local).
-      // Persiste, deriva o nome combinado e propaga SÓ `players` (nome) via
-      // set_config — `ownerVerified` fica local (sync intocado).
-      const players = { ...cur.players, blue1: nome }
-      const newConfig: GameConfig = { ...cur, players, ownerVerified: true }
-      setGameConfig(newConfig)
-      gameConfigRef.current = newConfig
-      try {
-        localStorage.setItem(`tennis_match_${quadra}`, JSON.stringify(newConfig))
-      } catch {
-        // aba privada / cota: segue só em memória
-      }
-      setBluePlayerName(cur.gameType === "duplas" ? `${players.blue1}/${players.blue2}` : players.blue1)
-      sendRealtimeAction({ kind: "set_config", patch: { players } })
+      // Só aplica se o slot ainda é do dono (fallback OU o nome do metadata que
+      // pusemos) — nunca sobrescreve edição feita durante o fetch.
+      const doDono = !!cur && (isFallbackName(cur.players.blue1) || cur.players.blue1 === nomeMeta)
+      if (nome && doDono) aplicarNomeDono(nome)
+      // Sem nome em lugar nenhum → solta o placeholder (cai no "Player 1").
+      if (!nomeMeta && !nome) soltarPlaceholder()
     })()
     return () => {
       alive = false
@@ -2065,6 +2149,13 @@ export default function JogoPage() {
         aria-label="Identidade verificada pelo Flow"
       />
     )
+    // PLACEHOLDER do slot do dono (Passo 1a): enquanto o nome resolve, o slot
+    // blue1 mostra um skeleton discreto em vez de "Player 1" piscando. Só no slot
+    // 0 do time do dono; anônimo/edição normal nunca liga (ownerNamePending=false).
+    const slot0Pending = team === "blue" && ownerNamePending
+    const placeholderNode = (
+      <span aria-hidden className="inline-block h-3.5 w-14 shrink-0 animate-pulse rounded-full bg-white/25" />
+    )
     const nameEl = (n: string, verified = false) =>
       verified ? (
         <span className="inline-flex min-w-0 items-center gap-1">
@@ -2083,7 +2174,9 @@ export default function JogoPage() {
       e.stopPropagation()
       setEditingSide(team)
     }
-    const nameCentered = verifiedSlot0 ? (
+    const nameCentered = slot0Pending ? (
+      <span className="flex min-w-0 flex-1 items-center justify-center">{placeholderNode}</span>
+    ) : verifiedSlot0 ? (
       <span className="flex min-w-0 flex-1 items-center justify-center gap-1">
         <span className="truncate text-sm font-bold uppercase tracking-wide text-white">{names[0]}</span>
         {tick}
@@ -2167,7 +2260,7 @@ export default function JogoPage() {
             >
               {bola(0)}
             </button>
-            {nameEl(names[0], verifiedSlot0)}
+            {slot0Pending ? placeholderNode : nameEl(names[0], verifiedSlot0)}
           </span>
           {logoEl}
           <span className="flex min-w-0 items-center justify-between gap-2">
@@ -2198,7 +2291,7 @@ export default function JogoPage() {
       >
         <span className="flex min-w-0 items-center justify-between gap-2">
           {bola(0)}
-          {nameEl(names[0], verifiedSlot0)}
+          {slot0Pending ? placeholderNode : nameEl(names[0], verifiedSlot0)}
         </span>
         {logoEl}
         <span className="flex min-w-0 items-center justify-between gap-2">
