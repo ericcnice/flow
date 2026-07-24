@@ -751,7 +751,19 @@ export default function JogoPage() {
     }
     let playersChanged = false
     if (patch.players) {
-      const mergedPlayers = { ...prev.players, ...patch.players }
+      // GUARD NÃO-DESTRUTIVO (correção do "nome do dono some"): um valor REMOTO
+      // fallback/vazio ("Player N"/"Jogador N"/"") NUNCA sobrescreve um nome LOCAL
+      // real. Merge POR CAMPO: se o remoto é fallback e o local é real, mantém o
+      // local; senão aplica o remoto. Protege o nome do dono (blue1) contra o seed
+      // e o eco fallback da sala, e blue2/red* também. Nome remoto REAL continua
+      // aplicando normal (propagação p/ o espectador intacta).
+      const mergedPlayers = { ...prev.players }
+      for (const [k, v] of Object.entries(patch.players)) {
+        const key = k as keyof GameConfig["players"]
+        const localVal = prev.players[key]
+        if (isFallbackName((v ?? "").trim()) && !isFallbackName(localVal)) continue
+        mergedPlayers[key] = v as string
+      }
       if (JSON.stringify(mergedPlayers) !== JSON.stringify(prev.players)) {
         updated.players = mergedPlayers
         changed = true
