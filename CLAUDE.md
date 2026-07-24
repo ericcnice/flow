@@ -50,6 +50,16 @@ PWA offline-first de placar para esportes de raquete (tênis, beach, padel, squa
 - O convite do oponente (Passo 2 do A4) é o que transforma um nome DIGITADO num VERIFICADO: em vez de eu escrever o nome do adversário, ele loga e afirma o próprio nome (resolve o cheiro de falsa atribuição que o "digitar nome do adversário" tem hoje).
 - Confiabilidade: nome verificado é prova de quem jogou — essencial para torneio/ranking/histórico com valor. O tick aparece também no link de transmissão (espectador vê a credibilidade).
 
+## Passo 1c — Sistema de celebração (visão, backlog após 1b)
+Gamificação que mexe com vaidade para incentivar cadastro + dar emoção à transmissão. Hoje não há celebração entre games (só o card final) — momento desperdiçado.
+- ESCALA POR PESO (a distinção é visual, vira linguagem que o espectador aprende): GAME vencido = pílula do vencedor expande vertical, mostra o avatar, recolhe rápido (sutil). SET = mesma animação do game (consistência). PARTIDA = distinta e maior: o avatar do campeão cobre os dois lados/tela inteira, encobrindo o adversário ("acabou, este venceu"). A diferença de escala comunica a diferença de peso sem texto.
+- SÓ O VENCEDOR aparece (psicologia: o perdedor não quer a cara estampada na derrota). Na vitória final, celebração + placar, sem humilhar o perdedor.
+- FOTO vs INICIAL: logado mostra foto; não-logado mostra inicial (círculo digno, estilo o "C" do perfil — convite, não castigo). O contraste (minha inicial ao lado da foto do outro) é o incentivo de cadastro.
+- TOGGLE no settings para desligar celebrações (respeita juiz sério / quem marca rápido).
+- SINCRONIZADA NA TRANSMISSÃO (fator uau de venda): FORMA A (preferida, baixo risco) = o espectador DERIVA a celebração do que já sincroniza (detecta local "o game mudou" e dispara a animação com a foto que já buscou), sem mandar evento novo pelo sync. FORMA B (mandar evento explícito via set_config) = mais arriscada, evitar. Investigar se a Forma A tem timing confiável.
+- DEPENDÊNCIA: o Passo 1b (foto do usuário disponível/buscável) é o alicerce — sem foto não há o que celebrar com rosto.
+- A DECIDER no 1c: celebração de game é do vencedor do game, ou marco neutro? (no tênis, ganhar o game nem sempre é "algo especial" — pode ser só segurar o saque). Desenhar sobre a tela real com mockups do Eric.
+
 ## Fluxo de trabalho
 - **Claude Chat**: estratégia, decisões, prompts. **Claude Code**: executa código, commits, push. **IA do Supabase**: verifica e roda o SQL.
 - **Método por peça**: investigação read-only → decisão no chat → prompt com intocáveis explícitos → migração verificada antes de rodar → QA de produção no celular.
