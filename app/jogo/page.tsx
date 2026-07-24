@@ -2097,23 +2097,29 @@ export default function JogoPage() {
     // SIMPLES (item 5a): [LOGO na esquerda] [Nome no centro] [BOLA na direita] —
     // o logo assume a ponta que a 2ª bola ocuparia em duplas.
     if (!duplas) {
-      // PRÉ-JOGO: dois alvos — metade do jogador escolhe o saque (nomes
-      // opcionais), o logo abre o popup. A pílula pulsa 2x na entrada e para.
+      // PRÉ-JOGO: SÓ a bolinha escolhe o saque (1 toque) / sorteia (3 toques). O
+      // RESTO da pílula (nome + logo + espaço) abre a edição. O CONTAINER é o alvo
+      // de edição (onClick); a bolinha é um botão que PARA a propagação — o toque
+      // nela não vaza para a edição, e o toque no resto não vaza para o saque.
       if (prejogo) {
         return (
-          <div className={`${pill} flex items-center gap-2 serve-pill-pulse`}>
-            <button type="button" onClick={editOnClick} aria-label="Editar nomes" className="shrink-0">
-              {logoEl}
-            </button>
+          <div
+            className={`${pill} flex items-center gap-2 serve-pill-pulse`}
+            onClick={editOnClick}
+            role="button"
+            aria-label="Editar nomes"
+          >
+            {logoEl}
+            {nameCentered}
             <button
               type="button"
               onClick={(e) => {
                 e.stopPropagation()
                 onServeBallTap(team, 0)
               }}
-              className="flex min-w-0 flex-1 items-center gap-2"
+              aria-label="Escolher sacador"
+              className="shrink-0"
             >
-              {nameCentered}
               {bola(0)}
             </button>
           </div>
@@ -2140,33 +2146,44 @@ export default function JogoPage() {
     // PRÉ-JOGO: cada metade escolhe o sacador do par (nomes opcionais), logo
     // central abre o popup. Pílula pulsa 2x na entrada e para.
     if (prejogo) {
+      // Container edita (nome + logo + espaço); SÓ cada bolinha escolhe/sorteia
+      // o saque do seu jogador, parando a propagação para não abrir a edição.
       return (
-        <div className={`${gridPill} serve-pill-pulse`}>
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation()
-              onServeBallTap(team, 0)
-            }}
-            className="flex min-w-0 items-center justify-between gap-2"
-          >
-            {bola(0)}
+        <div
+          className={`${gridPill} serve-pill-pulse`}
+          onClick={editOnClick}
+          role="button"
+          aria-label="Editar nomes"
+        >
+          <span className="flex min-w-0 items-center justify-between gap-2">
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation()
+                onServeBallTap(team, 0)
+              }}
+              aria-label="Escolher sacador"
+              className="shrink-0"
+            >
+              {bola(0)}
+            </button>
             {nameEl(names[0], verifiedSlot0)}
-          </button>
-          <button type="button" onClick={editOnClick} aria-label="Editar nomes" className="shrink-0">
-            {logoEl}
-          </button>
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation()
-              onServeBallTap(team, 1)
-            }}
-            className="flex min-w-0 items-center justify-between gap-2"
-          >
+          </span>
+          {logoEl}
+          <span className="flex min-w-0 items-center justify-between gap-2">
             {nameEl(names[1])}
-            {bola(1)}
-          </button>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation()
+                onServeBallTap(team, 1)
+              }}
+              aria-label="Escolher sacador"
+              className="shrink-0"
+            >
+              {bola(1)}
+            </button>
+          </span>
         </div>
       )
     }
