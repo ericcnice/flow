@@ -15,7 +15,7 @@
 import { useRef, useState } from 'react'
 import Cropper, { type Area } from 'react-easy-crop'
 import { Camera, Check, Loader2, X } from 'lucide-react'
-import type { User } from '@supabase/supabase-js'
+import { createClient, type User } from '@supabase/supabase-js'
 import { createBrowserSupabaseClient } from '@/lib/supabase/browser-client'
 
 const MAX_FILE = 10 * 1024 * 1024 // 10MB — rejeita arquivos absurdos antes do crop
@@ -92,29 +92,50 @@ export function AvatarUploader({
         return
       }
       const supabase = createBrowserSupabaseClient()
-      // Garante a sessão (cookie → token) ANTES do upload — sem isto, uma request
-      // ao Storage podia sair sem auth (auth.uid() null → RLS recusa). Força a
-      // resolução do token na instância antes da chamada.
       const {
         data: { session },
       } = await supabase.auth.getSession()
+      // DEBUG (temporário): a sessão/token existe NESTA instância no momento do upload?
+      console.log('[avatar] token check', {
+        hasSession: !!session,
+        uid: session?.user?.id,
+        tokenPresent: !!session?.access_token,
+      })
       if (!session) {
         setErro('Sua sessão expirou. Entre novamente para trocar a foto.')
         setEnviando(false)
         return
       }
+
+      // FIX: o createBrowserClient (@supabase/ssr) NÃO estava anexando a
+      // Authorization na request ao Storage (o PostgREST/.from() anexa — por isso
+      // DB funciona e Storage não). Cliente DEDICADO ao upload com o token do
+      // usuário explicitamente no header → auth.uid() disponível na policy de
+      // storage.objects. persistSession:false → não conflita com o singleton.
+      const authed = createClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+        {
+          auth: { persistSession: false, autoRefreshToken: false },
+          global: { headers: { Authorization: `Bearer ${session.access_token}` } },
+        },
+      )
+
       // Path versionado (cache-bust) na pasta do próprio uid — a policy da 1a permite.
       const path = `avatars/${user.id}/${Date.now()}.jpg`
-      const { error: upErr } = await supabase.storage
+      const { error: upErr } = await authed.storage
         .from('flow-images')
         .upload(path, blob, { upsert: true, contentType: 'image/jpeg' })
       if (upErr) {
+        // DEBUG (temporário): confirma se o header explícito resolveu.
+        console.error('[avatar] upload error:', JSON.stringify(upErr))
         setErro('Não deu para enviar a foto agora. Tente novamente.')
         setEnviando(false)
         return
       }
-      const { data: pub } = supabase.storage.from('flow-images').getPublicUrl(path)
+      const { data: pub } = authed.storage.from('flow-images').getPublicUrl(path)
       const url = pub.publicUrl
+      // DB continua no singleton (as escritas em profiles já funcionavam).
       const { error: dbErr } = await supabase.from('profiles').update({ avatar_url: url }).eq('id', user.id)
       if (dbErr) {
         setErro('A foto subiu, mas não deu para salvar. Tente novamente.')
