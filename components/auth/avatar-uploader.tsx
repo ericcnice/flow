@@ -15,8 +15,6 @@
 import { useRef, useState } from 'react'
 import Cropper, { type Area } from 'react-easy-crop'
 import { Camera, Check, Loader2, X } from 'lucide-react'
-import type { User } from '@supabase/supabase-js'
-import { createBrowserSupabaseClient } from '@/lib/supabase/browser-client'
 
 const MAX_FILE = 10 * 1024 * 1024 // 10MB — rejeita arquivos absurdos antes do crop
 const LADO = 512 // alvo do avatar (px)
@@ -40,12 +38,10 @@ async function recortarParaBlob(src: string, area: Area): Promise<Blob | null> {
 }
 
 export function AvatarUploader({
-  user,
   displayUrl,
   inicial,
   onUploaded,
 }: {
-  user: User
   displayUrl: string | null
   inicial: string
   onUploaded: (url: string) => void
@@ -91,58 +87,23 @@ export function AvatarUploader({
         setEnviando(false)
         return
       }
-      const supabase = createBrowserSupabaseClient()
-      const {
-        data: { session },
-      } = await supabase.auth.getSession()
-      // DEBUG (temporário): a sessão/token existe NESTA instância no momento do upload?
-      console.log('[avatar] token check', {
-        hasSession: !!session,
-        uid: session?.user?.id,
-        tokenPresent: !!session?.access_token,
-      })
-      if (!session) {
-        setErro('Sua sessão expirou. Entre novamente para trocar a foto.')
-        setEnviando(false)
-        return
-      }
-
-      // Path versionado (cache-bust) na pasta do próprio uid — a policy da 1a permite.
-      const path = `avatars/${user.id}/${Date.now()}.jpg`
-      const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!
-
-      // UPLOAD via fetch DIRETO ao endpoint do Storage, com o Bearer do usuário
-      // EXPLÍCITO no header — elimina a incerteza sobre o supabase-js anexar (ou
-      // não) o token ao Storage. `apikey` (anon) passa o gateway; a Authorization
-      // (JWT do usuário) é o que a RLS usa para auth.uid(). `x-upsert` = upsert.
-      const res = await fetch(`${SUPABASE_URL}/storage/v1/object/flow-images/${path}`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${session.access_token}`,
-          apikey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-          'Content-Type': 'image/jpeg',
-          'x-upsert': 'true',
-        },
-        body: blob,
-      })
+      // UPLOAD via ROTA DE SERVIDOR: o cliente só manda os bytes cropados. O
+      // servidor (/api/avatar) valida a sessão (cookies), deriva o path do uid
+      // REAL e sobe com service_role — sem depender do token no Storage do
+      // cliente. Os cookies vão automáticos (same-origin).
+      const fd = new FormData()
+      fd.append('file', blob, 'avatar.jpg')
+      const res = await fetch('/api/avatar', { method: 'POST', body: fd })
       if (!res.ok) {
-        // DEBUG (temporário): status + texto REAL do servidor (não o genérico do SDK).
-        const txt = await res.text()
-        console.error('[avatar] upload', res.status, txt)
-        setErro('Não deu para enviar a foto agora. Tente novamente.')
+        setErro(
+          res.status === 401
+            ? 'Sua sessão expirou. Entre novamente para trocar a foto.'
+            : 'Não deu para enviar a foto agora. Tente novamente.',
+        )
         setEnviando(false)
         return
       }
-
-      // URL pública construível direto (o bucket é público; getPublicUrl faria o mesmo).
-      const url = `${SUPABASE_URL}/storage/v1/object/public/flow-images/${path}`
-      // DB continua no singleton (as escritas em profiles já funcionavam).
-      const { error: dbErr } = await supabase.from('profiles').update({ avatar_url: url }).eq('id', user.id)
-      if (dbErr) {
-        setErro('A foto subiu, mas não deu para salvar. Tente novamente.')
-        setEnviando(false)
-        return
-      }
+      const { url } = (await res.json()) as { url: string }
       setImgErro(false)
       onUploaded(url) // reflete na hora no header
       setEnviando(false)

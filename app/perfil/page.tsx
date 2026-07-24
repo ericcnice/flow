@@ -992,7 +992,6 @@ function PerfilLogado({ user }: { user: User }) {
         {/* Cascata desta fatia: profiles.avatar_url (Storage) → Google → inicial.
             A cascata completa em todo lugar é a 1c. */}
         <AvatarUploader
-          user={user}
           displayUrl={perfil?.avatarUrl ?? avatarUrlOf(user)}
           inicial={inicial}
           onUploaded={(url) => setPerfil((p) => (p ? { ...p, avatarUrl: url } : p))}
