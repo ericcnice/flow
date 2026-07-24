@@ -60,6 +60,18 @@ Gamificação que mexe com vaidade para incentivar cadastro + dar emoção à tr
 - DEPENDÊNCIA: o Passo 1b (foto do usuário disponível/buscável) é o alicerce — sem foto não há o que celebrar com rosto.
 - A DECIDER no 1c: celebração de game é do vencedor do game, ou marco neutro? (no tênis, ganhar o game nem sempre é "algo especial" — pode ser só segurar o saque). Desenhar sobre a tela real com mockups do Eric.
 
+## A3 e a visão de plataforma de clube (roadmap)
+MODELO: usuários finais GRÁTIS; cobra-se de PROFESSORES e CLUBES. O professor é a alavanca de adoção (traz alunos). O clube muitas vezes é o ÚLTIMO a aderir, talvez nunca — então a experiência do professor NÃO pode depender da adoção do clube. Foco total no professor.
+
+A3 (AGORA) — ROSTER SIMPLES DO PROFESSOR: o coach cadastra/gerencia os alunos DELE (vínculo `coach_id` em `members`, que já existe no schema). Campos: nome, celular (chave de identidade futura), nível (opcional, p/ campeonatos), número de sócio (opcional, identificador rápido tipo bar/restaurante do clube), horário de aula (opcional, muitas crianças). Acesso escopado por RLS (coach vê/gerencia só os seus — hoje `members` é super_admin-exclusivo, precisa policy nova). O aluno é `member` sem `profile_id` até criar conta; o claim futuro por celular vincula.
+
+VISÃO DE CLUBE (FUTURO, registrado — próximo grande bloco quando um clube formalizar):
+- Quando o clube PAGA, os alunos são SÓCIOS do clube (fonte de dados rica: filiação, número de sócio, dependentes). Duas fontes: professor cadastra soltos VS clube fornece a base de sócios que os professores CONSOMEM.
+- Entidade "clube com sócios" acima do professor; login de CLUBE (o dono loga como SPAC, não admin, para inserir/gerenciar a base de sócios consumida por Ana/Shock/Nicholas).
+- O aluno pertence ao CLUBE (sócio); o vínculo com o professor é uma ASSOCIAÇÃO (turma), não posse. Um sócio pode ser aluno da Ana E jogar em campeonato do capitão Lucas.
+- RANKING INTERNO gerenciado pelo Flow (o capitão Lucas do beach tênis já pediu; Letz Play faz mal feito). Peça de negócio grande: faz o clube DEPENDER do Flow (o ranking oficial vive no sistema).
+- O roster simples da A3 NÃO conflita: quando o clube-com-sócios existir, os alunos cadastrados soltos podem ser vinculados aos sócios. Começar simples não fecha portas.
+
 ## Fluxo de trabalho
 - **Claude Chat**: estratégia, decisões, prompts. **Claude Code**: executa código, commits, push. **IA do Supabase**: verifica e roda o SQL.
 - **Método por peça**: investigação read-only → decisão no chat → prompt com intocáveis explícitos → migração verificada antes de rodar → QA de produção no celular.
