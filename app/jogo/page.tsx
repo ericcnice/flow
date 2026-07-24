@@ -674,23 +674,36 @@ export default function JogoPage() {
               // Objeto em VARIÁVEL (não literal) para incluir `theme` sem exigir
               // que ele esteja na interface LiveMatchInitialState — o campo viaja
               // no jsonb e a RPC grava tudo na raiz do `state` da sala.
+              // SEED dos players do config ATUAL (o ref já tem o nome do dono se o
+              // pré-preenchimento correu antes) — a sala nasce com o nome, sem
+              // depender do set_config posterior. Reduz churn.
+              const seedConfig = gameConfigRef.current ?? config
               const initialConfig = {
                 scoreType: config.scoreType,
                 firstServer: firstServerRef.current,
                 rules: rulesRef.current,
-                players: config.players,
+                players: seedConfig.players,
                 theme: config.theme ?? theme,
                 sport: config.sport ?? sportRef.current,
               }
               const room = await createLiveMatch(config.clube, initialConfig)
               if (!room) return
+              // Monta a partir do config ATUAL (gameConfigRef.current), NÃO do
+              // `config` STALE do closure do load: entre o início do IIFE e o
+              // resolve do createLiveMatch, o pré-preenchimento pode já ter posto o
+              // nome do dono no blue1. Spread de `config` regravaria o fallback por
+              // cima (a 2ª via do bug). Aqui mesclamos só os tokens. Se o ref ainda
+              // é fallback (createLiveMatch resolveu antes), o pré-preenchimento
+              // roda em seguida e põe o nome — sem reversão em nenhum caso.
+              const cur = gameConfigRef.current ?? config
               const updated: GameConfig = {
-                ...config,
+                ...cur,
                 matchId: room.id,
                 viewToken: room.viewToken,
                 editToken: room.editToken,
               }
               localStorage.setItem(`tennis_match_${quadra}`, JSON.stringify(updated))
+              gameConfigRef.current = updated
               setGameConfig(updated)
               // Entra no canal como editor (presence/broadcast).
               await rt.subscribe(room.viewToken, room.id, "editor")
@@ -1446,10 +1459,15 @@ export default function JogoPage() {
   }, [])
 
   const toggleScoreType = () => {
-    if (!gameConfig) return
+    // Usa o REF (config atual), não o `gameConfig` do closure: este handler pode
+    // ter fechado sobre um gameConfig anterior ao pré-preenchimento (blue1
+    // fallback) e um {...gameConfig} reverteria o nome do dono. Os demais
+    // handlers (chooseServer/saveNames/setMatchGameType) já usam o ref.
+    const cfg = gameConfigRef.current
+    if (!cfg) return
 
-    const next: "pontos" | "games" = gameConfig.scoreType === "pontos" ? "games" : "pontos"
-    const newConfig = { ...gameConfig, scoreType: next }
+    const next: "pontos" | "games" = cfg.scoreType === "pontos" ? "games" : "pontos"
+    const newConfig = { ...cfg, scoreType: next }
 
     // (a) Efeito local imediato (como antes).
     setGameConfig(newConfig)
