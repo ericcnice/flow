@@ -160,6 +160,16 @@ export function ProfileForm({
   // ocupado). No cadastro currentPhone é undefined → check normal via RPC.
   const phoneAvail = useAvailability('check_phone_available', 'p_phone', e164, phoneValido, currentPhone)
 
+  // DIRTY CHECK (só no editar): Salvar só habilita se algo divergir dos valores
+  // ORIGINAIS do profile (nome/sobrenome/username/celular-E.164). No cadastro não
+  // há "original" → sempre "sujo" (o fluxo de completar-perfil não muda).
+  const dirty =
+    mode !== 'editar' ||
+    nome.trim() !== (initial?.nome ?? '').trim() ||
+    sobrenome.trim() !== (initial?.sobrenome ?? '').trim() ||
+    username !== (initial?.username ?? '') ||
+    e164 !== (currentPhone ?? '')
+
   const podeSalvar =
     nome.trim() !== '' &&
     sobrenome.trim() !== '' &&
@@ -168,6 +178,7 @@ export function ProfileForm({
     phoneValido &&
     phoneAvail === 'ok' &&
     (mode === 'editar' || aceiteTos) && // T&C obrigatório no cadastro
+    dirty &&
     !salvando
 
   async function salvar() {

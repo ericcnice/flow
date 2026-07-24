@@ -229,6 +229,9 @@ function Consentimentos({ user }: { user: User }) {
 
   const aceitou = consent?.tosVersion != null
   const desatualizado = aceitou && consent?.tosVersion !== TOS_VERSION
+  // Precisa (re)aceitar sempre que a versão registrada não for a vigente — cobre
+  // o usuário LEGADO (sem aceite algum) e o bump futuro de TOS_VERSION.
+  const precisaAceitar = (consent?.tosVersion ?? null) !== TOS_VERSION
   const dataAceite = (() => {
     if (!consent?.tosAcceptedAt) return ''
     try {
@@ -296,11 +299,22 @@ function Consentimentos({ user }: { user: User }) {
         </div>
       </div>
 
-      {/* Re-aceite quando os termos mudaram desde o último aceite */}
-      {desatualizado && (
+      {/* Aceite/re-aceite: legado sem aceite OU versão desatualizada */}
+      {precisaAceitar && (
         <div className="rounded-lg border border-amber-400/30 bg-amber-400/10 p-3">
           <p className="mb-2 text-sm text-amber-200/90">
-            Os termos foram atualizados desde o seu último aceite. Revise e confirme para continuar.
+            {desatualizado
+              ? 'Os termos foram atualizados desde o seu último aceite. Revise e confirme para continuar.'
+              : 'Você ainda não registrou o aceite dos Termos e da Política de Privacidade.'}
+          </p>
+          <p className="mb-2.5 text-xs text-amber-200/70">
+            <a href="/termos" target="_blank" rel="noreferrer" className="underline underline-offset-2 hover:text-white">
+              Termos de Uso
+            </a>{' '}
+            ·{' '}
+            <a href="/privacidade" target="_blank" rel="noreferrer" className="underline underline-offset-2 hover:text-white">
+              Política de Privacidade
+            </a>
           </p>
           <button
             type="button"
@@ -309,7 +323,7 @@ function Consentimentos({ user }: { user: User }) {
             className="inline-flex items-center gap-1.5 rounded-lg bg-white px-3 py-1.5 text-sm font-bold text-neutral-900 transition hover:bg-white/90 disabled:opacity-40"
           >
             {salvando && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-            Aceitar a nova versão
+            Li e aceito os Termos e a Política de Privacidade
           </button>
         </div>
       )}
