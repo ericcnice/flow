@@ -72,6 +72,25 @@ VISÃO DE CLUBE (FUTURO, registrado — próximo grande bloco quando um clube fo
 - RANKING INTERNO gerenciado pelo Flow (o capitão Lucas do beach tênis já pediu; Letz Play faz mal feito). Peça de negócio grande: faz o clube DEPENDER do Flow (o ranking oficial vive no sistema).
 - O roster simples da A3 NÃO conflita: quando o clube-com-sócios existir, os alunos cadastrados soltos podem ser vinculados aos sócios. Começar simples não fecha portas.
 
+## Convite viral do professor (visão, fatia após o avatar)
+A máquina de captação via professor. DOIS tipos de convite:
+
+CONVITE DIRECIONADO (tipo 1): o coach cadastra o aluno no roster (nome + WhatsApp — dado que ele já tem). Botão CONVIDAR gera link ÚNICO pré-vinculado àquele member, com mensagem PERSONALIZÁVEL ("Olá João, aqui é a Ana, te enviando pra cadastrar no Flow..."). O coach envia pelo PRÓPRIO WhatsApp (zero custo de API). O aluno clica → landing "A Ana te convidou" → cadastro rápido (Google/email PRIMEIRO, vantagens depois) → o cadastro VINCULA ao member do roster (o claim) e ENRIQUECE com foto/slug/idade que o aluno/pai preenche. Status visível pra Ana (enviado→cadastrado). Rastreável, pré-vinculado, pessoal (converte mais).
+
+CONVITE GENÉRICO (tipo 2): a Ana joga um link GENÉRICO no grupo de WhatsApp do tênis (200+ pessoas no SPAC). Reutilizável, qualquer um se cadastra. NÃO pré-vinculado a um member, MAS carrega a ATRIBUIÇÃO ao professor ("veio pela Ana") pra métrica/indicação futura. Alcance massivo, viralização real. Tecnicamente mais simples (sem pré-vínculo). Um link por professor/campanha.
+
+MÉTRICAS: a Ana vê quantos convidou e quantos se cadastraram (controle dela). O SUPER ADMIN vê nº de convites/cadastros por professor = MÉTRICA DE ENGAJAMENTO (quais professores são alavancas reais; base pra futuro programa de indicação/comissão "a Ana trouxe 40 pessoas").
+
+REQUISITOS DO CADASTRO:
+- IDADE (data de nascimento) OBRIGATÓRIA — questão legal: MENOR → consentimento parental (o pai se cadastra e cadastra o filho, o pai é o titular do consentimento, NÃO o admin/coach); MAIOR → consentimento próprio. A idade DECIDE o fluxo.
+- Enriquecimento: o aluno/pai sobe a própria foto (qualidade + consentimento embutidos), escolhe slug, etc. O trabalho se distribui pra quem tem o dado.
+
+ENVIO EM MASSA: "convidar todos os pendentes" do ROSTER (os que a Ana já cadastrou) — NÃO da agenda. O coach dispara pelo WhatsApp dele (individual ou grupo da turma).
+
+DESCARTADO (com motivo): integração com agenda/contatos do Google — permissão invasiva (recuo de conversão), exige aprovação/auditoria do Google (semanas), e LGPD sobre contatos de TERCEIROS (dado de quem nunca consentiu). Custo >> economia de digitação. Não fazer.
+
+FILOSOFIA: distribuir o cadastro pra os DONOS dos dados (professor inicia com o contato que tem; aluno/pai completa com consentimento + foto). Tira o admin de ser gargalo e responsável legal por dados de menores. Escala infinitamente. Prova social (verificado + foto + torneios) alimenta o tipo 2.
+
 ## Fluxo de trabalho
 - **Claude Chat**: estratégia, decisões, prompts. **Claude Code**: executa código, commits, push. **IA do Supabase**: verifica e roda o SQL.
 - **Método por peça**: investigação read-only → decisão no chat → prompt com intocáveis explícitos → migração verificada antes de rodar → QA de produção no celular.
