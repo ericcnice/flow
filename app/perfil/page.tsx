@@ -17,8 +17,8 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { formatDistanceToNow } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
-import { parsePhoneNumber } from 'libphonenumber-js'
-import { AlertTriangle, ArrowLeft, BadgeCheck, Check, Loader2, LogOut, ShieldCheck, Trash2, Trophy, Users } from 'lucide-react'
+import { AsYouType, isValidPhoneNumber, parsePhoneNumber } from 'libphonenumber-js'
+import { AlertTriangle, ArrowLeft, BadgeCheck, Check, Loader2, LogOut, Plus, ShieldCheck, Trash2, Trophy, Users, X } from 'lucide-react'
 import type { User } from '@supabase/supabase-js'
 import { createBrowserSupabaseClient } from '@/lib/supabase/browser-client'
 import { avatarUrlOf } from '@/lib/auth-avatar'
@@ -257,12 +257,156 @@ function AlunoCard({ a }: { a: Aluno }) {
   )
 }
 
+// Modal de cadastro de aluno (A3.3). Enxuto/mobile-first, tema dark do /perfil.
+// Salva via a RPC coach_add_student — o servidor seta coach_id (=auth.uid) e
+// club_slug; o coach NUNCA os envia. Nome obrigatório; o resto opcional.
+function AlunoFormModal({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
+  const [nome, setNome] = useState('')
+  const [celular, setCelular] = useState('')
+  const [nivel, setNivel] = useState('')
+  const [socio, setSocio] = useState('')
+  const [horario, setHorario] = useState('')
+  const [salvando, setSalvando] = useState(false)
+  const [erro, setErro] = useState<string | null>(null)
+
+  const nomeOk = nome.trim() !== ''
+  // Celular OPCIONAL: vazio → ok; preenchido → precisa ser E.164 válido.
+  const celularPreenchido = celular.trim() !== ''
+  const e164 =
+    celularPreenchido && isValidPhoneNumber(celular, 'BR')
+      ? (parsePhoneNumber(celular, 'BR')?.number ?? '')
+      : ''
+  const celularInvalido = celularPreenchido && e164 === ''
+  const podeSalvar = nomeOk && !celularInvalido && !salvando
+
+  async function salvar() {
+    if (!podeSalvar) return
+    setSalvando(true)
+    setErro(null)
+    const norm = (s: string) => {
+      const t = s.trim()
+      return t === '' ? null : t
+    }
+    const supabase = createBrowserSupabaseClient()
+    // coach_id e club_slug NÃO vão no payload — o servidor os define.
+    const { error } = await supabase.rpc('coach_add_student', {
+      p_name: nome.trim(),
+      p_phone: e164 || null,
+      p_level: norm(nivel),
+      p_member_number: norm(socio),
+      p_class_schedule: norm(horario),
+    })
+    if (error) {
+      setErro('Não deu para adicionar o aluno agora. Tente novamente.')
+      setSalvando(false)
+      return
+    }
+    onSaved()
+  }
+
+  const campo = 'h-11 rounded-lg border border-white/20 bg-white/10 px-3 text-base'
+
+  return (
+    <div
+      className="fixed inset-0 z-[80] flex items-start justify-center overflow-y-auto bg-black/70 p-4 backdrop-blur-sm"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Adicionar aluno"
+      onClick={() => !salvando && onClose()}
+    >
+      <div
+        className="my-8 w-full max-w-sm rounded-2xl border border-white/10 bg-neutral-900 text-white shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between border-b border-white/10 px-5 py-4">
+          <h3 className="text-base font-bold">Adicionar aluno</h3>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Fechar"
+            className="rounded-full p-1.5 text-white/50 transition hover:bg-white/10 hover:text-white"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        <div className="flex flex-col gap-3 px-5 py-5">
+          <label className="flex flex-col gap-1">
+            <span className="text-xs font-semibold uppercase tracking-wide text-white/60">Nome *</span>
+            <input value={nome} onChange={(e) => setNome(e.target.value)} autoFocus placeholder="Nome do aluno" className={campo} />
+          </label>
+
+          <label className="flex flex-col gap-1">
+            <span className="text-xs font-semibold uppercase tracking-wide text-white/60">Celular</span>
+            <input
+              value={celular}
+              onChange={(e) => setCelular(new AsYouType('BR').input(e.target.value))}
+              inputMode="tel"
+              placeholder="+55 (11) 95050-7175"
+              className={campo}
+            />
+            {celularInvalido && <span className="text-xs text-white/50">Número inválido. Deixe vazio ou corrija.</span>}
+          </label>
+
+          <div className="flex gap-2">
+            <label className="flex flex-1 flex-col gap-1">
+              <span className="text-xs font-semibold uppercase tracking-wide text-white/60">Nível</span>
+              <input value={nivel} onChange={(e) => setNivel(e.target.value)} placeholder="Iniciante" className={campo} />
+            </label>
+            <label className="flex flex-1 flex-col gap-1">
+              <span className="text-xs font-semibold uppercase tracking-wide text-white/60">Nº sócio</span>
+              <input value={socio} onChange={(e) => setSocio(e.target.value)} placeholder="Opcional" className={campo} />
+            </label>
+          </div>
+
+          <label className="flex flex-col gap-1">
+            <span className="text-xs font-semibold uppercase tracking-wide text-white/60">Horário de aula</span>
+            <input value={horario} onChange={(e) => setHorario(e.target.value)} placeholder="Ter/Qui 18h" className={campo} />
+          </label>
+
+          {erro && (
+            <p role="alert" className="text-sm text-red-400">
+              {erro}
+            </p>
+          )}
+
+          <div className="mt-1 flex gap-2">
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={salvando}
+              className="h-12 flex-1 rounded-lg bg-white/10 text-base font-bold text-white transition hover:bg-white/15 disabled:opacity-40"
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              onClick={salvar}
+              disabled={!podeSalvar}
+              className="flex h-12 flex-1 items-center justify-center gap-2 rounded-lg bg-white text-base font-bold text-neutral-900 transition hover:bg-white/90 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              {salvando ? <Loader2 className="h-5 w-5 animate-spin" /> : <Check className="h-5 w-5" />}
+              Salvar
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // Roster do coach: os alunos DELE (a SELECT policy "members coach select own"
-// escopa por coach_id = auth.uid() — nenhum vazamento entre coaches). Só leitura.
+// escopa por coach_id = auth.uid() — nenhum vazamento entre coaches). A3.3 dá o
+// botão de adicionar (via RPC); editar/remover é A3.4.
 function MeusAlunos({ userId }: { userId: string }) {
   const [alunos, setAlunos] = useState<Aluno[]>([])
   const [estado, setEstado] = useState<'carregando' | 'ok' | 'erro'>('carregando')
+  const [modalAberto, setModalAberto] = useState(false)
+  const [refreshKey, setRefreshKey] = useState(0)
+  const [feedback, setFeedback] = useState(false)
 
+  // Recarrega a lista (sem voltar ao skeleton em refresh — estado só é
+  // 'carregando' no 1º load; refresh só troca os dados quando chegam).
   useEffect(() => {
     let alive = true
     const supabase = createBrowserSupabaseClient()
@@ -284,7 +428,33 @@ function MeusAlunos({ userId }: { userId: string }) {
     return () => {
       alive = false
     }
-  }, [userId])
+  }, [userId, refreshKey])
+
+  // Feedback transitório após adicionar.
+  useEffect(() => {
+    if (!feedback) return
+    const t = setTimeout(() => setFeedback(false), 2500)
+    return () => clearTimeout(t)
+  }, [feedback])
+
+  // Aluno adicionado: fecha o modal, recarrega a lista e sinaliza.
+  const aoAdicionar = () => {
+    setModalAberto(false)
+    setRefreshKey((k) => k + 1)
+    setFeedback(true)
+  }
+
+  const botaoAdicionar = (
+    <button
+      type="button"
+      onClick={() => setModalAberto(true)}
+      className="inline-flex items-center gap-1.5 rounded-lg bg-white px-3 py-1.5 text-sm font-bold text-neutral-900 transition hover:bg-white/90"
+    >
+      <Plus className="h-4 w-4" /> Adicionar
+    </button>
+  )
+
+  const modal = modalAberto && <AlunoFormModal onClose={() => setModalAberto(false)} onSaved={aoAdicionar} />
 
   if (estado === 'carregando') {
     return (
@@ -304,24 +474,43 @@ function MeusAlunos({ userId }: { userId: string }) {
   }
   if (alunos.length === 0) {
     return (
-      <div className="rounded-2xl border border-dashed border-orange-400/25 bg-orange-400/5 p-8 text-center">
-        <Users className="mx-auto mb-3 h-8 w-8 text-orange-400/70" />
-        <p className="text-base font-semibold">Você ainda não tem alunos cadastrados.</p>
-        <p className="mx-auto mt-1.5 max-w-xs text-sm text-white/55">
-          Em breve você poderá adicioná-los aqui.
-        </p>
-      </div>
+      <>
+        <div className="rounded-2xl border border-dashed border-orange-400/25 bg-orange-400/5 p-8 text-center">
+          <Users className="mx-auto mb-3 h-8 w-8 text-orange-400/70" />
+          <p className="text-base font-semibold">Você ainda não tem alunos cadastrados.</p>
+          <p className="mx-auto mt-1.5 mb-4 max-w-xs text-sm text-white/55">
+            Cadastre seu primeiro aluno para começar seu roster.
+          </p>
+          <button
+            type="button"
+            onClick={() => setModalAberto(true)}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-white px-4 py-2.5 text-sm font-bold text-neutral-900 transition hover:bg-white/90"
+          >
+            <Plus className="h-4 w-4" /> Adicionar aluno
+          </button>
+        </div>
+        {modal}
+      </>
     )
   }
 
   return (
     <div className="flex flex-col gap-3">
-      <p className="text-xs uppercase tracking-widest text-white/40">
-        {alunos.length} {alunos.length === 1 ? 'aluno' : 'alunos'}
-      </p>
+      <div className="flex items-center justify-between">
+        <p className="text-xs uppercase tracking-widest text-white/40">
+          {alunos.length} {alunos.length === 1 ? 'aluno' : 'alunos'}
+        </p>
+        {botaoAdicionar}
+      </div>
+      {feedback && (
+        <p className="inline-flex items-center gap-1.5 text-xs text-emerald-400">
+          <Check className="h-3 w-3" /> Aluno adicionado.
+        </p>
+      )}
       {alunos.map((a) => (
         <AlunoCard key={a.id} a={a} />
       ))}
+      {modal}
     </div>
   )
 }
