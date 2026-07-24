@@ -992,7 +992,11 @@ function PerfilLogado({ user }: { user: User }) {
         {/* Cascata desta fatia: profiles.avatar_url (Storage) → Google → inicial.
             A cascata completa em todo lugar é a 1c. */}
         <AvatarUploader
-          displayUrl={perfil?.avatarUrl ?? avatarUrlOf(user)}
+          // Enquanto o perfil não resolve (perfil === null), skeleton neutro —
+          // NÃO mostra o Google como intermediário (evita o flicker Google→Storage).
+          // Resolvido: cascata Storage → Google → inicial.
+          carregando={perfil === null}
+          displayUrl={perfil ? avatarUrlOf(user, perfil.avatarUrl) : null}
           inicial={inicial}
           onUploaded={(url) => setPerfil((p) => (p ? { ...p, avatarUrl: url } : p))}
         />

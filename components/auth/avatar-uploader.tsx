@@ -40,10 +40,14 @@ async function recortarParaBlob(src: string, area: Area): Promise<Blob | null> {
 export function AvatarUploader({
   displayUrl,
   inicial,
+  carregando = false,
   onUploaded,
 }: {
   displayUrl: string | null
   inicial: string
+  /** Perfil ainda carregando (avatar_url do banco não chegou): mostra skeleton
+   *  neutro em vez da foto do Google — evita o salto Google→Storage no reload. */
+  carregando?: boolean
   onUploaded: (url: string) => void
 }) {
   const inputRef = useRef<HTMLInputElement>(null)
@@ -122,14 +126,19 @@ export function AvatarUploader({
     <>
       <input ref={inputRef} type="file" accept="image/*" onChange={escolherArquivo} className="hidden" />
 
-      {/* Avatar clicável + badge de câmera + overlay de envio. */}
+      {/* Avatar clicável + badge de câmera + overlay de envio. Enquanto o perfil
+          CARREGA (avatar_url do banco não chegou), mostra um skeleton neutro em
+          vez da foto do Google — evita o salto Google→Storage no reload. */}
       <button
         type="button"
         onClick={() => inputRef.current?.click()}
+        disabled={carregando}
         aria-label="Trocar foto de perfil"
         className="relative h-16 w-16 shrink-0"
       >
-        {mostraFoto ? (
+        {carregando ? (
+          <span className="block h-16 w-16 animate-pulse rounded-full bg-white/10" />
+        ) : mostraFoto ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
             src={displayUrl}
@@ -142,13 +151,16 @@ export function AvatarUploader({
             {inicial}
           </span>
         )}
-        <span className="absolute -bottom-0.5 -right-0.5 flex h-6 w-6 items-center justify-center rounded-full bg-neutral-800 ring-2 ring-neutral-950">
-          {enviando ? (
-            <Loader2 className="h-3.5 w-3.5 animate-spin text-white/80" />
-          ) : (
-            <Camera className="h-3.5 w-3.5 text-white/70" />
-          )}
-        </span>
+        {/* Badge só quando resolvido (durante o carregamento fica limpo). */}
+        {!carregando && (
+          <span className="absolute -bottom-0.5 -right-0.5 flex h-6 w-6 items-center justify-center rounded-full bg-neutral-800 ring-2 ring-neutral-950">
+            {enviando ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin text-white/80" />
+            ) : (
+              <Camera className="h-3.5 w-3.5 text-white/70" />
+            )}
+          </span>
+        )}
       </button>
 
       {/* Erro fora do modal (ex.: arquivo grande antes do crop). */}
