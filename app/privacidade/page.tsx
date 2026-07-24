@@ -1,6 +1,7 @@
 /**
  * POLÍTICA DE PRIVACIDADE (/privacidade) — server component, conteúdo-base LGPD
- * editável AQUI. Placeholders [ASSIM] a preencher antes da publicação real.
+ * editável AQUI, já com os dados reais da PWER IO LTDA. Base honesta e factual —
+ * pode ser revisada por advogado depois.
  */
 
 import type { Metadata } from 'next'
@@ -15,15 +16,16 @@ export default function PrivacidadePage() {
   return (
     <LegalShell title="Política de Privacidade">
       <p>
-        Esta Política explica como o <strong>Flow</strong>, operado por <strong>[RAZÃO SOCIAL]</strong> (CNPJ{' '}
-        <strong>[CNPJ]</strong>), trata dados pessoais, em conformidade com a Lei Geral de Proteção de Dados (Lei nº
-        13.709/2018 — LGPD).
+        Esta Política explica como o <strong>Flow</strong> (Flow by PWER IO), operado por{' '}
+        <strong>PWER IO LTDA</strong> (CNPJ <strong>65.132.165/0001-62</strong>, com sede na Rua País Leme, 215, Conj.
+        1713, Pinheiros, São Paulo/SP, CEP 05.424-150), trata dados pessoais, em conformidade com a Lei Geral de
+        Proteção de Dados (Lei nº 13.709/2018 — LGPD).
       </p>
 
       <h2>1. Controlador e encarregado (DPO)</h2>
       <p>
-        Controlador: <strong>[RAZÃO SOCIAL]</strong>. Encarregado pelo tratamento de dados (DPO):{' '}
-        <strong>[NOME DO ENCARREGADO]</strong> — <strong>[EMAIL DO ENCARREGADO/DPO]</strong>.
+        Controlador: <strong>PWER IO LTDA</strong> (CNPJ 65.132.165/0001-62). Encarregado pelo tratamento de dados
+        (DPO): contato pelo email <strong>pwerioflow@gmail.com</strong>.
       </p>
 
       <h2>2. Dados que coletamos</h2>
@@ -37,7 +39,8 @@ export default function PrivacidadePage() {
         </li>
         <li>
           <strong>Uso do serviço:</strong> dados técnicos mínimos para o funcionamento e a segurança (ex.: registros de
-          acesso). <strong>[DETALHAR SE HOUVER ANALYTICS/COOKIES]</strong>
+          acesso). O Flow usa armazenamento local no seu dispositivo (para funcionar offline) e cookies essenciais de
+          sessão para manter você conectado; não usamos cookies de publicidade nem rastreadores de terceiros.
         </li>
       </ul>
 
@@ -60,9 +63,9 @@ export default function PrivacidadePage() {
 
       <h2>4. Compartilhamento</h2>
       <p>
-        Não vendemos seus dados. Compartilhamos apenas com operadores necessários à prestação do serviço (por exemplo, a
-        infraestrutura de autenticação e banco de dados <strong>[SUPABASE / PROVEDOR]</strong> e a hospedagem{' '}
-        <strong>[VERCEL / PROVEDOR]</strong>), sob obrigações de confidencialidade, ou quando exigido por lei.
+        Não vendemos seus dados. Compartilhamos apenas com operadores necessários à prestação do serviço — a
+        infraestrutura de autenticação, banco de dados e armazenamento <strong>Supabase</strong> e a hospedagem{' '}
+        <strong>Vercel</strong> —, sob obrigações de confidencialidade, ou quando exigido por lei.
       </p>
 
       <h2>5. Registro histórico esportivo</h2>
@@ -77,8 +80,8 @@ export default function PrivacidadePage() {
       <p>
         Você pode confirmar a existência de tratamento, acessar, corrigir, portar, e solicitar a eliminação de dados
         pessoais, além de revogar consentimentos. Muitos desses direitos são exercidos direto em <strong>/perfil</strong>{' '}
-        (editar dados, alternar marketing, excluir a conta). Para os demais, contate o encarregado em{' '}
-        <strong>[EMAIL DO ENCARREGADO/DPO]</strong>.
+        (editar dados, alternar marketing, excluir a conta). Para os demais, ou para acesso, correção e exclusão,
+        contate o encarregado em <strong>pwerioflow@gmail.com</strong>.
       </p>
 
       <h2>7. Exclusão de conta</h2>
@@ -90,20 +93,21 @@ export default function PrivacidadePage() {
 
       <h2>8. Retenção e segurança</h2>
       <p>
-        Mantemos os dados pelo tempo necessário às finalidades acima ou conforme exigido por lei. Adotamos medidas
-        técnicas e organizacionais para proteger os dados. <strong>[DETALHAR PRAZOS DE RETENÇÃO SE APLICÁVEL]</strong>
+        Mantemos os dados de cadastro enquanto sua conta existir; ao excluí-la, seus dados pessoais são apagados
+        (conforme a seção 7), ressalvados os registros que a lei exigir manter e os resultados esportivos preservados
+        como registro histórico (seção 5). Adotamos medidas técnicas e organizacionais para proteger os dados.
       </p>
 
       <h2>9. Transferência internacional</h2>
       <p>
-        Alguns provedores podem processar dados fora do Brasil, com salvaguardas adequadas.{' '}
-        <strong>[CONFIRMAR PROVEDORES E LOCAIS]</strong>
+        Nossos provedores de infraestrutura (Supabase e Vercel) podem processar e armazenar dados em servidores fora do
+        Brasil. Nesses casos, a transferência ocorre com as salvaguardas previstas na LGPD.
       </p>
 
       <h2>10. Alterações desta Política</h2>
       <p>
         Podemos atualizar esta Política; mudanças relevantes serão sinalizadas no app e refletidas na versão vigente
-        acima. Contato: <strong>[EMAIL DO ENCARREGADO/DPO]</strong>.
+        acima. Contato: <strong>pwerioflow@gmail.com</strong>.
       </p>
     </LegalShell>
   )

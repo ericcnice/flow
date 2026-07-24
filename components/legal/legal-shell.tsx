@@ -29,10 +29,9 @@ export function LegalShell({ title, children }: { title: string; children: React
       </div>
 
       <p className="mt-10 rounded-lg border border-amber-400/25 bg-amber-400/5 p-3 text-xs text-amber-200/70">
-        <strong className="text-amber-200/90">Nota de preenchimento:</strong> os trechos entre colchetes{' '}
-        <span className="font-mono">[ASSIM]</span> são PLACEHOLDERS a serem preenchidos antes da publicação real
-        (razão social, CNPJ, contato do encarregado, etc.). Este é um conteúdo-base honesto, não aconselhamento
-        jurídico — revise com apoio jurídico.
+        <strong className="text-amber-200/90">Nota:</strong> esta é a versão vigente, com conteúdo-base honesto e
+        factual — não é aconselhamento jurídico e pode ser revista por advogado. Para exercer direitos ou tirar
+        dúvidas, escreva para <span className="font-mono">pwerioflow@gmail.com</span>.
       </p>
     </main>
   )

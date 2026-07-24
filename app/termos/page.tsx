@@ -1,7 +1,8 @@
 /**
- * TERMOS DE USO (/termos) — server component. Conteúdo-base editável AQUI mesmo.
- * Ao alterar o conteúdo, suba a TOS_VERSION em lib/legal.ts (o /perfil detecta e
- * pede novo aceite). Placeholders [ASSIM] a preencher antes da publicação.
+ * TERMOS DE USO (/termos) — server component. Conteúdo-base editável AQUI mesmo,
+ * já com os dados reais da PWER IO LTDA. Ao alterar o conteúdo, suba a
+ * TOS_VERSION em lib/legal.ts (o /perfil detecta e pede novo aceite). Base
+ * honesta e factual — pode ser revisada por advogado depois.
  */
 
 import type { Metadata } from 'next'
@@ -16,10 +17,11 @@ export default function TermosPage() {
   return (
     <LegalShell title="Termos de Uso">
       <p>
-        Bem-vindo ao <strong>Flow</strong>, aplicativo de placar para esportes de raquete (tênis, beach tennis, padel,
-        squash, ping pong e pickleball), operado por <strong>[RAZÃO SOCIAL]</strong>, inscrita no CNPJ sob o nº{' '}
-        <strong>[CNPJ]</strong>, com sede em <strong>[ENDEREÇO]</strong> (&quot;Flow&quot;, &quot;nós&quot;). Ao criar
-        uma conta ou usar o Flow, você concorda com estes Termos de Uso.
+        Bem-vindo ao <strong>Flow</strong> (Flow by PWER IO), aplicativo de placar para esportes de raquete (tênis,
+        beach tennis, padel, squash, ping pong e pickleball), operado por <strong>PWER IO LTDA</strong>, inscrita no
+        CNPJ sob o nº <strong>65.132.165/0001-62</strong>, com sede na{' '}
+        <strong>Rua País Leme, 215, Conj. 1713, Pinheiros, São Paulo/SP, CEP 05.424-150</strong> (&quot;Flow&quot;,
+        &quot;nós&quot;). Ao criar uma conta ou usar o Flow, você concorda com estes Termos de Uso.
       </p>
 
       <h2>1. O que é o Flow</h2>
@@ -63,7 +65,7 @@ export default function TermosPage() {
       <h2>6. Limitação de responsabilidade</h2>
       <p>
         Na máxima extensão permitida pela lei, o Flow não se responsabiliza por danos indiretos decorrentes do uso ou da
-        indisponibilidade do serviço. <strong>[REVISAR CLÁUSULA COM APOIO JURÍDICO]</strong>
+        indisponibilidade do serviço. Isto não afasta os direitos que a legislação brasileira assegura ao consumidor.
       </p>
 
       <h2>7. Encerramento</h2>
@@ -74,13 +76,13 @@ export default function TermosPage() {
 
       <h2>8. Lei aplicável e foro</h2>
       <p>
-        Estes Termos são regidos pelas leis do Brasil. Fica eleito o foro da comarca de <strong>[CIDADE/UF]</strong>,
-        salvo disposição legal em contrário.
+        Estes Termos são regidos pelas leis do Brasil. Fica eleito o foro da comarca de <strong>São Paulo/SP</strong>,
+        salvo disposição legal em contrário (inclusive o foro do domicílio do consumidor, quando aplicável).
       </p>
 
       <h2>9. Contato</h2>
       <p>
-        Dúvidas sobre estes Termos: <strong>[EMAIL DE CONTATO]</strong>. Sobre dados pessoais, veja a{' '}
+        Dúvidas sobre estes Termos: <strong>pwerioflow@gmail.com</strong>. Sobre dados pessoais, veja a{' '}
         <a href="/privacidade">Política de Privacidade</a>.
       </p>
     </LegalShell>
