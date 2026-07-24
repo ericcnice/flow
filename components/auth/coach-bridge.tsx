@@ -17,7 +17,7 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { Check, PartyPopper } from 'lucide-react'
+import { Check, PartyPopper, X } from 'lucide-react'
 import { createBrowserSupabaseClient } from '@/lib/supabase/browser-client'
 
 // Guard de MÓDULO: no máximo UMA tentativa por uid por carga de página (várias
@@ -83,9 +83,20 @@ export function CoachBridge() {
       onClick={() => setPromoted(false)}
     >
       <div
-        className="w-full max-w-sm overflow-hidden rounded-2xl border border-emerald-400/20 bg-neutral-900 text-white shadow-2xl"
+        className="relative w-full max-w-sm overflow-hidden rounded-2xl border border-emerald-400/20 bg-neutral-900 text-white shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
+        {/* X discreto: fechar sem ir à área, sem parecer uma escolha de valor
+            (clicar fora também fecha). */}
+        <button
+          type="button"
+          onClick={() => setPromoted(false)}
+          aria-label="Fechar"
+          className="absolute right-3 top-3 z-10 rounded-full p-1 text-white/40 transition hover:bg-white/10 hover:text-white/80"
+        >
+          <X className="h-4 w-4" />
+        </button>
+
         {/* Hero comemorativo — brilho sutil, sem exageros. */}
         <div className="relative flex flex-col items-center gap-3 bg-gradient-to-b from-emerald-500/15 to-transparent px-6 pt-8 pb-5 text-center">
           <span className="flex h-14 w-14 items-center justify-center rounded-full bg-emerald-500/15 ring-1 ring-emerald-400/30">
@@ -110,7 +121,7 @@ export function CoachBridge() {
           ))}
         </ul>
 
-        <div className="flex flex-col gap-2 px-6 pb-6 pt-4">
+        <div className="px-6 pb-6 pt-4">
           <Link
             href="/perfil"
             onClick={() => setPromoted(false)}
@@ -118,13 +129,6 @@ export function CoachBridge() {
           >
             Ir para minha área
           </Link>
-          <button
-            type="button"
-            onClick={() => setPromoted(false)}
-            className="h-10 text-sm font-medium text-white/50 transition hover:text-white/80"
-          >
-            Agora não
-          </button>
         </div>
       </div>
     </div>
