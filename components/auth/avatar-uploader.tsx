@@ -36,6 +36,9 @@ async function recortarParaBlob(src: string, area: Area): Promise<Blob | null> {
   const ctx = canvas.getContext('2d')
   if (!ctx) return null
   ctx.drawImage(img, area.x, area.y, area.width, area.height, 0, 0, LADO, LADO)
+  // DEBUG (temporário): dimensões naturais + área de recorte → detecta área
+  // degenerada (width/height 0) que faria o draw não desenhar nada.
+  console.log('[avatar] draw', { natW: img.naturalWidth, natH: img.naturalHeight, area })
   return new Promise((resolve) => canvas.toBlob((b) => resolve(b), 'image/jpeg', 0.85))
 }
 
@@ -86,6 +89,9 @@ export function AvatarUploader({
     setErro(null)
     try {
       const blob = await recortarParaBlob(cropSrc, areaPx)
+      // DEBUG (temporário): o blob tem tamanho > 0 e type image/jpeg? size 0/undef
+      // → culpado é o canvas/blob (vazio/tainted). Ver antes do upload.
+      console.log('[avatar] blob', { size: blob?.size, type: blob?.type })
       if (!blob) {
         setErro('Não deu para processar a imagem. Tente outra.')
         setEnviando(false)
@@ -98,6 +104,8 @@ export function AvatarUploader({
         .from('flow-images')
         .upload(path, blob, { upsert: true, contentType: 'image/jpeg' })
       if (upErr) {
+        // DEBUG (temporário): mensagem REAL do 400 (o supabase-js às vezes engole).
+        console.error('[avatar] upload error:', JSON.stringify(upErr), upErr)
         setErro('Não deu para enviar a foto agora. Tente novamente.')
         setEnviando(false)
         return
