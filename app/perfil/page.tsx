@@ -18,7 +18,7 @@ import { useRouter } from 'next/navigation'
 import { formatDistanceToNow } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import { AsYouType, isValidPhoneNumber, parsePhoneNumber } from 'libphonenumber-js'
-import { AlertTriangle, ArrowLeft, BadgeCheck, Check, Loader2, LogOut, Plus, ShieldCheck, Trash2, Trophy, Users, X } from 'lucide-react'
+import { AlertTriangle, ArrowLeft, BadgeCheck, Check, Loader2, LogOut, Pencil, Plus, ShieldCheck, Trash2, Trophy, Users, X } from 'lucide-react'
 import type { User } from '@supabase/supabase-js'
 import { createBrowserSupabaseClient } from '@/lib/supabase/browser-client'
 import { avatarUrlOf } from '@/lib/auth-avatar'
@@ -225,7 +225,7 @@ type Aluno = {
 // Card de aluno (A3.2 — só leitura). Mostra o nome em destaque e, abaixo, só os
 // campos preenchidos (nível/sócio/aula) + o celular discreto. Estilo dark alinhado
 // aos cards de "Meus jogos".
-function AlunoCard({ a }: { a: Aluno }) {
+function AlunoCard({ a, onEdit }: { a: Aluno; onEdit: (a: Aluno) => void }) {
   const tel = (() => {
     if (!a.phone) return ''
     try {
@@ -240,33 +240,63 @@ function AlunoCard({ a }: { a: Aluno }) {
     a.class_schedule ? { label: 'Aula', valor: a.class_schedule } : null,
   ].filter(Boolean) as { label: string; valor: string }[]
 
+  // Card inteiro tocável → abre a edição (fluido). Lápis sinaliza a ação.
   return (
-    <div className="rounded-xl border border-white/10 bg-neutral-900 p-4">
-      <p className="truncate text-base font-bold">{a.name ?? '—'}</p>
-      {tel && <p className="mt-0.5 text-sm text-white/50">{tel}</p>}
-      {detalhes.length > 0 && (
-        <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-white/60">
-          {detalhes.map((d) => (
-            <span key={d.label}>
-              <span className="text-white/40">{d.label}:</span> {d.valor}
-            </span>
-          ))}
-        </div>
-      )}
-    </div>
+    <button
+      type="button"
+      onClick={() => onEdit(a)}
+      aria-label={`Editar ${a.name ?? 'aluno'}`}
+      className="flex w-full items-center gap-3 rounded-xl border border-white/10 bg-neutral-900 p-4 text-left transition hover:bg-neutral-800/60"
+    >
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-base font-bold">{a.name ?? '—'}</p>
+        {tel && <p className="mt-0.5 text-sm text-white/50">{tel}</p>}
+        {detalhes.length > 0 && (
+          <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-white/60">
+            {detalhes.map((d) => (
+              <span key={d.label}>
+                <span className="text-white/40">{d.label}:</span> {d.valor}
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
+      <Pencil className="h-4 w-4 shrink-0 text-white/30" aria-hidden />
+    </button>
   )
 }
 
-// Modal de cadastro de aluno (A3.3). Enxuto/mobile-first, tema dark do /perfil.
-// Salva via a RPC coach_add_student — o servidor seta coach_id (=auth.uid) e
-// club_slug; o coach NUNCA os envia. Nome obrigatório; o resto opcional.
-function AlunoFormModal({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
-  const [nome, setNome] = useState('')
-  const [celular, setCelular] = useState('')
-  const [nivel, setNivel] = useState('')
-  const [socio, setSocio] = useState('')
-  const [horario, setHorario] = useState('')
+// Modal de aluno (A3.3 cadastro + A3.4 edição/remoção). Enxuto/mobile-first, tema
+// dark do /perfil. `aluno=null` → cadastro (coach_add_student); `aluno` presente →
+// edição (coach_update_student) + remover (coach_remove_student, soft-delete). O
+// coach NUNCA envia coach_id/role — as RPCs (SECURITY DEFINER) escopam no servidor.
+function AlunoFormModal({
+  aluno,
+  onClose,
+  onDone,
+}: {
+  aluno: Aluno | null
+  onClose: () => void
+  onDone: (msg: string) => void
+}) {
+  const editar = aluno !== null
+  const telInicial = (() => {
+    if (!aluno?.phone) return ''
+    try {
+      return parsePhoneNumber(aluno.phone)?.formatInternational() ?? aluno.phone
+    } catch {
+      return aluno.phone
+    }
+  })()
+
+  const [nome, setNome] = useState(aluno?.name ?? '')
+  const [celular, setCelular] = useState(telInicial)
+  const [nivel, setNivel] = useState(aluno?.level ?? '')
+  const [socio, setSocio] = useState(aluno?.member_number ?? '')
+  const [horario, setHorario] = useState(aluno?.class_schedule ?? '')
   const [salvando, setSalvando] = useState(false)
+  const [removendo, setRemovendo] = useState(false)
+  const [confirmandoRemover, setConfirmandoRemover] = useState(false)
   const [erro, setErro] = useState<string | null>(null)
 
   const nomeOk = nome.trim() !== ''
@@ -277,33 +307,77 @@ function AlunoFormModal({ onClose, onSaved }: { onClose: () => void; onSaved: ()
       ? (parsePhoneNumber(celular, 'BR')?.number ?? '')
       : ''
   const celularInvalido = celularPreenchido && e164 === ''
-  const podeSalvar = nomeOk && !celularInvalido && !salvando
+
+  // DIRTY (só na edição): Salvar habilita se algum campo divergiu do original.
+  const dirty =
+    !editar ||
+    nome.trim() !== (aluno?.name ?? '').trim() ||
+    (e164 || '') !== (aluno?.phone ?? '') ||
+    nivel.trim() !== (aluno?.level ?? '').trim() ||
+    socio.trim() !== (aluno?.member_number ?? '').trim() ||
+    horario.trim() !== (aluno?.class_schedule ?? '').trim()
+
+  const podeSalvar = nomeOk && !celularInvalido && dirty && !salvando && !removendo
+
+  const norm = (s: string) => {
+    const t = s.trim()
+    return t === '' ? null : t
+  }
 
   async function salvar() {
     if (!podeSalvar) return
     setSalvando(true)
     setErro(null)
-    const norm = (s: string) => {
-      const t = s.trim()
-      return t === '' ? null : t
-    }
     const supabase = createBrowserSupabaseClient()
-    // coach_id e club_slug NÃO vão no payload — o servidor os define.
-    const { error } = await supabase.rpc('coach_add_student', {
-      p_name: nome.trim(),
-      p_phone: e164 || null,
-      p_level: norm(nivel),
-      p_member_number: norm(socio),
-      p_class_schedule: norm(horario),
-    })
-    if (error) {
-      setErro('Não deu para adicionar o aluno agora. Tente novamente.')
-      setSalvando(false)
-      return
+    // coach_id/role NÃO vão no payload — as RPCs escopam por coach_id=auth.uid().
+    if (editar && aluno) {
+      const { error } = await supabase.rpc('coach_update_student', {
+        p_student_id: aluno.id,
+        p_name: nome.trim(),
+        p_phone: e164 || null,
+        p_level: norm(nivel),
+        p_member_number: norm(socio),
+        p_class_schedule: norm(horario),
+      })
+      if (error) {
+        setErro('Não deu para salvar as alterações agora. Tente novamente.')
+        setSalvando(false)
+        return
+      }
+      onDone('Aluno atualizado.')
+    } else {
+      const { error } = await supabase.rpc('coach_add_student', {
+        p_name: nome.trim(),
+        p_phone: e164 || null,
+        p_level: norm(nivel),
+        p_member_number: norm(socio),
+        p_class_schedule: norm(horario),
+      })
+      if (error) {
+        setErro('Não deu para adicionar o aluno agora. Tente novamente.')
+        setSalvando(false)
+        return
+      }
+      onDone('Aluno adicionado.')
     }
-    onSaved()
   }
 
+  async function remover() {
+    if (!aluno) return
+    setRemovendo(true)
+    setErro(null)
+    const supabase = createBrowserSupabaseClient()
+    // Soft-delete no servidor (active=false); some da lista (filtra active=true).
+    const { error } = await supabase.rpc('coach_remove_student', { p_student_id: aluno.id })
+    if (error) {
+      setErro('Não deu para remover agora. Tente novamente.')
+      setRemovendo(false)
+      return
+    }
+    onDone('Aluno removido.')
+  }
+
+  const ocupado = salvando || removendo
   const campo = 'h-11 rounded-lg border border-white/20 bg-white/10 px-3 text-base'
 
   return (
@@ -311,15 +385,15 @@ function AlunoFormModal({ onClose, onSaved }: { onClose: () => void; onSaved: ()
       className="fixed inset-0 z-[80] flex items-start justify-center overflow-y-auto bg-black/70 p-4 backdrop-blur-sm"
       role="dialog"
       aria-modal="true"
-      aria-label="Adicionar aluno"
-      onClick={() => !salvando && onClose()}
+      aria-label={editar ? 'Editar aluno' : 'Adicionar aluno'}
+      onClick={() => !ocupado && onClose()}
     >
       <div
         className="my-8 w-full max-w-sm rounded-2xl border border-white/10 bg-neutral-900 text-white shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between border-b border-white/10 px-5 py-4">
-          <h3 className="text-base font-bold">Adicionar aluno</h3>
+          <h3 className="text-base font-bold">{editar ? 'Editar aluno' : 'Adicionar aluno'}</h3>
           <button
             type="button"
             onClick={onClose}
@@ -374,7 +448,7 @@ function AlunoFormModal({ onClose, onSaved }: { onClose: () => void; onSaved: ()
             <button
               type="button"
               onClick={onClose}
-              disabled={salvando}
+              disabled={ocupado}
               className="h-12 flex-1 rounded-lg bg-white/10 text-base font-bold text-white transition hover:bg-white/15 disabled:opacity-40"
             >
               Cancelar
@@ -386,9 +460,48 @@ function AlunoFormModal({ onClose, onSaved }: { onClose: () => void; onSaved: ()
               className="flex h-12 flex-1 items-center justify-center gap-2 rounded-lg bg-white text-base font-bold text-neutral-900 transition hover:bg-white/90 disabled:cursor-not-allowed disabled:opacity-40"
             >
               {salvando ? <Loader2 className="h-5 w-5 animate-spin" /> : <Check className="h-5 w-5" />}
-              Salvar
+              {editar ? 'Salvar alterações' : 'Salvar'}
             </button>
           </div>
+
+          {/* REMOVER (só na edição). Deliberado: confirmação separada. */}
+          {editar && !confirmandoRemover && (
+            <button
+              type="button"
+              onClick={() => setConfirmandoRemover(true)}
+              disabled={ocupado}
+              className="mt-1 inline-flex items-center justify-center gap-1.5 border-t border-white/10 pt-4 text-sm font-medium text-red-400/80 transition hover:text-red-400 disabled:opacity-40"
+            >
+              <Trash2 className="h-4 w-4" />
+              Remover aluno
+            </button>
+          )}
+          {editar && confirmandoRemover && (
+            <div className="mt-1 rounded-lg border border-red-500/25 bg-red-500/5 p-3">
+              <p className="mb-2.5 text-sm text-white/80">
+                Remover <strong>{aluno?.name}</strong>? Ele sai da sua lista de alunos.
+              </p>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setConfirmandoRemover(false)}
+                  disabled={removendo}
+                  className="h-10 flex-1 rounded-lg bg-white/10 text-sm font-bold text-white transition hover:bg-white/15 disabled:opacity-40"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={remover}
+                  disabled={removendo}
+                  className="inline-flex h-10 flex-1 items-center justify-center gap-2 rounded-lg bg-red-600 text-sm font-bold text-white transition hover:bg-red-500 disabled:opacity-40"
+                >
+                  {removendo ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                  Remover
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -401,9 +514,10 @@ function AlunoFormModal({ onClose, onSaved }: { onClose: () => void; onSaved: ()
 function MeusAlunos({ userId }: { userId: string }) {
   const [alunos, setAlunos] = useState<Aluno[]>([])
   const [estado, setEstado] = useState<'carregando' | 'ok' | 'erro'>('carregando')
-  const [modalAberto, setModalAberto] = useState(false)
+  // Modal: null = fechado; { aluno: null } = cadastro; { aluno } = edição.
+  const [modal, setModal] = useState<{ aluno: Aluno | null } | null>(null)
   const [refreshKey, setRefreshKey] = useState(0)
-  const [feedback, setFeedback] = useState(false)
+  const [feedback, setFeedback] = useState<string | null>(null)
 
   // Recarrega a lista (sem voltar ao skeleton em refresh — estado só é
   // 'carregando' no 1º load; refresh só troca os dados quando chegam).
@@ -430,31 +544,23 @@ function MeusAlunos({ userId }: { userId: string }) {
     }
   }, [userId, refreshKey])
 
-  // Feedback transitório após adicionar.
+  // Feedback transitório após adicionar/editar/remover.
   useEffect(() => {
     if (!feedback) return
-    const t = setTimeout(() => setFeedback(false), 2500)
+    const t = setTimeout(() => setFeedback(null), 2500)
     return () => clearTimeout(t)
   }, [feedback])
 
-  // Aluno adicionado: fecha o modal, recarrega a lista e sinaliza.
-  const aoAdicionar = () => {
-    setModalAberto(false)
+  // Add/update/remove concluído: fecha o modal, recarrega e sinaliza.
+  const aoConcluir = (msg: string) => {
+    setModal(null)
     setRefreshKey((k) => k + 1)
-    setFeedback(true)
+    setFeedback(msg)
   }
 
-  const botaoAdicionar = (
-    <button
-      type="button"
-      onClick={() => setModalAberto(true)}
-      className="inline-flex items-center gap-1.5 rounded-lg bg-white px-3 py-1.5 text-sm font-bold text-neutral-900 transition hover:bg-white/90"
-    >
-      <Plus className="h-4 w-4" /> Adicionar
-    </button>
+  const modalEl = modal && (
+    <AlunoFormModal aluno={modal.aluno} onClose={() => setModal(null)} onDone={aoConcluir} />
   )
-
-  const modal = modalAberto && <AlunoFormModal onClose={() => setModalAberto(false)} onSaved={aoAdicionar} />
 
   if (estado === 'carregando') {
     return (
@@ -483,13 +589,13 @@ function MeusAlunos({ userId }: { userId: string }) {
           </p>
           <button
             type="button"
-            onClick={() => setModalAberto(true)}
+            onClick={() => setModal({ aluno: null })}
             className="inline-flex items-center gap-1.5 rounded-lg bg-white px-4 py-2.5 text-sm font-bold text-neutral-900 transition hover:bg-white/90"
           >
             <Plus className="h-4 w-4" /> Adicionar aluno
           </button>
         </div>
-        {modal}
+        {modalEl}
       </>
     )
   }
@@ -500,17 +606,23 @@ function MeusAlunos({ userId }: { userId: string }) {
         <p className="text-xs uppercase tracking-widest text-white/40">
           {alunos.length} {alunos.length === 1 ? 'aluno' : 'alunos'}
         </p>
-        {botaoAdicionar}
+        <button
+          type="button"
+          onClick={() => setModal({ aluno: null })}
+          className="inline-flex items-center gap-1.5 rounded-lg bg-white px-3 py-1.5 text-sm font-bold text-neutral-900 transition hover:bg-white/90"
+        >
+          <Plus className="h-4 w-4" /> Adicionar
+        </button>
       </div>
       {feedback && (
         <p className="inline-flex items-center gap-1.5 text-xs text-emerald-400">
-          <Check className="h-3 w-3" /> Aluno adicionado.
+          <Check className="h-3 w-3" /> {feedback}
         </p>
       )}
       {alunos.map((a) => (
-        <AlunoCard key={a.id} a={a} />
+        <AlunoCard key={a.id} a={a} onEdit={(al) => setModal({ aluno: al })} />
       ))}
-      {modal}
+      {modalEl}
     </div>
   )
 }
