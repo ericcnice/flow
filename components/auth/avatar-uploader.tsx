@@ -14,7 +14,7 @@
 
 import { useRef, useState } from 'react'
 import Cropper, { type Area } from 'react-easy-crop'
-import { Camera, Check, Loader2, X } from 'lucide-react'
+import { Camera, Check, Image as ImageIcon, Loader2, X } from 'lucide-react'
 
 const MAX_FILE = 10 * 1024 * 1024 // 10MB — rejeita arquivos absurdos antes do crop
 const LADO = 512 // alvo do avatar (px)
@@ -50,7 +50,9 @@ export function AvatarUploader({
   carregando?: boolean
   onUploaded: (url: string) => void
 }) {
-  const inputRef = useRef<HTMLInputElement>(null)
+  const galeriaRef = useRef<HTMLInputElement>(null) // sem capture → galeria/arquivos
+  const cameraRef = useRef<HTMLInputElement>(null) // capture → câmera (mobile)
+  const [menuAberto, setMenuAberto] = useState(false)
   const [imgErro, setImgErro] = useState(false)
   const [cropSrc, setCropSrc] = useState<string | null>(null) // object URL do arquivo escolhido
   const [crop, setCrop] = useState({ x: 0, y: 0 })
@@ -124,14 +126,25 @@ export function AvatarUploader({
 
   return (
     <>
-      <input ref={inputRef} type="file" accept="image/*" onChange={escolherArquivo} className="hidden" />
+      {/* Dois inputs ocultos: câmera (capture) e galeria (sem capture). No mobile,
+          `capture` força a câmera; no desktop é ignorado (abre o seletor de
+          arquivo). Ambos seguem para o MESMO escolherArquivo → crop → upload. */}
+      <input
+        ref={cameraRef}
+        type="file"
+        accept="image/*"
+        capture="user"
+        onChange={escolherArquivo}
+        className="hidden"
+      />
+      <input ref={galeriaRef} type="file" accept="image/*" onChange={escolherArquivo} className="hidden" />
 
-      {/* Avatar clicável + badge de câmera + overlay de envio. Enquanto o perfil
-          CARREGA (avatar_url do banco não chegou), mostra um skeleton neutro em
-          vez da foto do Google — evita o salto Google→Storage no reload. */}
+      {/* Avatar clicável (abre o menu de 2 opções) + badge + overlay de envio.
+          Enquanto o perfil CARREGA, mostra um skeleton neutro em vez da foto do
+          Google — evita o salto Google→Storage no reload. */}
       <button
         type="button"
-        onClick={() => inputRef.current?.click()}
+        onClick={() => setMenuAberto(true)}
         disabled={carregando}
         aria-label="Trocar foto de perfil"
         className="relative h-16 w-16 shrink-0"
@@ -175,6 +188,51 @@ export function AvatarUploader({
         <div role="status" className="fixed inset-x-0 bottom-5 z-[90] flex justify-center px-4">
           <div className="inline-flex items-center gap-1.5 rounded-full border border-emerald-400/30 bg-neutral-900/95 px-4 py-2.5 text-sm font-semibold text-white shadow-2xl">
             <Check className="h-4 w-4 text-emerald-400" /> Foto atualizada
+          </div>
+        </div>
+      )}
+
+      {/* MENU de 2 opções (bottom-sheet no mobile, centrado no desktop). Cada
+          opção fecha o menu e dispara o seu input; ambos vão para o crop. */}
+      {menuAberto && (
+        <div
+          className="fixed inset-0 z-[85] flex items-end justify-center bg-black/60 p-4 backdrop-blur-sm sm:items-center"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Trocar foto de perfil"
+          onClick={() => setMenuAberto(false)}
+        >
+          <div
+            className="w-full max-w-sm rounded-2xl border border-white/10 bg-neutral-900 p-2 text-white shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              type="button"
+              onClick={() => {
+                setMenuAberto(false)
+                cameraRef.current?.click()
+              }}
+              className="flex w-full items-center gap-3 rounded-xl px-4 py-3.5 text-left text-base font-semibold transition hover:bg-white/5"
+            >
+              <Camera className="h-5 w-5 shrink-0 text-white/70" /> Tirar foto
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setMenuAberto(false)
+                galeriaRef.current?.click()
+              }}
+              className="flex w-full items-center gap-3 rounded-xl px-4 py-3.5 text-left text-base font-semibold transition hover:bg-white/5"
+            >
+              <ImageIcon className="h-5 w-5 shrink-0 text-white/70" /> Escolher da galeria
+            </button>
+            <button
+              type="button"
+              onClick={() => setMenuAberto(false)}
+              className="mt-1 w-full rounded-xl px-4 py-3 text-center text-sm font-medium text-white/50 transition hover:bg-white/5"
+            >
+              Cancelar
+            </button>
           </div>
         </div>
       )}
