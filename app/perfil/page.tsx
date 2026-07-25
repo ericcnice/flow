@@ -18,7 +18,7 @@ import { useRouter } from 'next/navigation'
 import { formatDistanceToNow } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import { AsYouType, isValidPhoneNumber, parsePhoneNumber } from 'libphonenumber-js'
-import { AlertTriangle, ArrowLeft, BadgeCheck, Check, Loader2, LogOut, Pencil, Plus, ShieldCheck, Trash2, Trophy, Users, X } from 'lucide-react'
+import { AlertTriangle, ArrowLeft, BadgeCheck, Check, Copy, Loader2, LogOut, MessageCircle, Pencil, Plus, Send, ShieldCheck, Trash2, Trophy, Users, X } from 'lucide-react'
 import type { User } from '@supabase/supabase-js'
 import { createBrowserSupabaseClient } from '@/lib/supabase/browser-client'
 import { avatarUrlOf } from '@/lib/auth-avatar'
@@ -262,9 +262,19 @@ function ConviteBadge({ estado }: { estado: { tipo: 'cadastrado' | 'convidado'; 
 // ESTRUTURA (refatorada na A.2): o card era um <button> ÚNICO embrulhando tudo.
 // Isso impedia acrescentar o botão "Convidar" (A.3) — <button> dentro de
 // <button> é HTML inválido. Agora é <div> + <button> interno nos DADOS (mesmo
-// onEdit, comportamento idêntico) + uma ÁREA DE AÇÕES à direita, onde hoje só
-// mora o lápis e onde o "Convidar" vai entrar ao lado dele.
-function AlunoCard({ a, onEdit }: { a: Aluno; onEdit: (a: Aluno) => void }) {
+// onEdit, comportamento idêntico) + uma ÁREA DE AÇÕES à direita, com o botão de
+// convite e o lápis.
+function AlunoCard({
+  a,
+  onEdit,
+  onConvidar,
+  convidando,
+}: {
+  a: Aluno
+  onEdit: (a: Aluno) => void
+  onConvidar: (a: Aluno) => void
+  convidando: boolean
+}) {
   const tel = (() => {
     if (!a.phone) return ''
     try {
@@ -308,12 +318,20 @@ function AlunoCard({ a, onEdit }: { a: Aluno; onEdit: (a: Aluno) => void }) {
         )}
       </button>
 
-      {/* AÇÕES — coluna à direita. Hoje só o lápis; a A.3 acrescenta o botão
-          "Convidar" AQUI, ao lado dele (por isso a área já é uma flex row).
+      {/* AÇÕES — coluna à direita: CONVIDAR (ação nova, própria) + o lápis.
           O lápis repete a MESMA ação do botão de dados: é afordância visual,
           então sai da ordem de tabulação e do leitor de tela (tabIndex=-1 +
-          aria-hidden) para não duplicar "Editar Fulano". 44×44 de alvo. */}
+          aria-hidden) para não duplicar "Editar Fulano". 44×44 de alvo cada. */}
       <div className="flex shrink-0 items-center gap-1 pr-2">
+        <button
+          type="button"
+          onClick={() => onConvidar(a)}
+          disabled={convidando}
+          aria-label={`Convidar ${a.name ?? 'aluno'}`}
+          className="flex h-11 w-11 items-center justify-center rounded-lg text-white/45 transition hover:bg-white/10 hover:text-emerald-400 disabled:opacity-40"
+        >
+          {convidando ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+        </button>
         <button
           type="button"
           onClick={() => onEdit(a)}
@@ -323,6 +341,147 @@ function AlunoCard({ a, onEdit }: { a: Aluno; onEdit: (a: Aluno) => void }) {
         >
           <Pencil className="h-4 w-4" />
         </button>
+      </div>
+    </div>
+  )
+}
+
+// Mensagem que o coach manda pelo WhatsApp DELE (zero custo de API). Template
+// pessoal — o CLAUDE.md é explícito que o convite direcionado converte por ser
+// pessoal. Sem o nome do coach (perfil ainda carregando / sem nome), a saudação
+// degrada limpo em vez de virar "Aqui é  👋".
+function montarMensagemConvite(primeiroNome: string, nomeCoach: string, url: string) {
+  const coach = nomeCoach.trim()
+  return [
+    coach ? `Olá ${primeiroNome}! Aqui é ${coach} 👋` : `Olá ${primeiroNome}! 👋`,
+    'Estou usando o Flow para marcar os pontos e guardar os jogos das nossas aulas.',
+    'Faça seu cadastro rápido por aqui — leva 1 minuto:',
+    url,
+  ].join('\n')
+}
+
+// MODAL DE CONVITE (A.3). Abre DEPOIS que a RPC devolveu o token.
+//
+// POR QUE UM MODAL, e não abrir o WhatsApp direto: a RPC é assíncrona, e um
+// window.open() depois do await perde o gesto do usuário — o Safari iOS
+// (justamente o aparelho do professor) bloqueia como popup. Aqui o WhatsApp é
+// um <a href> que o coach CLICA: gesto preservado, zero bloqueio. De quebra,
+// sobra lugar para ele editar a mensagem antes de mandar.
+function ConviteModal({
+  aluno,
+  token,
+  nomeCoach,
+  onClose,
+}: {
+  aluno: Aluno
+  token: string
+  nomeCoach: string
+  onClose: () => void
+}) {
+  const primeiroNome = (aluno.name ?? '').trim().split(/\s+/)[0] || 'aluno'
+  // Inicializador PREGUIÇOSO com guarda de window: roda só no cliente (o modal
+  // nem existe no SSR, mas a guarda mantém a regra da casa de nunca ler window
+  // durante a renderização do servidor).
+  const [origin] = useState(() => (typeof window !== 'undefined' ? window.location.origin : ''))
+  const url = `${origin}/convite/${token}`
+
+  const [mensagem, setMensagem] = useState(() => montarMensagemConvite(primeiroNome, nomeCoach, url))
+  const [copiado, setCopiado] = useState(false)
+
+  useEffect(() => {
+    if (!copiado) return
+    const t = setTimeout(() => setCopiado(false), 2000)
+    return () => clearTimeout(t)
+  }, [copiado])
+
+  // wa.me exige SÓ DÍGITOS (sem '+', sem espaços). members.phone é E.164
+  // validado no banco. Sem celular cadastrado, `digitos` fica vazio e a URL
+  // degrada exatamente para o formato sem número (https://wa.me/?text=...),
+  // em que o próprio WhatsApp abre o seletor de contato.
+  const digitos = (aluno.phone ?? '').replace(/\D/g, '')
+  const waUrl = `https://wa.me/${digitos}?text=${encodeURIComponent(mensagem)}`
+
+  async function copiarLink() {
+    try {
+      await navigator.clipboard.writeText(url)
+      setCopiado(true)
+    } catch {
+      setCopiado(false)
+    }
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-[80] flex items-start justify-center overflow-y-auto bg-black/70 p-4 backdrop-blur-sm"
+      role="dialog"
+      aria-modal="true"
+      aria-label={`Convidar ${primeiroNome}`}
+      onClick={onClose}
+    >
+      <div
+        className="my-8 w-full max-w-sm rounded-2xl border border-white/10 bg-neutral-900 text-white shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between border-b border-white/10 px-5 py-4">
+          <h3 className="min-w-0 truncate text-base font-bold">Convidar {primeiroNome}</h3>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Fechar"
+            className="rounded-full p-1.5 text-white/50 transition hover:bg-white/10 hover:text-white"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        <div className="flex flex-col gap-3 px-5 py-5">
+          <label className="flex flex-col gap-1">
+            <span className="text-xs font-semibold uppercase tracking-wide text-white/60">Mensagem</span>
+            <textarea
+              value={mensagem}
+              onChange={(e) => setMensagem(e.target.value)}
+              rows={6}
+              className="w-full min-w-0 resize-none rounded-lg border border-white/20 bg-white/10 p-3 text-sm leading-relaxed"
+            />
+            <span className="text-xs text-white/45">
+              {digitos
+                ? 'Abre a conversa com o aluno no seu WhatsApp. Você pode editar antes de enviar.'
+                : 'Sem celular cadastrado — o WhatsApp vai pedir para você escolher o contato.'}
+            </span>
+          </label>
+
+          {/* <a>, NUNCA window.open: preserva o gesto do usuário (popup blocker
+              do iOS) e deixa o SO decidir — app no celular, web no desktop. */}
+          <a
+            href={waUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex h-12 items-center justify-center gap-2 rounded-lg bg-white text-base font-bold text-neutral-900 transition hover:bg-white/90"
+          >
+            <MessageCircle className="h-5 w-5" />
+            Abrir WhatsApp
+          </a>
+
+          {/* Escape sempre visível: se o wa.me/{numero} falhar (número sem
+              WhatsApp), o coach ainda leva o link por onde quiser. */}
+          <button
+            type="button"
+            onClick={copiarLink}
+            className="flex h-11 items-center justify-center gap-2 rounded-lg bg-white/10 text-sm font-bold text-white transition hover:bg-white/15"
+          >
+            {copiado ? (
+              <>
+                <Check className="h-4 w-4 text-emerald-400" /> Link copiado
+              </>
+            ) : (
+              <>
+                <Copy className="h-4 w-4" /> Copiar link
+              </>
+            )}
+          </button>
+
+          <p className="break-all text-center font-mono text-[11px] text-white/35">{url}</p>
+        </div>
       </div>
     </div>
   )
@@ -580,13 +739,18 @@ function AlunoFormModal({
 // Roster do coach: os alunos DELE (a SELECT policy "members coach select own"
 // escopa por coach_id = auth.uid() — nenhum vazamento entre coaches). A3.3 dá o
 // botão de adicionar (via RPC); editar/remover é A3.4.
-function MeusAlunos({ userId }: { userId: string }) {
+function MeusAlunos({ userId, nomeCoach }: { userId: string; nomeCoach: string }) {
   const [alunos, setAlunos] = useState<Aluno[]>([])
   const [estado, setEstado] = useState<'carregando' | 'ok' | 'erro'>('carregando')
   // Modal: null = fechado; { aluno: null } = cadastro; { aluno } = edição.
   const [modal, setModal] = useState<{ aluno: Aluno | null } | null>(null)
   const [refreshKey, setRefreshKey] = useState(0)
   const [feedback, setFeedback] = useState<string | null>(null)
+  // Convite (A.3): id do aluno cujo convite está sendo gerado (spinner no card)
+  // e o modal com o token já em mãos.
+  const [convidandoId, setConvidandoId] = useState<string | null>(null)
+  const [convite, setConvite] = useState<{ aluno: Aluno; token: string } | null>(null)
+  const [erroConvite, setErroConvite] = useState<string | null>(null)
 
   // Recarrega a lista (sem voltar ao skeleton em refresh — estado só é
   // 'carregando' no 1º load; refresh só troca os dados quando chegam).
@@ -664,6 +828,14 @@ function MeusAlunos({ userId }: { userId: string }) {
     return () => clearTimeout(t)
   }, [feedback])
 
+  // Erro do convite: some sozinho (mais tempo que o sucesso — é o que precisa
+  // ser lido).
+  useEffect(() => {
+    if (!erroConvite) return
+    const t = setTimeout(() => setErroConvite(null), 4000)
+    return () => clearTimeout(t)
+  }, [erroConvite])
+
   // Métrica do coach ("quantos convidei, quantos já se cadastraram"). Só aparece
   // quando há convite — roster novo mostra apenas "N alunos", sem ruído.
   const resumoConvites = useMemo(() => {
@@ -685,6 +857,33 @@ function MeusAlunos({ userId }: { userId: string }) {
     setModal(null)
     setRefreshKey((k) => k + 1)
     setFeedback(msg)
+  }
+
+  // CONVIDAR (A.3). A RPC gera o convite OU devolve o pendente que já existe —
+  // o token é ESTÁVEL enquanto pending, então reenviar manda o MESMO link (a
+  // mensagem antiga no WhatsApp do aluno continua valendo).
+  async function convidar(a: Aluno) {
+    if (convidandoId) return
+    setConvidandoId(a.id)
+    setErroConvite(null)
+    const supabase = createBrowserSupabaseClient()
+    const { data, error } = await supabase.rpc('coach_invite_student', { p_student_id: a.id })
+    setConvidandoId(null)
+
+    // `returns table` chega como array de linhas; normalizamos (mesmo cuidado
+    // de lib/supabase/live-match.ts).
+    const linha = (Array.isArray(data) ? data[0] : data) as { token?: string } | null
+    if (error || !linha?.token) {
+      // A RPC levanta erro técnico em inglês ('not a coach', 'student not
+      // found'); o usuário vê uma frase só, gentil.
+      setErroConvite('Não deu para gerar o convite agora. Tente novamente.')
+      return
+    }
+
+    setConvite({ aluno: a, token: linha.token })
+    // Recarrega para o badge "Convidado" aparecer no card (mesmo caminho do
+    // adicionar/editar).
+    setRefreshKey((k) => k + 1)
   }
 
   const modalEl = modal && (
@@ -749,10 +948,29 @@ function MeusAlunos({ userId }: { userId: string }) {
           <Check className="h-3 w-3" /> {feedback}
         </p>
       )}
+      {erroConvite && (
+        <p role="alert" className="text-xs text-red-400">
+          {erroConvite}
+        </p>
+      )}
       {alunos.map((a) => (
-        <AlunoCard key={a.id} a={a} onEdit={(al) => setModal({ aluno: al })} />
+        <AlunoCard
+          key={a.id}
+          a={a}
+          onEdit={(al) => setModal({ aluno: al })}
+          onConvidar={convidar}
+          convidando={convidandoId === a.id}
+        />
       ))}
       {modalEl}
+      {convite && (
+        <ConviteModal
+          aluno={convite.aluno}
+          token={convite.token}
+          nomeCoach={nomeCoach}
+          onClose={() => setConvite(null)}
+        />
+      )}
     </div>
   )
 }
@@ -1254,7 +1472,9 @@ function PerfilLogado({ user }: { user: User }) {
       {isCoach && aba === 'coach' && (
         <section className="mt-6">
           <h2 className="mb-3 text-xs font-semibold uppercase tracking-widest text-white/50">Meus alunos</h2>
-          <MeusAlunos userId={user.id} />
+          {/* nomeCoach alimenta a mensagem do convite ("Aqui é a Ana"). Enquanto
+              o perfil carrega vai vazio e a saudação degrada sem quebrar. */}
+          <MeusAlunos userId={user.id} nomeCoach={perfil?.nome ?? ''} />
         </section>
       )}
     </main>
