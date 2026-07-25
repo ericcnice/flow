@@ -191,47 +191,71 @@ function MeusJogos({ userId }: { userId: string }) {
 }
 
 // ------------------------------------------------------------------ meus alunos
-// Convite do aluno (CONVITE VIRAL A.1/A.2). O coach lê os convites DELE pela
-// policy "invites coach select own"; um aluno tem no máximo UM 'pending' (índice
-// parcial no banco) e pode ter históricos 'registered'/'revoked'.
-type ConviteStatus = 'pending' | 'registered' | 'revoked'
-type Convite = {
-  token: string
-  status: ConviteStatus
-  last_sent_at: string | null
-  send_count: number
-}
-type AlunoBase = {
+// Linha crua de coach_list_students (SOBERANIA DE DADOS / Fatia 1). A RPC já
+// resolve a identidade: aluno CADASTRADO mostra o que ELE declarou no profile;
+// aluno solto mostra a anotação do professor. O app não faz mais essa escolha.
+type AlunoRpcRow = {
   id: string
+  level: string | null
+  member_number: string | null
+  class_schedule: string | null
+  is_claimed: boolean
+  display_name: string | null
+  display_phone: string | null
+  avatar_url: string | null
+  invite_token: string | null
+  invite_status: string | null
+  invite_last_sent_at: string | null
+}
+
+type Aluno = {
+  id: string
+  /** Nome RESOLVIDO (profile do aluno quando cadastrado; anotação do coach quando não). */
   name: string | null
+  /** Celular RESOLVIDO, mesma regra. */
   phone: string | null
   level: string | null
   member_number: string | null
   class_schedule: string | null
+  /** O aluno é dono de si (members.profile_id preenchido) — a verdade da soberania. */
+  isClaimed: boolean
+  avatarUrl: string | null
+  conviteToken: string | null
+  conviteStatus: string | null
+  conviteEnviadoEm: string | null
 }
-type Aluno = AlunoBase & { invites: Convite[] }
-// Linha crua de invites no plano B (busca separada, casada no cliente).
-type ConviteRow = Convite & { student_member_id: string | null }
 
-const COLUNAS_ALUNO = 'id, name, phone, level, member_number, class_schedule'
+function alunoDaRpc(r: AlunoRpcRow): Aluno {
+  return {
+    id: r.id,
+    name: r.display_name,
+    phone: r.display_phone,
+    level: r.level,
+    member_number: r.member_number,
+    class_schedule: r.class_schedule,
+    isClaimed: Boolean(r.is_claimed),
+    avatarUrl: r.avatar_url,
+    conviteToken: r.invite_token,
+    conviteStatus: r.invite_status,
+    conviteEnviadoEm: r.invite_last_sent_at,
+  }
+}
 
-// Estado do convite que o CARD mostra. 'registered' vence 'pending' (o aluno já
-// se cadastrou — é o troféu do coach); sem convite → null (sem badge, que é como
-// todo o roster nasce).
-function estadoDoConvite(a: Aluno): { tipo: 'cadastrado' | 'convidado'; convite: Convite } | null {
-  const lista = a.invites ?? []
-  const cadastrado = lista.find((c) => c.status === 'registered')
-  if (cadastrado) return { tipo: 'cadastrado', convite: cadastrado }
-  const pendente = lista.find((c) => c.status === 'pending')
-  if (pendente) return { tipo: 'convidado', convite: pendente }
+// Estado que o CARD mostra. A régua de "cadastrado" é `isClaimed` (profile_id),
+// NÃO o status do convite: quem é dono de si é dono de si independentemente do
+// caminho que usou para chegar lá (o claim por celular da A5 não passa por
+// convite algum). O convite só responde pelo estado intermediário "convidado".
+function estadoDoConvite(a: Aluno): { tipo: 'cadastrado' | 'convidado'; quando: string | null } | null {
+  if (a.isClaimed) return { tipo: 'cadastrado', quando: null }
+  if (a.conviteStatus === 'pending') return { tipo: 'convidado', quando: a.conviteEnviadoEm }
   return null
 }
 
-// Badge do convite. VERDE (mesmo tom do tick de verificado) para 'cadastrado' —
-// puxa o olho de propósito; NEUTRO para 'convidado', com o "há Xd" do último
-// disparo (o app abre o WhatsApp mas não sabe se o coach apertou enviar — por
-// isso "Convidado", nunca "Enviado").
-function ConviteBadge({ estado }: { estado: { tipo: 'cadastrado' | 'convidado'; convite: Convite } }) {
+// Badge. VERDE (mesmo tom do tick de verificado) para 'cadastrado' — puxa o olho
+// de propósito; NEUTRO para 'convidado', com o "há Xd" do último disparo (o app
+// abre o WhatsApp mas não sabe se o coach apertou enviar — por isso "Convidado",
+// nunca "Enviado").
+function ConviteBadge({ estado }: { estado: { tipo: 'cadastrado' | 'convidado'; quando: string | null } }) {
   if (estado.tipo === 'cadastrado') {
     return (
       <span className="inline-flex items-center gap-1 rounded-full bg-emerald-400/10 px-2 py-0.5 text-[11px] font-bold text-emerald-400 ring-1 ring-emerald-400/25">
@@ -241,9 +265,9 @@ function ConviteBadge({ estado }: { estado: { tipo: 'cadastrado' | 'convidado'; 
     )
   }
   const quando = (() => {
-    if (!estado.convite.last_sent_at) return ''
+    if (!estado.quando) return ''
     try {
-      return formatDistanceToNow(new Date(estado.convite.last_sent_at), { addSuffix: true, locale: ptBR })
+      return formatDistanceToNow(new Date(estado.quando), { addSuffix: true, locale: ptBR })
     } catch {
       return ''
     }
@@ -736,9 +760,12 @@ function AlunoFormModal({
   )
 }
 
-// Roster do coach: os alunos DELE (a SELECT policy "members coach select own"
-// escopa por coach_id = auth.uid() — nenhum vazamento entre coaches). A3.3 dá o
-// botão de adicionar (via RPC); editar/remover é A3.4.
+// Roster do coach: os alunos DELE. O escopo agora vem da RPC
+// coach_list_students (auth.uid() por dentro), que também resolve a identidade
+// do aluno cadastrado — nenhum vazamento entre coaches, e nada de nome velho.
+//
+// `userId` não entra mais na consulta (a RPC não recebe parâmetro); segue como
+// DEPENDÊNCIA do effect, para a lista recarregar se a sessão trocar.
 function MeusAlunos({ userId, nomeCoach }: { userId: string; nomeCoach: string }) {
   const [alunos, setAlunos] = useState<Aluno[]>([])
   const [estado, setEstado] = useState<'carregando' | 'ok' | 'erro'>('carregando')
@@ -759,59 +786,20 @@ function MeusAlunos({ userId, nomeCoach }: { userId: string; nomeCoach: string }
     const supabase = createBrowserSupabaseClient()
 
     async function carregar() {
-      // CAMINHO NORMAL: uma viagem só, com os convites embutidos (embed do
-      // PostgREST pela FK invites.student_member_id → members.id). A RLS de
-      // invites já filtra: só vêm os convites DESTE coach.
-      const comEmbed = await supabase
-        .from('members')
-        .select(`${COLUNAS_ALUNO}, invites(token, status, last_sent_at, send_count)`)
-        .eq('coach_id', userId)
-        .eq('active', true)
-        .order('name')
-
+      // UMA viagem: a RPC já escopa ao coach (auth.uid() por dentro), resolve a
+      // identidade do aluno cadastrado a partir do profile DELE, embute o
+      // convite relevante e ordena pelo nome MOSTRADO.
+      //
+      // O embed members→profiles seria pior que inútil aqui: a RLS self de
+      // profiles devolveria null em SILÊNCIO e o card continuaria com o nome
+      // velho, sem erro nenhum para denunciar.
+      const { data, error } = await supabase.rpc('coach_list_students')
       if (!alive) return
-      if (!comEmbed.error) {
-        setAlunos((comEmbed.data ?? []) as unknown as Aluno[])
-        setEstado('ok')
-        return
-      }
-
-      // PLANO B: o embed depende de o cache de schema do PostgREST enxergar a
-      // FK (pode estar frio logo após a migração). O ROSTER NÃO PODE QUEBRAR
-      // por causa do badge — busca as duas tabelas em paralelo e casa aqui.
-      const [alunosRes, convitesRes] = await Promise.all([
-        supabase
-          .from('members')
-          .select(COLUNAS_ALUNO)
-          .eq('coach_id', userId)
-          .eq('active', true)
-          .order('name'),
-        supabase
-          .from('invites')
-          .select('student_member_id, token, status, last_sent_at, send_count')
-          .eq('coach_id', userId),
-      ])
-      if (!alive) return
-      if (alunosRes.error) {
+      if (error) {
         setEstado('erro')
         return
       }
-
-      // Convites que falharem (convitesRes.error) apenas somem os badges — a
-      // lista de alunos continua de pé.
-      const porAluno = new Map<string, Convite[]>()
-      for (const c of (convitesRes.data ?? []) as ConviteRow[]) {
-        if (!c.student_member_id) continue
-        const lista = porAluno.get(c.student_member_id) ?? []
-        lista.push(c)
-        porAluno.set(c.student_member_id, lista)
-      }
-      setAlunos(
-        ((alunosRes.data ?? []) as unknown as AlunoBase[]).map((a) => ({
-          ...a,
-          invites: porAluno.get(a.id) ?? [],
-        })),
-      )
+      setAlunos(((data ?? []) as AlunoRpcRow[]).map(alunoDaRpc))
       setEstado('ok')
     }
 
