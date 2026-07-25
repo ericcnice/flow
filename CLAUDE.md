@@ -91,6 +91,24 @@ DESCARTADO (com motivo): integração com agenda/contatos do Google — permiss�
 
 FILOSOFIA: distribuir o cadastro pra os DONOS dos dados (professor inicia com o contato que tem; aluno/pai completa com consentimento + foto). Tira o admin de ser gargalo e responsável legal por dados de menores. Escala infinitamente. Prova social (verificado + foto + torneios) alimenta o tipo 2.
 
+## Convite do oponente / de partida (visão — evolução do A4, fatia após o convite do professor)
+A viralização que NÃO depende do professor — como o Flow atravessa para novos círculos, fora do clube de origem.
+
+CENÁRIO: o jogador logado (já com FOTO + tick VERIFICADO, prova social) vai jogar num lugar novo, com alguém que não usa o Flow. Ao MONTAR a partida (ele é o Jogador 1, já identificado), o app oferece convidar o Jogador 2 (ou 3/4 em duplas) para se cadastrar e ENTRAR NAQUELE JOGO. Via link de WhatsApp OU QR (antes só QR; agora também link, mesmo conteúdo). A pessoa clica → cadastra → VOLTA como Jogador 2 daquela partida específica.
+
+POR QUE É FORTE:
+1. INCENTIVO IMEDIATO E CONCRETO: não é "cadastre-se no Flow" (abstrato), é "entre neste jogo que estamos jogando AGORA". A pessoa está com a raquete na mão — conversão no momento perfeito. Resolve a questão do "por que um usuário comum indicaria?": ele indica porque PRECISA do oponente no jogo. O incentivo é o próprio jogo (utilidade imediata, não recompensa abstrata).
+2. ESPALHA FORA DO CLUBE: o professor traz alunos (contexto SPAC); o convite jogador→jogador é como o Flow atravessa para círculos novos quando o usuário viaja/joga em outro lugar. Cada jogo com alguém novo = porta de entrada.
+3. USA A FOTO/VERIFICADO: o Jogador 1 aparece logado, com foto + tick verde = prova social no momento do convite ("quero um perfil assim também"). A vaidade construída vira motor de captação.
+
+INFRAESTRUTURA: reusa a mesma base (link único com token, atribuição a quem convidou, cadastro que vincula) = tabela invites com um CONTEXTO novo (não student_member_id, mas um contexto de jogo/match_id — a definir). Reusa a LANDING/recepção do convite do professor (Fatia B) — por isso vem DEPOIS que a recepção existir (a landing do convite de partida é primo da do professor).
+
+DEPENDÊNCIAS: "a pessoa volta como Jogador 2 daquele jogo" encadeia com o multi-device/sync (placar compartilhado até 3 devices, já existe) + uma camada de IDENTIDADE nos slots do placar (o Jogador 2 logado, não anônimo) = conecta com o A4 (slots com identidade, ainda não feito). Construível, mas depende do sistema de slots/identidade do placar.
+
+SEQUÊNCIA: fatia própria, DEPOIS do convite do professor (Fatia A disparo + Fatia B recepção). Reusa a recepção. É a evolução do "A4 / convite do oponente / QR de partida" já mencionado no backlog.
+
+Relacionado: o convite GENÉRICO (tipo 2) também não é exclusivo do professor — qualquer usuário pode ter um link de indicação com atribuição (incentivo a definir: social/vaidade, recompensa, ou utilidade). O convite do oponente é a forma mais forte disso, porque o incentivo (o jogo) é intrínseco.
+
 ## Distribuição, parcerias e white-label (visão estratégica)
 O Flow foi construído com "superfícies de marca" que já existem (QR contextual, card de patrocinador na abertura, "Powered by Flow" clicável/rastreável, placar compartilhado, telão futuro). A mesma infraestrutura de sponsors que serve professor/clube serve parceiros comerciais — o Flow é WHITE-LABEL-READY sem reconstrução.
 
