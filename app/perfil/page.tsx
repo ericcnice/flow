@@ -191,7 +191,17 @@ function MeusJogos({ userId }: { userId: string }) {
 }
 
 // ------------------------------------------------------------------ meus alunos
-type Aluno = {
+// Convite do aluno (CONVITE VIRAL A.1/A.2). O coach lê os convites DELE pela
+// policy "invites coach select own"; um aluno tem no máximo UM 'pending' (índice
+// parcial no banco) e pode ter históricos 'registered'/'revoked'.
+type ConviteStatus = 'pending' | 'registered' | 'revoked'
+type Convite = {
+  token: string
+  status: ConviteStatus
+  last_sent_at: string | null
+  send_count: number
+}
+type AlunoBase = {
   id: string
   name: string | null
   phone: string | null
@@ -199,10 +209,61 @@ type Aluno = {
   member_number: string | null
   class_schedule: string | null
 }
+type Aluno = AlunoBase & { invites: Convite[] }
+// Linha crua de invites no plano B (busca separada, casada no cliente).
+type ConviteRow = Convite & { student_member_id: string | null }
 
-// Card de aluno (A3.2 — só leitura). Mostra o nome em destaque e, abaixo, só os
-// campos preenchidos (nível/sócio/aula) + o celular discreto. Estilo dark alinhado
-// aos cards de "Meus jogos".
+const COLUNAS_ALUNO = 'id, name, phone, level, member_number, class_schedule'
+
+// Estado do convite que o CARD mostra. 'registered' vence 'pending' (o aluno já
+// se cadastrou — é o troféu do coach); sem convite → null (sem badge, que é como
+// todo o roster nasce).
+function estadoDoConvite(a: Aluno): { tipo: 'cadastrado' | 'convidado'; convite: Convite } | null {
+  const lista = a.invites ?? []
+  const cadastrado = lista.find((c) => c.status === 'registered')
+  if (cadastrado) return { tipo: 'cadastrado', convite: cadastrado }
+  const pendente = lista.find((c) => c.status === 'pending')
+  if (pendente) return { tipo: 'convidado', convite: pendente }
+  return null
+}
+
+// Badge do convite. VERDE (mesmo tom do tick de verificado) para 'cadastrado' —
+// puxa o olho de propósito; NEUTRO para 'convidado', com o "há Xd" do último
+// disparo (o app abre o WhatsApp mas não sabe se o coach apertou enviar — por
+// isso "Convidado", nunca "Enviado").
+function ConviteBadge({ estado }: { estado: { tipo: 'cadastrado' | 'convidado'; convite: Convite } }) {
+  if (estado.tipo === 'cadastrado') {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-400/10 px-2 py-0.5 text-[11px] font-bold text-emerald-400 ring-1 ring-emerald-400/25">
+        <BadgeCheck className="h-3 w-3" aria-hidden />
+        Cadastrado
+      </span>
+    )
+  }
+  const quando = (() => {
+    if (!estado.convite.last_sent_at) return ''
+    try {
+      return formatDistanceToNow(new Date(estado.convite.last_sent_at), { addSuffix: true, locale: ptBR })
+    } catch {
+      return ''
+    }
+  })()
+  return (
+    <span className="inline-flex items-center gap-1 rounded-full bg-white/10 px-2 py-0.5 text-[11px] font-medium text-white/60">
+      Convidado
+      {quando && <span className="text-white/35">· {quando}</span>}
+    </span>
+  )
+}
+
+// Card de aluno. Mostra o nome em destaque, o badge do convite (se houver), o
+// celular discreto e só os campos preenchidos (nível/sócio/aula).
+//
+// ESTRUTURA (refatorada na A.2): o card era um <button> ÚNICO embrulhando tudo.
+// Isso impedia acrescentar o botão "Convidar" (A.3) — <button> dentro de
+// <button> é HTML inválido. Agora é <div> + <button> interno nos DADOS (mesmo
+// onEdit, comportamento idêntico) + uma ÁREA DE AÇÕES à direita, onde hoje só
+// mora o lápis e onde o "Convidar" vai entrar ao lado dele.
 function AlunoCard({ a, onEdit }: { a: Aluno; onEdit: (a: Aluno) => void }) {
   const tel = (() => {
     if (!a.phone) return ''
@@ -217,18 +278,25 @@ function AlunoCard({ a, onEdit }: { a: Aluno; onEdit: (a: Aluno) => void }) {
     a.member_number ? { label: 'Sócio', valor: a.member_number } : null,
     a.class_schedule ? { label: 'Aula', valor: a.class_schedule } : null,
   ].filter(Boolean) as { label: string; valor: string }[]
+  const convite = estadoDoConvite(a)
 
-  // Card inteiro tocável → abre a edição (fluido). Lápis sinaliza a ação.
   return (
-    <button
-      type="button"
-      onClick={() => onEdit(a)}
-      aria-label={`Editar ${a.name ?? 'aluno'}`}
-      className="flex w-full items-center gap-3 rounded-xl border border-white/10 bg-neutral-900 p-4 text-left transition hover:bg-neutral-800/60"
-    >
-      <div className="min-w-0 flex-1">
+    <div className="flex items-stretch overflow-hidden rounded-xl border border-white/10 bg-neutral-900">
+      {/* DADOS — alvo principal de toque (ocupa quase todo o card, altura do
+          conteúdo ≥ 44px com o p-4). Carrega o nome acessível da ação. */}
+      <button
+        type="button"
+        onClick={() => onEdit(a)}
+        aria-label={`Editar ${a.name ?? 'aluno'}`}
+        className="min-w-0 flex-1 p-4 text-left transition hover:bg-neutral-800/60"
+      >
         <p className="truncate text-base font-bold">{a.name ?? '—'}</p>
-        {tel && <p className="mt-0.5 text-sm text-white/50">{tel}</p>}
+        {convite && (
+          <p className="mt-1.5">
+            <ConviteBadge estado={convite} />
+          </p>
+        )}
+        {tel && <p className="mt-1 text-sm text-white/50">{tel}</p>}
         {detalhes.length > 0 && (
           <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-white/60">
             {detalhes.map((d) => (
@@ -238,9 +306,25 @@ function AlunoCard({ a, onEdit }: { a: Aluno; onEdit: (a: Aluno) => void }) {
             ))}
           </div>
         )}
+      </button>
+
+      {/* AÇÕES — coluna à direita. Hoje só o lápis; a A.3 acrescenta o botão
+          "Convidar" AQUI, ao lado dele (por isso a área já é uma flex row).
+          O lápis repete a MESMA ação do botão de dados: é afordância visual,
+          então sai da ordem de tabulação e do leitor de tela (tabIndex=-1 +
+          aria-hidden) para não duplicar "Editar Fulano". 44×44 de alvo. */}
+      <div className="flex shrink-0 items-center gap-1 pr-2">
+        <button
+          type="button"
+          onClick={() => onEdit(a)}
+          tabIndex={-1}
+          aria-hidden
+          className="flex h-11 w-11 items-center justify-center rounded-lg text-white/30 transition hover:bg-white/10 hover:text-white/70"
+        >
+          <Pencil className="h-4 w-4" />
+        </button>
       </div>
-      <Pencil className="h-4 w-4 shrink-0 text-white/30" aria-hidden />
-    </button>
+    </div>
   )
 }
 
@@ -502,21 +586,65 @@ function MeusAlunos({ userId }: { userId: string }) {
   useEffect(() => {
     let alive = true
     const supabase = createBrowserSupabaseClient()
-    supabase
-      .from('members')
-      .select('id, name, phone, level, member_number, class_schedule')
-      .eq('coach_id', userId)
-      .eq('active', true)
-      .order('name')
-      .then(({ data, error }) => {
-        if (!alive) return
-        if (error) {
-          setEstado('erro')
-          return
-        }
-        setAlunos((data ?? []) as Aluno[])
+
+    async function carregar() {
+      // CAMINHO NORMAL: uma viagem só, com os convites embutidos (embed do
+      // PostgREST pela FK invites.student_member_id → members.id). A RLS de
+      // invites já filtra: só vêm os convites DESTE coach.
+      const comEmbed = await supabase
+        .from('members')
+        .select(`${COLUNAS_ALUNO}, invites(token, status, last_sent_at, send_count)`)
+        .eq('coach_id', userId)
+        .eq('active', true)
+        .order('name')
+
+      if (!alive) return
+      if (!comEmbed.error) {
+        setAlunos((comEmbed.data ?? []) as unknown as Aluno[])
         setEstado('ok')
-      })
+        return
+      }
+
+      // PLANO B: o embed depende de o cache de schema do PostgREST enxergar a
+      // FK (pode estar frio logo após a migração). O ROSTER NÃO PODE QUEBRAR
+      // por causa do badge — busca as duas tabelas em paralelo e casa aqui.
+      const [alunosRes, convitesRes] = await Promise.all([
+        supabase
+          .from('members')
+          .select(COLUNAS_ALUNO)
+          .eq('coach_id', userId)
+          .eq('active', true)
+          .order('name'),
+        supabase
+          .from('invites')
+          .select('student_member_id, token, status, last_sent_at, send_count')
+          .eq('coach_id', userId),
+      ])
+      if (!alive) return
+      if (alunosRes.error) {
+        setEstado('erro')
+        return
+      }
+
+      // Convites que falharem (convitesRes.error) apenas somem os badges — a
+      // lista de alunos continua de pé.
+      const porAluno = new Map<string, Convite[]>()
+      for (const c of (convitesRes.data ?? []) as ConviteRow[]) {
+        if (!c.student_member_id) continue
+        const lista = porAluno.get(c.student_member_id) ?? []
+        lista.push(c)
+        porAluno.set(c.student_member_id, lista)
+      }
+      setAlunos(
+        ((alunosRes.data ?? []) as unknown as AlunoBase[]).map((a) => ({
+          ...a,
+          invites: porAluno.get(a.id) ?? [],
+        })),
+      )
+      setEstado('ok')
+    }
+
+    carregar()
     return () => {
       alive = false
     }
@@ -528,6 +656,22 @@ function MeusAlunos({ userId }: { userId: string }) {
     const t = setTimeout(() => setFeedback(null), 2500)
     return () => clearTimeout(t)
   }, [feedback])
+
+  // Métrica do coach ("quantos convidei, quantos já se cadastraram"). Só aparece
+  // quando há convite — roster novo mostra apenas "N alunos", sem ruído.
+  const resumoConvites = useMemo(() => {
+    let cadastrados = 0
+    let convidados = 0
+    for (const a of alunos) {
+      const e = estadoDoConvite(a)
+      if (e?.tipo === 'cadastrado') cadastrados++
+      else if (e?.tipo === 'convidado') convidados++
+    }
+    const partes: string[] = []
+    if (cadastrados > 0) partes.push(`${cadastrados} cadastrado${cadastrados === 1 ? '' : 's'}`)
+    if (convidados > 0) partes.push(`${convidados} convidado${convidados === 1 ? '' : 's'}`)
+    return partes.join(' · ')
+  }, [alunos])
 
   // Add/update/remove concluído: fecha o modal, recarrega e sinaliza.
   const aoConcluir = (msg: string) => {
@@ -583,6 +727,7 @@ function MeusAlunos({ userId }: { userId: string }) {
       <div className="flex items-center justify-between">
         <p className="text-xs uppercase tracking-widest text-white/40">
           {alunos.length} {alunos.length === 1 ? 'aluno' : 'alunos'}
+          {resumoConvites && <span className="text-white/25"> · {resumoConvites}</span>}
         </p>
         <button
           type="button"
