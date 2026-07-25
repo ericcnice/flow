@@ -91,6 +91,17 @@ DESCARTADO (com motivo): integração com agenda/contatos do Google — permiss�
 
 FILOSOFIA: distribuir o cadastro pra os DONOS dos dados (professor inicia com o contato que tem; aluno/pai completa com consentimento + foto). Tira o admin de ser gargalo e responsável legal por dados de menores. Escala infinitamente. Prova social (verificado + foto + torneios) alimenta o tipo 2.
 
+## Idade no cadastro e menores (decisão + visão)
+DECISÃO ATUAL (B.1): capturar data de nascimento (profiles.birth_date) no cadastro. Parede em 18 anos como PISO SEGURO PROVISÓRIO — a idade-limite é uma CONSTANTE fácil de mudar (não travada na lógica). >= 18 segue o fluxo normal (claim + perfil); < 18 vê parede amigável ("Para menores de 18, quem cadastra é o responsável — peça para ele abrir este link"). Sem claim, sem gravar dado além do que o auth já criou.
+
+POR QUE 18 (e não a intuição de liberar 13+): a idade de consentimento LGPD (art. 14) NÃO depende de o produto ser bom/saudável — protege o DADO do menor, não avalia o mérito do serviço. Fronteiras legais: CRIANÇA até 12 (consentimento parental OBRIGATÓRIO e específico); ADOLESCENTE 13-17 (zona cinzenta — menos rígido que criança, mais que adulto; interpretação varia). "13+ se cadastra sozinho" é possível mas NÃO é certeza jurídica. 18 é o piso seguro enquanto não há validação de advogado/DPO.
+
+VISÃO-ALVO (Eric): o Flow é produto saudável/presencial (o oposto do que vicia — não é rede social, não é online). Jovens 13-14 já têm celular e querem interagir; a intenção é eventualmente liberar 13+ autônomo. DEPENDENTES (conta parental) pensada para 6-12. A intuição de Eric (dependentes 6-12, 13+ autônomo) converge com a estrutura legal (criança até 12 / adolescente 13+).
+
+CAMINHO: a idade-limite vira CONFIGURAÇÃO. Antes de baixar de 18, VALIDAÇÃO com advogado/DPO (já necessária para menores de qualquer forma) define a linha final (13/16/18). A B.2 (consentimento parental + dependentes) constrói o modelo de menores com a linha definida juridicamente. Ponto crítico da B.2 já mapeado: o menor que digita a idade JÁ TEM conta no auth (criada no login) → a parede deixa conta órfã; a B.2 decide apagar/marcar/congelar (aparentado com a pendência de re-login de conta com deleted_at).
+
+Este é um dos pontos mais sensíveis da revisão jurídica (art. 14) — reforçar na lista de revisão dos T&C.
+
 ## Convite do oponente / de partida (visão — evolução do A4, fatia após o convite do professor)
 A viralização que NÃO depende do professor — como o Flow atravessa para novos círculos, fora do clube de origem.
 
