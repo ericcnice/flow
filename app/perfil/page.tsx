@@ -440,7 +440,9 @@ function AlunoFormModal({
   }
 
   const ocupado = salvando || removendo
-  const campo = 'h-11 rounded-lg border border-white/20 bg-white/10 px-3 text-base'
+  // w-full + min-w-0: a largura intrínseca do <input> é a origem do estouro
+  // horizontal no mobile; assim ele sempre obedece ao container, nunca ao size.
+  const campo = 'h-11 w-full min-w-0 rounded-lg border border-white/20 bg-white/10 px-3 text-base'
 
   return (
     <div
@@ -484,16 +486,19 @@ function AlunoFormModal({
             {celularInvalido && <span className="text-xs text-white/50">Número inválido. Deixe vazio ou corrija.</span>}
           </label>
 
-          <div className="flex gap-2">
-            <label className="flex flex-1 flex-col gap-1">
-              <span className="text-xs font-semibold uppercase tracking-wide text-white/60">Nível</span>
-              <input value={nivel} onChange={(e) => setNivel(e.target.value)} placeholder="Iniciante" className={campo} />
-            </label>
-            <label className="flex flex-1 flex-col gap-1">
-              <span className="text-xs font-semibold uppercase tracking-wide text-white/60">Nº sócio</span>
-              <input value={socio} onChange={(e) => setSocio(e.target.value)} placeholder="Opcional" className={campo} />
-            </label>
-          </div>
+          {/* EMPILHADOS (não lado a lado): dois inputs numa row estouravam a
+              largura no mobile — input tem largura intrínseca (~20 chars) e não
+              encolhe abaixo dela, empurrando scroll horizontal na página toda.
+              Mesmo bug (e mesma correção) do Nome/Sobrenome do /perfil. */}
+          <label className="flex flex-col gap-1">
+            <span className="text-xs font-semibold uppercase tracking-wide text-white/60">Nível</span>
+            <input value={nivel} onChange={(e) => setNivel(e.target.value)} placeholder="Iniciante" className={campo} />
+          </label>
+
+          <label className="flex flex-col gap-1">
+            <span className="text-xs font-semibold uppercase tracking-wide text-white/60">Nº sócio</span>
+            <input value={socio} onChange={(e) => setSocio(e.target.value)} placeholder="Opcional" className={campo} />
+          </label>
 
           <label className="flex flex-col gap-1">
             <span className="text-xs font-semibold uppercase tracking-wide text-white/60">Horário de aula</span>
@@ -522,7 +527,9 @@ function AlunoFormModal({
               className="flex h-12 flex-1 items-center justify-center gap-2 rounded-lg bg-white text-base font-bold text-neutral-900 transition hover:bg-white/90 disabled:cursor-not-allowed disabled:opacity-40"
             >
               {salvando ? <Loader2 className="h-5 w-5 animate-spin" /> : <Check className="h-5 w-5" />}
-              {editar ? 'Salvar alterações' : 'Salvar'}
+              {/* "Salvar" nos dois modos: "Salvar alterações" quebrava em duas
+                  linhas no mobile e não acrescenta informação. */}
+              Salvar
             </button>
           </div>
 
