@@ -203,6 +203,9 @@ type AlunoRpcRow = {
   display_name: string | null
   display_phone: string | null
   avatar_url: string | null
+  email: string | null
+  idade: number | null
+  nascimento_mes_ano: string | null
   invite_token: string | null
   invite_status: string | null
   invite_last_sent_at: string | null
@@ -220,6 +223,12 @@ type Aluno = {
   /** O aluno é dono de si (members.profile_id preenchido) — a verdade da soberania. */
   isClaimed: boolean
   avatarUrl: string | null
+  /** Do profile do aluno (login Google/OTP). Só cadastrado; desambigua homônimos. */
+  email: string | null
+  /** Anos completos, DERIVADO no banco. O dia do nascimento nunca chega aqui. */
+  idade: number | null
+  /** 'MM/AAAA' — granularidade máxima que sai do banco. */
+  nascimentoMesAno: string | null
   conviteToken: string | null
   conviteStatus: string | null
   conviteEnviadoEm: string | null
@@ -235,6 +244,9 @@ function alunoDaRpc(r: AlunoRpcRow): Aluno {
     class_schedule: r.class_schedule,
     isClaimed: Boolean(r.is_claimed),
     avatarUrl: r.avatar_url,
+    email: r.email,
+    idade: r.idade,
+    nascimentoMesAno: r.nascimento_mes_ano,
     conviteToken: r.invite_token,
     conviteStatus: r.invite_status,
     conviteEnviadoEm: r.invite_last_sent_at,
@@ -307,7 +319,11 @@ function AlunoCard({
       return a.phone
     }
   })()
+  // A IDADE entra junto dos detalhes (útil para montar categoria/turma de
+  // relance). O EMAIL fica só no modal — no card seria ruído numa linha que já
+  // carrega nome, badge e celular.
   const detalhes = [
+    a.idade !== null ? { label: 'Idade', valor: `${a.idade}` } : null,
     a.level ? { label: 'Nível', valor: a.level } : null,
     a.member_number ? { label: 'Sócio', valor: a.member_number } : null,
     a.class_schedule ? { label: 'Aula', valor: a.class_schedule } : null,
@@ -525,6 +541,10 @@ function AlunoFormModal({
   onDone: (msg: string) => void
 }) {
   const editar = aluno !== null
+  // SOBERANIA (Fatia 3): aluno CADASTRADO tem nome/celular/email/idade vindos do
+  // profile DELE — aqui viram texto, não campo. O banco já recusa a escrita
+  // (Fatia 2); a tela apenas para de oferecer o que não é do professor.
+  const cadastrado = editar && Boolean(aluno?.isClaimed)
   const telInicial = (() => {
     if (!aluno?.phone) return ''
     try {
@@ -554,15 +574,21 @@ function AlunoFormModal({
   const celularInvalido = celularPreenchido && e164 === ''
 
   // DIRTY (só na edição): Salvar habilita se algum campo divergiu do original.
-  const dirty =
-    !editar ||
-    nome.trim() !== (aluno?.name ?? '').trim() ||
-    (e164 || '') !== (aluno?.phone ?? '') ||
+  // Para CADASTRADO, nome/celular não são mais editáveis — incluí-los na conta
+  // deixaria o Salvar preso, porque eles nunca mudam.
+  const dirtyPedagogico =
     nivel.trim() !== (aluno?.level ?? '').trim() ||
     socio.trim() !== (aluno?.member_number ?? '').trim() ||
     horario.trim() !== (aluno?.class_schedule ?? '').trim()
 
-  const podeSalvar = nomeOk && !celularInvalido && dirty && !salvando && !removendo
+  const dirty =
+    !editar ||
+    dirtyPedagogico ||
+    (!cadastrado &&
+      (nome.trim() !== (aluno?.name ?? '').trim() || (e164 || '') !== (aluno?.phone ?? '')))
+
+  const podeSalvar =
+    (cadastrado || nomeOk) && (cadastrado || !celularInvalido) && dirty && !salvando && !removendo
 
   const norm = (s: string) => {
     const t = s.trim()
@@ -576,10 +602,13 @@ function AlunoFormModal({
     const supabase = createBrowserSupabaseClient()
     // coach_id/role NÃO vão no payload — as RPCs escopam por coach_id=auth.uid().
     if (editar && aluno) {
+      // Aluno CADASTRADO: nem enviamos identidade. O banco já a congela (Fatia
+      // 2, o `case` em coach_update_student), mas mandar null deixa a intenção
+      // explícita — o professor está salvando ANOTAÇÃO, não identidade.
       const { error } = await supabase.rpc('coach_update_student', {
         p_student_id: aluno.id,
-        p_name: nome.trim(),
-        p_phone: e164 || null,
+        p_name: cadastrado ? null : nome.trim(),
+        p_phone: cadastrado ? null : e164 || null,
         p_level: norm(nivel),
         p_member_number: norm(socio),
         p_class_schedule: norm(horario),
@@ -652,22 +681,82 @@ function AlunoFormModal({
         </div>
 
         <div className="flex flex-col gap-3 px-5 py-5">
-          <label className="flex flex-col gap-1">
-            <span className="text-xs font-semibold uppercase tracking-wide text-white/60">Nome *</span>
-            <input value={nome} onChange={(e) => setNome(e.target.value)} autoFocus placeholder="Nome do aluno" className={campo} />
-          </label>
+          {cadastrado ? (
+            /* BLOCO 1 — DADOS DO ALUNO (leitura). Ele criou conta e declarou
+               quem é; o professor lê, não escreve. O tick verde é o mesmo do
+               /perfil, e a frase final ensina a regra em cinco palavras. */
+            <div className="rounded-lg border border-white/10 bg-white/5 p-3">
+              <p className="mb-2.5 text-xs font-semibold uppercase tracking-wide text-white/40">
+                Dados do aluno
+              </p>
+              <div className="flex items-start gap-3">
+                {aluno?.avatarUrl ? (
+                  /* eslint-disable-next-line @next/next/no-img-element */
+                  <img
+                    src={aluno.avatarUrl}
+                    alt=""
+                    className="h-11 w-11 shrink-0 rounded-full object-cover"
+                  />
+                ) : (
+                  <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/10 text-base font-bold text-white/70">
+                    {(aluno?.name ?? '?').trim().charAt(0).toUpperCase() || '?'}
+                  </span>
+                )}
+                <div className="min-w-0 flex-1">
+                  <p className="flex items-center gap-1.5 text-base font-bold">
+                    <span className="truncate">{aluno?.name ?? '—'}</span>
+                    <BadgeCheck
+                      className="h-4 w-4 shrink-0 text-emerald-400"
+                      aria-label="Identidade confirmada pelo aluno"
+                    />
+                  </p>
+                  {telInicial && <p className="mt-0.5 truncate text-sm text-white/60">{telInicial}</p>}
+                  {aluno?.email && <p className="truncate text-sm text-white/50">{aluno.email}</p>}
+                  {aluno?.idade !== null && aluno?.idade !== undefined && (
+                    <p className="mt-0.5 text-sm text-white/50">
+                      Idade: {aluno.idade} anos
+                      {aluno.nascimentoMesAno ? ` · ${aluno.nascimentoMesAno}` : ''}
+                    </p>
+                  )}
+                </div>
+              </div>
+              <p className="mt-2.5 text-xs text-white/40">Informado pelo próprio aluno.</p>
+            </div>
+          ) : (
+            <>
+              <label className="flex flex-col gap-1">
+                <span className="text-xs font-semibold uppercase tracking-wide text-white/60">Nome *</span>
+                <input value={nome} onChange={(e) => setNome(e.target.value)} autoFocus placeholder="Nome do aluno" className={campo} />
+              </label>
 
-          <label className="flex flex-col gap-1">
-            <span className="text-xs font-semibold uppercase tracking-wide text-white/60">Celular</span>
-            <input
-              value={celular}
-              onChange={(e) => setCelular(new AsYouType('BR').input(e.target.value))}
-              inputMode="tel"
-              placeholder="+55 (11) 95050-7175"
-              className={campo}
-            />
-            {celularInvalido && <span className="text-xs text-white/50">Número inválido. Deixe vazio ou corrija.</span>}
-          </label>
+              <label className="flex flex-col gap-1">
+                <span className="text-xs font-semibold uppercase tracking-wide text-white/60">Celular</span>
+                <input
+                  value={celular}
+                  onChange={(e) => setCelular(new AsYouType('BR').input(e.target.value))}
+                  inputMode="tel"
+                  placeholder="+55 (11) 95050-7175"
+                  className={campo}
+                />
+                {celularInvalido && <span className="text-xs text-white/50">Número inválido. Deixe vazio ou corrija.</span>}
+              </label>
+
+              {/* Combina a expectativa ANTES de ela virar surpresa: o dia em que
+                  o aluno criar a conta, estes dois campos deixam de ser do
+                  professor — e ninguém vai achar que perdeu uma função. */}
+              <p className="-mt-1 text-xs text-white/40">
+                Você anotou estes dados. Quando o aluno criar a conta, ele passa a mantê-los.
+              </p>
+            </>
+          )}
+
+          {/* BLOCO 2 — SUAS ANOTAÇÕES (sempre editável, nos dois casos): é a
+              visão do professor sobre o aluno, não identidade. */}
+          {cadastrado && (
+            <p className="mt-1 text-xs font-semibold uppercase tracking-wide text-white/40">
+              Suas anotações
+            </p>
+          )}
 
           {/* EMPILHADOS (não lado a lado): dois inputs numa row estouravam a
               largura no mobile — input tem largura intrínseca (~20 chars) e não
