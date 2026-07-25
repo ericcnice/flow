@@ -102,6 +102,17 @@ CAMINHO: a idade-limite vira CONFIGURAÇÃO. Antes de baixar de 18, VALIDAÇÃO 
 
 Este é um dos pontos mais sensíveis da revisão jurídica (art. 14) — reforçar na lista de revisão dos T&C.
 
+## Furo de proteção de menores descoberto no QA da B.1c (tratar na B.2)
+TESTE REAL (William, conta de menor no Google Family Link): revelou dois problemas de ORDEM/proteção que a B.2 deve fechar:
+
+1. CLAIM RODA ANTES DA VERIFICAÇÃO DE IDADE: hoje o fluxo é login → claim (vincula members.profile_id) → depois pede idade → parede. Quando é menor, o vínculo JÁ ACONTECEU quando a parede aparece = conta órfã de menor vinculada ao roster sem cadastro completo. CORREÇÃO (B.2): verificar idade ANTES de vincular — se menor, NÃO fazer o claim (deixar para o responsável). A ordem correta é idade → (se adulto) claim → cadastro.
+
+2. MENOR CONTORNA A PAREDE PELO /PERFIL: após o claim + parede, o menor foi ao /perfil (que detecta "sem T&C" e pede aceite) e CONSEGUIU aceitar os termos + marketing, contornando a parede da landing. O /perfil NÃO checa idade. CORREÇÃO (B.2): o /perfil (ou o app) precisa respeitar a idade — um menor não deve conseguir completar cadastro/aceitar T&C por NENHUM caminho. Possivelmente: se birth_date indica menor (ou está ausente + conta veio de convite de menor), bloquear o cadastro até haver fluxo parental.
+
+3. CAMADA EXTERNA (bônus): o Google Family Link já exige consentimento parental para o menor logar em apps novos — reforço externo antes de chegar ao Flow. Não substitui a proteção do Flow, mas é uma camada a mais.
+
+Esses furos NÃO são exploráveis por acidente no fluxo adulto normal (precisam de conta de menor + navegação deliberada), mas são proteção de menores = prioridade da B.2. A B.2 (consentimento parental + dependentes) fecha os três + trata a conta órfã (apagar/marcar/congelar). Reforça a necessidade de revisão jurídica do art. 14.
+
 ## Convite do oponente / de partida (visão — evolução do A4, fatia após o convite do professor)
 A viralização que NÃO depende do professor — como o Flow atravessa para novos círculos, fora do clube de origem.
 
