@@ -31,7 +31,8 @@ import { createBrowserSupabaseClient } from '@/lib/supabase/browser-client'
 import { useSession } from '@/lib/hooks/use-session'
 import { LoginPanel } from '@/components/auth/login-panel'
 import { ProfileForm } from '@/components/auth/profile-form'
-import { IDADE_MINIMA } from '@/lib/legal'
+import { getConsent, saveConsentInitial } from '@/lib/supabase/consents'
+import { IDADE_MINIMA, TOS_VERSION } from '@/lib/legal'
 
 type Convite = {
   coach_name: string | null
@@ -60,6 +61,7 @@ type Fase =
   | 'claiming' // logado, vinculando
   | 'claimUsed' // o claim disse: outra conta ficou com este aluno
   | 'cadastro' // vinculado, falta completar o perfil
+  | 'aceite' // perfil pronto, falta SÓ o aceite dos termos
   | 'menor' // parede da idade (o fluxo de menor é a B.2)
   | 'sucesso'
 
@@ -103,6 +105,85 @@ function Cartao({
       <h1 className="text-lg font-semibold tracking-tight">{titulo}</h1>
       <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">{texto}</p>
       {children}
+    </div>
+  )
+}
+
+/**
+ * Passo SÓ DE ACEITE — para quem chega ao convite já com o perfil preenchido.
+ * Grava pelo MESMO caminho do cadastro do fim de jogo (saveConsentInitial →
+ * public.consents, com a versão vigente dos termos), então o registro do aceite
+ * é idêntico venha de onde vier.
+ */
+function AceiteTermos({ user, onDone }: { user: User; onDone: () => void }) {
+  const [aceite, setAceite] = useState(false)
+  const [marketing, setMarketing] = useState(false)
+  const [salvando, setSalvando] = useState(false)
+  const [erro, setErro] = useState<string | null>(null)
+
+  async function salvar() {
+    if (!aceite || salvando) return
+    setSalvando(true)
+    setErro(null)
+    const { error } = await saveConsentInitial(user.id, { tosVersion: TOS_VERSION, marketing })
+    if (error) {
+      setErro('Não deu para registrar seu aceite agora. Tente novamente.')
+      setSalvando(false)
+      return
+    }
+    onDone()
+  }
+
+  return (
+    <div className="rounded-2xl border border-white/10 bg-neutral-900 p-5 text-white">
+      <div className="flex flex-col gap-2.5 rounded-lg border border-white/10 bg-white/5 p-3">
+        <label className="flex cursor-pointer items-start gap-2.5 text-sm text-white/80">
+          <input
+            type="checkbox"
+            checked={aceite}
+            onChange={(e) => setAceite(e.target.checked)}
+            className="mt-0.5 h-4 w-4 shrink-0 accent-white"
+          />
+          <span>
+            Li e aceito os{' '}
+            <a href="/termos" target="_blank" rel="noreferrer" className="underline underline-offset-2 hover:text-white">
+              Termos de Uso
+            </a>{' '}
+            e a{' '}
+            <a href="/privacidade" target="_blank" rel="noreferrer" className="underline underline-offset-2 hover:text-white">
+              Política de Privacidade
+            </a>
+            . <span className="text-white/50">(obrigatório)</span>
+          </span>
+        </label>
+        <label className="flex cursor-pointer items-start gap-2.5 text-sm text-white/80">
+          <input
+            type="checkbox"
+            checked={marketing}
+            onChange={(e) => setMarketing(e.target.checked)}
+            className="mt-0.5 h-4 w-4 shrink-0 accent-white"
+          />
+          <span>
+            Quero receber novidades do Flow por email. <span className="text-white/50">(opcional)</span>
+          </span>
+        </label>
+      </div>
+
+      {erro && (
+        <p role="alert" className="mt-3 text-sm text-red-400">
+          {erro}
+        </p>
+      )}
+
+      <button
+        type="button"
+        onClick={salvar}
+        disabled={!aceite || salvando}
+        className="mt-4 flex h-12 w-full items-center justify-center gap-2 rounded-lg bg-white text-base font-bold text-neutral-900 transition hover:bg-white/90 disabled:cursor-not-allowed disabled:opacity-40"
+      >
+        {salvando ? <Loader2 className="h-5 w-5 animate-spin" /> : <Check className="h-5 w-5" />}
+        Continuar
+      </button>
     </div>
   )
 }
@@ -165,16 +246,33 @@ export default function ConvitePage() {
     async (u: User) => {
       const supabase = createBrowserSupabaseClient()
 
-      // Perfil já completo (alguém que JÁ usava o Flow aceitando um convite) →
-      // pula o cadastro. Mesma régua de completude do resto do app (nome+celular).
-      const { data: perfil } = await supabase
-        .from('profiles')
-        .select('name, phone')
-        .eq('id', u.id)
-        .maybeSingle()
+      // COMPLETUDE = perfil (nome+celular) E CONSENTIMENTO da versão vigente.
+      //
+      // ⚠️ O consentimento faz parte da régua de propósito. Olhar só
+      // nome+celular deixava um buraco: quem chegasse aqui com o perfil já
+      // preenchido (teste anterior, cadastro pelo fim de jogo, ou uma falha de
+      // rede na gravação do consentimento seguida de reload) ia DIRETO para o
+      // sucesso — cadastrado, vinculado ao professor e SEM aceite algum
+      // registrado em public.consents. Nenhuma conta pode fechar este fluxo sem
+      // T&C.
+      const [{ data: perfil }, consent] = await Promise.all([
+        supabase.from('profiles').select('name, phone').eq('id', u.id).maybeSingle(),
+        getConsent(u.id),
+      ])
 
-      if (perfil?.name && perfil?.phone) {
+      const perfilCompleto = Boolean(perfil?.name && perfil?.phone)
+      const consentimentoOk = consent?.tosVersion === TOS_VERSION
+
+      if (perfilCompleto && consentimentoOk) {
         setFase('sucesso')
+        return
+      }
+
+      // Perfil pronto, faltando só o aceite → passo curto (não reabre o
+      // cadastro inteiro, que pediria username de novo e acusaria o próprio
+      // @ como ocupado).
+      if (perfilCompleto) {
+        setFase('aceite')
         return
       }
 
@@ -342,6 +440,19 @@ export default function ConvitePage() {
             </Link>
           </div>
         </div>
+      </Moldura>
+    )
+  }
+
+  // ------------------------------------ ACEITE (perfil pronto, falta o T&C)
+  if (fase === 'aceite' && user) {
+    return (
+      <Moldura>
+        <h1 className="text-center text-xl font-semibold tracking-tight">Falta só uma coisa</h1>
+        <p className="mx-auto mt-1.5 mb-5 max-w-xs text-center text-sm text-muted-foreground">
+          Seu perfil já está pronto. Aceite os termos para entrar na lista de {coach}.
+        </p>
+        <AceiteTermos user={user} onDone={() => setFase('sucesso')} />
       </Moldura>
     )
   }
