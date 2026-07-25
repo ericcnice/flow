@@ -35,6 +35,20 @@ PWA offline-first de placar para esportes de raquete (tênis, beach, padel, squa
 - Slug de venue idêntico nos dois sistemas: `CLUBS` estático (`lib/clubs-config.ts`) valida a jornada; `venues` (banco) serve o admin. Clube novo entra nos DOIS.
 - Slug travado no dashboard até a unificação. Rename futuro será com popup de aviso (QRs impressos param), NÃO redirect.
 
+## A CARTEIRINHA FLOW (conceito central de identidade)
+O profile do jogador (nome, foto, tick verde de verificado, celular confirmado, histórico de jogos) É uma CARTEIRINHA de identidade portátil do jogador — "este é o Eric Nice, verificado, com estes jogos". Não é "cadastro de aluno"; é "identidade do jogador", que serve a TODOS os contextos.
+
+POR QUE É O ATIVO CENTRAL: a carteirinha é o que torna os convites desejáveis. A pessoa não se cadastra por burocracia — se cadastra para TER uma carteirinha (identidade, histórico, o tick verde = prova social). O jogo/aula é a isca; a carteirinha é o que ela ganha e leva consigo.
+
+O QUE PENDURA NA CARTEIRINHA (cada contexto enriquece a mesma identidade):
+- Aluno de professor (feito: convite do professor A/B.1) → "sou aluno da Ana"
+- Jogador em jogos (próximo: convite de jogo / slots de identidade no placar) → histórico de partidas com identidade
+- Futuro: ranking, torneios, estatísticas → tudo pendura na mesma carteirinha
+
+A INFRAESTRUTURA DE HOJE É A CARTEIRINHA: o cadastro, o claim, a landing /convite/{token}, a foto, o tick verde, a soberania de dados — tudo isso é a infra da carteirinha, reaproveitável em cada novo contexto. O convite de jogo REUSA quase inteiro (landing, cadastro, claim); o que muda é o gatilho (nasce no placar, não no roster), o vínculo (slot do jogo, não coach) e o "voltar ao jogo" (depende dos slots de identidade no placar = A4).
+
+A carteirinha é o "passaporte" do jogador no ecossistema Flow. Cada convite (professor, jogo, oponente) é uma porta para CRIAR ou USAR a carteirinha. É por isso que a infra é tão reaproveitável — não construímos "cadastro de aluno", construímos "identidade do jogador".
+
 ## Modelo de identidade e negócio (Login Fase A)
 - **Hierarquia**: **Player** (todos; role padrão criado pela trigger `handle_new_user` no signup) → **Coach** (o super_admin promove via `members.role='coach'` no dashboard) → **Coach com marca+patrocinador no QR** (fatia futura; reusa `sponsors.member_id` apontando pro coach).
 - **Cadeia técnica existente**: `auth.users` → `profiles` (`id`, `name`, `email`, `phone`) → `members` (via `profile_id`, **hoje sempre null**) + `user_roles` (via `user_id`). A trigger de signup cria o `profile` + `user_roles='player'`; **NÃO cria `member`** e **NÃO promove coach**. `profiles.id = auth.users.id`; `user_roles` é a autorização de login (≠ `members.role`, que é atributo de pessoa).
