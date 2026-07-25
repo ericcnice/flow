@@ -80,7 +80,13 @@ REGRA: quem tem conta é dono da própria identidade. `members.profile_id` é a 
 
 EMAIL NO BLOCO "DADOS DO ALUNO" (Fatia 3): além de nome/celular/foto, mostrar o EMAIL do profile. É dado de RETORNO do aluno (vem do login Google/OTP, como tudo que ele declara), NÃO algo que o coach digita — mesma lógica de soberania. MOTIVO PRÁTICO: DESAMBIGUAR alunos homônimos — com dois "Eric Nice" no roster, o email distingue ericnice@me.com de eric.nice@pwerio.com na hora. A RPC `coach_list_students` precisa passar a retornar o email do profile, só quando `is_claimed` (conta excluída/`deleted_at` → sem email, mesma regra de nome/phone).
 
-`birth_date` continua FORA da RPC e da tela — dado de menor, nunca exibido ao coach. Email é ok exibir; nascimento não. A distinção é deliberada: o retorno da RPC é escolhido a dedo, campo a campo, e é por isso que a leitura é RPC e não policy (RLS filtra LINHA, não coluna — abrir a linha entregaria o birth_date junto).
+IDADE NO ROSTER — CORREÇÃO da regra anterior ("birth_date nunca sai"): o coach PRECISA da idade dos alunos para organizar torneios (categorias/datas de corte); negar seria proteção no lugar errado. DECISÃO (Eric): expor ao coach IDADE + MÊS/ANO, SEM O DIA. Ex.: "12 anos · 12/2014". RAZÃO: idade + mês/ano cobrem categorização (sub-14) e datas de corte de torneio (que usam ano/mês, nunca dia); omitir o DIA remove a granularidade que torna a data de nascimento um identificador preciso (fraude/cruzamento) sem tirar utilidade esportiva. O mínimo de dado sensível para o máximo de utilidade.
+
+IMPLEMENTAÇÃO na `coach_list_students`: NÃO retornar `birth_date` cru. Retornar campos DERIVADOS — `idade` (calculada, integer) + `birth_month_year` (text, ex. "12/2014"). O DIA fica no banco e nunca sai na RPC. Só para `is_claimed`; conta excluída (`deleted_at`) → sem idade, como nome/email/phone.
+
+CONTEXTO DE EXPOSIÇÃO: a idade sai SÓ para o coach DONO do aluno (a RPC é escopada por `coach_id = auth.uid()`), não para qualquer um — o contexto professor↔seu aluno legitima. A parede dos 18, o consentimento parental (B.2) e o Family Link continuam protegendo o CADASTRO; a idade no roster é uso pedagógico legítimo, camada diferente.
+
+Isto reforça (não enfraquece) o motivo de a leitura ser RPC e não policy: o retorno é escolhido a dedo, campo a campo, e derivar idade/mês-ano só é possível assim. Uma policy em `profiles` entregaria a LINHA inteira, com o dia junto (RLS filtra LINHA, não coluna).
 
 ## Convite viral do professor (visão, fatia após o avatar)
 A máquina de captação via professor. DOIS tipos de convite:
