@@ -24,7 +24,10 @@ import { saveConsentInitial } from '@/lib/supabase/consents'
 const DEFAULT_COUNTRY = 'BR' as const
 const USERNAME_RE = /^[a-z0-9][a-z0-9-]{2,29}$/
 
-type Avail = 'idle' | 'checking' | 'ok' | 'taken'
+// 'taken' = o valor É de outra pessoa. 'erro' = NÃO DEU para verificar (RPC/rede).
+// Os dois bloqueiam o Salvar, mas por motivos opostos — misturá-los num 'idle'
+// mudo era o que deixava o botão morto sem explicação.
+type Avail = 'idle' | 'checking' | 'ok' | 'taken' | 'erro'
 
 /** "Eric Nice" → "ericnice". */
 export function slugify(s: string): string {
@@ -67,7 +70,7 @@ function useAvailability(rpc: string, argKey: string, value: string, ready: bool
       const supabase = createBrowserSupabaseClient()
       const { data, error } = await supabase.rpc(rpc, { [argKey]: value })
       if (!alive) return
-      setStatus(error ? 'idle' : data ? 'ok' : 'taken')
+      setStatus(error ? 'erro' : data ? 'ok' : 'taken')
     }, 400)
     return () => {
       alive = false
@@ -92,6 +95,7 @@ function StatusPill({ status, invalid }: { status: Avail; invalid: boolean }) {
       </span>
     )
   if (status === 'taken') return <span className="text-xs text-destructive">✗ indisponível</span>
+  if (status === 'erro') return <span className="text-xs text-white/50">não deu para verificar</span>
   return null
 }
 
@@ -153,7 +157,9 @@ export function ProfileForm({
   const [marketing, setMarketing] = useState(false)
 
   // No modo editar o usuário já "tocou" (não auto-sugere sobre o valor atual).
-  const usernameTocado = useRef(mode === 'editar')
+  // Idem quando o cadastro chega COM username (convite de quem já tinha perfil):
+  // sem isto, a sugestão automática trocaria o @ que a pessoa já usa.
+  const usernameTocado = useRef(mode === 'editar' || Boolean(initial?.username))
   const variacaoTentada = useRef(false)
 
   // Sugestão automática — SÓ no cadastro e enquanto não tocou.
@@ -211,6 +217,23 @@ export function ProfileForm({
     dirty &&
     !salvando
 
+  // POR QUE o Salvar está desabilitado. Botão morto sem explicação é becoo sem
+  // saída — a pessoa não tem como descobrir que o problema é o celular do
+  // cadastro do professor já estar em outra conta, por exemplo. Só fala dos
+  // motivos ACIONÁVEIS (campo vazio não precisa de aviso: está visivelmente
+  // vazio) e some assim que a pendência é resolvida.
+  const motivoBloqueio = (() => {
+    if (salvando || podeSalvar) return null
+    if (usernameAvail === 'taken') return 'Este @username já está em uso. Escolha outro.'
+    if (phoneAvail === 'taken') return 'Este celular já está cadastrado em outra conta.'
+    if (usernameAvail === 'erro' || phoneAvail === 'erro')
+      return 'Não deu para verificar a disponibilidade agora. Confira sua conexão e tente de novo.'
+    if (usernameAvail === 'checking' || phoneAvail === 'checking') return null // transitório
+    if (pedirNascimento && !nascimentoValido) return 'Informe sua data de nascimento.'
+    if (mode === 'cadastro' && !aceiteTos) return 'Aceite os Termos para continuar.'
+    return null
+  })()
+
   async function salvar() {
     if (!podeSalvar) return
 
@@ -230,7 +253,11 @@ export function ProfileForm({
 
     // birth_date só entra no payload quando foi pedido — os chamadores antigos
     // enviam exatamente as mesmas colunas de antes.
-    const { error: pErr } = await supabase
+    // .select('id') NÃO é enfeite: um UPDATE que a RLS filtra (auth.uid() nulo
+    // ou de outra sessão) volta 204 SEM ERRO. Sem pedir as linhas afetadas, o
+    // "não gravou nada" era indistinguível de sucesso — e virava um "Pronto!"
+    // silencioso com o perfil intacto no banco.
+    const { data: linhas, error: pErr } = await supabase
       .from('profiles')
       .update(
         pedirNascimento
@@ -238,8 +265,14 @@ export function ProfileForm({
           : { name: nomeCompleto, phone: e164 },
       )
       .eq('id', user.id)
+      .select('id')
     if (pErr) {
       setErro(pErr.message)
+      setSalvando(false)
+      return
+    }
+    if (!linhas || linhas.length === 0) {
+      setErro('Não foi possível salvar. Entre novamente e tente de novo.')
       setSalvando(false)
       return
     }
@@ -397,6 +430,7 @@ export function ProfileForm({
           <Check className="h-4 w-4" /> Salvo.
         </p>
       )}
+      {motivoBloqueio && <p className="text-sm text-white/60">{motivoBloqueio}</p>}
 
       <div className="mt-1 flex gap-2">
         {mode === 'editar' && onCancel && (

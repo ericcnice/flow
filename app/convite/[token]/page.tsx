@@ -30,7 +30,7 @@ import type { User } from '@supabase/supabase-js'
 import { createBrowserSupabaseClient } from '@/lib/supabase/browser-client'
 import { useSession } from '@/lib/hooks/use-session'
 import { LoginPanel } from '@/components/auth/login-panel'
-import { ProfileForm } from '@/components/auth/profile-form'
+import { ProfileForm, splitName } from '@/components/auth/profile-form'
 import { getConsent, saveConsentInitial } from '@/lib/supabase/consents'
 import { IDADE_MINIMA, TOS_VERSION } from '@/lib/legal'
 
@@ -197,6 +197,13 @@ export default function ConvitePage() {
   const [convite, setConvite] = useState<Convite | null>(null)
   // Celular do member (o número por onde o convite chegou) para pré-preencher.
   const [telefoneInicial, setTelefoneInicial] = useState<string>('')
+  // Dados de quem JÁ tinha perfil e caiu no formulário (falta nascimento e/ou
+  // T&C): pré-preenche e evita que o próprio @/celular sejam acusados.
+  const [perfilAtual, setPerfilAtual] = useState<{
+    initial: { nome: string; sobrenome: string; username: string; phone: string }
+    ownUsername: string
+    currentPhone: string
+  } | null>(null)
 
   // ------------------------------------------------------------ 1. ler o convite
   useEffect(() => {
@@ -246,33 +253,62 @@ export default function ConvitePage() {
     async (u: User) => {
       const supabase = createBrowserSupabaseClient()
 
-      // COMPLETUDE = perfil (nome+celular) E CONSENTIMENTO da versão vigente.
+      // ⚠️ A RÉGUA DE COMPLETUDE É O CORAÇÃO DESTE FLUXO — e foi por ela ser
+      // frouxa que o "Pronto!" apareceu sem cadastro nenhum. Um perfil com
+      // nome+celular (vindos da trigger de signup ou de um uso anterior do app)
+      // PULAVA o formulário e ia direto ao sucesso: sem data de nascimento
+      // (decisão da B.1: idade é obrigatória e é ela que separa adulto de menor)
+      // e sem aceite de T&C registrado em public.consents.
       //
-      // ⚠️ O consentimento faz parte da régua de propósito. Olhar só
-      // nome+celular deixava um buraco: quem chegasse aqui com o perfil já
-      // preenchido (teste anterior, cadastro pelo fim de jogo, ou uma falha de
-      // rede na gravação do consentimento seguida de reload) ia DIRETO para o
-      // sucesso — cadastrado, vinculado ao professor e SEM aceite algum
-      // registrado em public.consents. Nenhuma conta pode fechar este fluxo sem
-      // T&C.
+      // Agora "pronto" exige as QUATRO coisas: nome, celular, nascimento e
+      // consentimento da versão vigente. Faltando qualquer uma, o formulário
+      // aparece — ninguém fecha o convite pela porta dos fundos.
       const [{ data: perfil }, consent] = await Promise.all([
-        supabase.from('profiles').select('name, phone').eq('id', u.id).maybeSingle(),
+        supabase.from('profiles').select('name, phone, birth_date').eq('id', u.id).maybeSingle(),
         getConsent(u.id),
       ])
 
-      const perfilCompleto = Boolean(perfil?.name && perfil?.phone)
+      const temIdentidade = Boolean(perfil?.name && perfil?.phone)
+      const temNascimento = Boolean(perfil?.birth_date)
       const consentimentoOk = consent?.tosVersion === TOS_VERSION
 
-      if (perfilCompleto && consentimentoOk) {
+      if (temIdentidade && temNascimento && consentimentoOk) {
         setFase('sucesso')
         return
       }
 
-      // Perfil pronto, faltando só o aceite → passo curto (não reabre o
-      // cadastro inteiro, que pediria username de novo e acusaria o próprio
-      // @ como ocupado).
-      if (perfilCompleto) {
+      // Cadastro inteiro pronto, faltando SÓ o aceite → passo curto (reabrir o
+      // formulário completo pediria username de novo à toa).
+      if (temIdentidade && temNascimento) {
         setFase('aceite')
+        return
+      }
+
+      // Vai para o formulário. Se a pessoa JÁ tinha perfil (é o caso que furava
+      // o gate), leva os dados dela pré-preenchidos — e `ownUsername`/
+      // `currentPhone` impedem que o check de disponibilidade acuse o PRÓPRIO
+      // @ e o PRÓPRIO celular como ocupados, que travaria o Salvar.
+      if (perfil?.name || perfil?.phone) {
+        const meta = (u.user_metadata ?? {}) as Record<string, unknown>
+        const [primeiro, resto] = splitName(perfil?.name ?? undefined)
+        const telE164 = perfil?.phone ?? ''
+        let telExibicao = telE164
+        try {
+          if (telE164) telExibicao = parsePhoneNumber(telE164)?.formatInternational() ?? telE164
+        } catch {
+          /* mantém o E.164 */
+        }
+        setPerfilAtual({
+          initial: {
+            nome: primeiro,
+            sobrenome: resto,
+            username: (meta.username as string) ?? '',
+            phone: telExibicao,
+          },
+          ownUsername: (meta.username as string) ?? '',
+          currentPhone: telE164,
+        })
+        setFase('cadastro')
         return
       }
 
@@ -472,6 +508,9 @@ export default function ConvitePage() {
           <ProfileForm
             user={user}
             mode="cadastro"
+            initial={perfilAtual?.initial}
+            ownUsername={perfilAtual?.ownUsername}
+            currentPhone={perfilAtual?.currentPhone}
             telefoneInicial={telefoneInicial}
             pedirNascimento
             onMenorDeIdade={() => setFase('menor')}
