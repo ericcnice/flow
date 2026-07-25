@@ -161,6 +161,32 @@ SEQUÊNCIA: fatia própria, DEPOIS do convite do professor (Fatia A disparo + Fa
 
 Relacionado: o convite GENÉRICO (tipo 2) também não é exclusivo do professor — qualquer usuário pode ter um link de indicação com atribuição (incentivo a definir: social/vaidade, recompensa, ou utilidade). O convite do oponente é a forma mais forte disso, porque o incentivo (o jogo) é intrínseco.
 
+## Âncora de jogo + quadra inteligente + fila (visão — os degraus)
+CONCEITO CENTRAL — A ÂNCORA: algo que representa o jogo e recebe os jogadores. O jogador SEMPRE faz o mesmo: escaneia a âncora → sua carteirinha entra num slot do jogo. O contexto define QUEM é a âncora:
+- DENTRO DO CLUBE: a âncora é o QR DA QUADRA (fixo). O jogo VIVE NA QUADRA (no servidor), NÃO no celular de ninguém. Os celulares são apenas JANELAS para o jogo da quadra — conectam e desconectam livremente. Isso resolve "joguei cedo e fui embora com meu celular": o jogo nunca foi do celular, é da quadra; o próximo grupo abre nos celulares DELES, e a partida computa nas contas DELES.
+- FORA DO CLUBE (praia, quadra pública sem QR Flow): a âncora é o QR NO CELULAR do dono (quadra temporária). Os amigos escaneiam o celular dele e entram no jogo.
+O TIPO de âncora é definido pelo contexto (tem QR de quadra? → quadra é âncora; não tem? → celular é âncora). O celular NUNCA é âncora dentro do clube — lá sempre é a quadra.
+
+A QUADRA INTELIGENTE (contexto clube):
+- Ao primeiro que escaneia, a quadra PERGUNTA "simples ou dupla?" — ela não assume (beach pode ser 1v1 ou 2v2). Isso define quantos slots esperar (2 ou 4).
+- Cada pessoa que escaneia o MESMO QR da quadra entra no placar ao lado das anteriores. Ninguém apresenta celular. A quadra monta o jogo.
+- A pergunta "simples/dupla" se repete A CADA NOVO JOGO (o próximo da fila redefine) — senão embaralha os jogos seguintes e precisaria de reset.
+
+A FILA (quando a quadra está ocupada):
+- Quem escaneia com a quadra cheia entra na FILA, por ORDEM DE ESCANEADA (justo, sem discussão — o sistema carimba a ordem).
+- Quando o jogo acaba, a quadra PROMOVE o próximo da fila automaticamente. Os celulares do próximo grupo já escanearam (estão na fila), então quando é a vez deles, o jogo abre nos celulares deles.
+- ESPECTADOR = retenção: quem espera na fila acompanha o placar ao vivo (modo espectador, já existe) e sabe quando está perto de jogar — pode até "ir tomar um café". O próximo da fila é um espectador que vira jogador.
+
+OS QUATRO DEGRAUS (ordem de construção — cada um entrega valor e valida antes do próximo; NÃO pular para o topo, erro tipo PWER LINK):
+1. SLOTS DE IDENTIDADE NO PLACAR (A4): Jogador 1/2/3/4 viram CARTEIRINHAS (foto/tick), não rótulos genéricos. Slot vazio preenchível por nome simples (baixo valor) OU escanear/link para a carteirinha. Reusa a infra de identidade de hoje. É o TIJOLO — sem jogadores com identidade, a fila não tem de quem ser feita.
+2. ÂNCORA MÓVEL (celular-QR, praia): você joga, amigos escaneiam seu QR, entram nos slots. Caso simples, sem fila, sem quadra. Prova o átomo "escaneou → entrou no jogo". Reusa mais.
+3. ÂNCORA FIXA (quadra-QR): o QR da quadra recebe jogadores. Ainda sem fila — "escaneou a quadra → entrou no jogo da quadra". A quadra vira dona do jogo (resolve o celular-que-vai-embora).
+4. A FILA: quadra-QR + "o que fazer quando cheio" → fila por ordem, simples/dupla por jogo, promoção automática. O módulo completo de gestão de quadra.
+
+VALOR COMERCIAL: a quadra que auto-organiza a fila é feature de GESTÃO DE QUADRA que o clube valoriza (não só placar — fluxo da quadra). Tem valor de venda (clube/professor paga por organização).
+
+QUANDO: depende de validar o SPAC. Observar na validação quão comum é a FILA no mundo real: se a maioria é "marquei com amigos, jogamos, saímos" (degraus 1-2 bastam), a fila é luxo futuro; se as quadras vivem lotadas com espera (o "Rei da Quadra" do beach sugere que sim), a fila é core. Degrau 1 (slots de identidade) é o próximo passo natural e reusa a carteirinha; a fila é o destino, não a próxima fatia.
+
 ## Distribuição, parcerias e white-label (visão estratégica)
 O Flow foi construído com "superfícies de marca" que já existem (QR contextual, card de patrocinador na abertura, "Powered by Flow" clicável/rastreável, placar compartilhado, telão futuro). A mesma infraestrutura de sponsors que serve professor/clube serve parceiros comerciais — o Flow é WHITE-LABEL-READY sem reconstrução.
 
