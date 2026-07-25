@@ -18,7 +18,7 @@ import { AsYouType, isValidPhoneNumber, parsePhoneNumber } from 'libphonenumber-
 import { Check, Loader2 } from 'lucide-react'
 import type { User } from '@supabase/supabase-js'
 import { createBrowserSupabaseClient } from '@/lib/supabase/browser-client'
-import { TOS_VERSION } from '@/lib/legal'
+import { IDADE_MINIMA, TOS_VERSION, idadeEmAnos } from '@/lib/legal'
 import { saveConsentInitial } from '@/lib/supabase/consents'
 
 const DEFAULT_COUNTRY = 'BR' as const
@@ -101,6 +101,9 @@ export function ProfileForm({
   initial,
   ownUsername,
   currentPhone,
+  telefoneInicial,
+  pedirNascimento = false,
+  onMenorDeIdade,
   onDone,
   onCancel,
 }: {
@@ -112,6 +115,24 @@ export function ProfileForm({
   ownUsername?: string
   /** Celular atual em E.164 — ignorado no check (não acusa o próprio número). */
   currentPhone?: string
+  /**
+   * Celular PRÉ-PREENCHIDO no cadastro (landing do convite: o número que o
+   * professor já tinha no roster — o convite chegou por ele, então está
+   * validado na prática). Editável. Só vale quando não há `initial`.
+   */
+  telefoneInicial?: string
+  /**
+   * Pede DATA DE NASCIMENTO (LGPD art. 14). OPT-IN: default false, então os
+   * chamadores existentes (ProfileModal da tela de fim de jogo, /perfil › Meus
+   * dados) seguem EXATAMENTE como estavam — o campo nem é renderizado.
+   */
+  pedirNascimento?: boolean
+  /**
+   * Chamado quando a idade fica abaixo de IDADE_MINIMA. NADA é gravado: o
+   * chamador mostra a parede (o fluxo de menor com consentimento parental é a
+   * B.2). Sem este callback o form apenas recusa o Salvar.
+   */
+  onMenorDeIdade?: (idade: number) => void
   onDone: () => void
   onCancel?: () => void
 }) {
@@ -121,7 +142,8 @@ export function ProfileForm({
   const [nome, setNome] = useState(initial?.nome ?? defNome)
   const [sobrenome, setSobrenome] = useState(initial?.sobrenome ?? defSobre)
   const [username, setUsername] = useState(initial?.username ?? '')
-  const [phone, setPhone] = useState(initial?.phone ?? '')
+  const [phone, setPhone] = useState(initial?.phone ?? telefoneInicial ?? '')
+  const [nascimento, setNascimento] = useState('')
   const [salvando, setSalvando] = useState(false)
   const [erro, setErro] = useState<string | null>(null)
   const [ok, setOk] = useState(false)
@@ -170,6 +192,13 @@ export function ProfileForm({
     username !== (initial?.username ?? '') ||
     e164 !== (currentPhone ?? '')
 
+  // NASCIMENTO (só quando pedirNascimento). Faixa razoável: nem futuro, nem
+  // mais de 120 anos. A idade em si só é conferida no salvar — acusar "menor de
+  // idade" enquanto a pessoa ainda digita o ano seria hostil.
+  const idade = nascimento ? idadeEmAnos(nascimento) : null
+  const nascimentoValido = idade !== null && idade >= 0 && idade <= 120
+  const nascimentoInvalido = nascimento !== '' && !nascimentoValido
+
   const podeSalvar =
     nome.trim() !== '' &&
     sobrenome.trim() !== '' &&
@@ -177,21 +206,37 @@ export function ProfileForm({
     usernameAvail === 'ok' &&
     phoneValido &&
     phoneAvail === 'ok' &&
+    (!pedirNascimento || nascimentoValido) &&
     (mode === 'editar' || aceiteTos) && // T&C obrigatório no cadastro
     dirty &&
     !salvando
 
   async function salvar() {
     if (!podeSalvar) return
+
+    // PAREDE DA IDADE — antes de QUALQUER escrita. O menor não tem cadastro
+    // gravado pela metade: o chamador assume e mostra a parede (a B.2 constrói
+    // o consentimento parental). A linha é IDADE_MINIMA, em lib/legal.ts.
+    if (pedirNascimento && idade !== null && idade < IDADE_MINIMA) {
+      onMenorDeIdade?.(idade)
+      return
+    }
+
     setSalvando(true)
     setErro(null)
     setOk(false)
     const supabase = createBrowserSupabaseClient()
     const nomeCompleto = `${nome.trim()} ${sobrenome.trim()}`.trim()
 
+    // birth_date só entra no payload quando foi pedido — os chamadores antigos
+    // enviam exatamente as mesmas colunas de antes.
     const { error: pErr } = await supabase
       .from('profiles')
-      .update({ name: nomeCompleto, phone: e164 })
+      .update(
+        pedirNascimento
+          ? { name: nomeCompleto, phone: e164, birth_date: nascimento }
+          : { name: nomeCompleto, phone: e164 },
+      )
       .eq('id', user.id)
     if (pErr) {
       setErro(pErr.message)
@@ -289,6 +334,23 @@ export function ProfileForm({
           <span className="text-xs text-white/50">Número inválido. Use +código para outros países.</span>
         )}
       </label>
+
+      {/* NASCIMENTO — só quando pedido (landing do convite). O <input type=date>
+          usa o seletor nativo do celular, que é o caminho mais rápido no mobile. */}
+      {pedirNascimento && (
+        <label className="flex flex-col gap-1">
+          <span className="text-xs font-semibold uppercase tracking-wide text-white/60">
+            Data de nascimento
+          </span>
+          <input
+            type="date"
+            value={nascimento}
+            onChange={(e) => setNascimento(e.target.value)}
+            className="h-11 w-full min-w-0 rounded-lg border border-white/20 bg-white/10 px-3 text-base"
+          />
+          {nascimentoInvalido && <span className="text-xs text-white/50">Data inválida.</span>}
+        </label>
+      )}
 
       {mode === 'cadastro' && (
         <div className="flex flex-col gap-2.5 rounded-lg border border-white/10 bg-white/5 p-3">
