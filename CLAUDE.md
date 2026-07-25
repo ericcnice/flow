@@ -91,6 +91,21 @@ DESCARTADO (com motivo): integração com agenda/contatos do Google — permiss�
 
 FILOSOFIA: distribuir o cadastro pra os DONOS dos dados (professor inicia com o contato que tem; aluno/pai completa com consentimento + foto). Tira o admin de ser gargalo e responsável legal por dados de menores. Escala infinitamente. Prova social (verificado + foto + torneios) alimenta o tipo 2.
 
+## Distribuição, parcerias e white-label (visão estratégica)
+O Flow foi construído com "superfícies de marca" que já existem (QR contextual, card de patrocinador na abertura, "Powered by Flow" clicável/rastreável, placar compartilhado, telão futuro). A mesma infraestrutura de sponsors que serve professor/clube serve parceiros comerciais — o Flow é WHITE-LABEL-READY sem reconstrução.
+
+TRÊS MODELOS DE DISTRIBUIÇÃO (além de professor-paga / clube-paga):
+
+1. LOJAS DE ENCORDOAMENTO / MATERIAIS ESPORTIVOS (o mais acionável cedo): são um CANAL que já tem relação recorrente com professores de tênis/squash (raquete/corda toda semana). Modelo ganha-ganha-ganha: a loja dá "Flow com a marca dela" como agrado ao cliente (professor ganha ferramenta grátis + útil), a loja fideliza e ganha visibilidade, o Flow ganha distribuição. A loja pode revender os serviços premium (setup pago) = vira REVENDEDOR/afiliado de alto valor (traz dezenas de professores, não um). Conecta com a rede de afiliados/convite viral: a loja teria um "link de convite de loja". Radar: quando o convite viral estiver pronto.
+
+2. GRANDE MARCA ESPORTIVA (Wilson, Head): patrocínio de DISTRIBUIÇÃO por presença de marca no esporte de base — a marca aparece em cada jogo/placar/telão (mídia esportiva capilar, estar no momento em que a pessoa joga). É VENDA CORPORATIVA (reuniões, proposta, contrato grande), depende de TRAÇÃO primeiro (eles perguntam "quantos jogos/clubes por mês"). Horizonte, não próximo passo — perseguir após SPAC + professores validarem uso.
+
+3. PATROCINADOR INSTITUCIONAL (Itaú etc.): marca institucional / responsabilidade social patrocinando esporte de base. Mesma lógica da marca esportiva: venda corporativa, depende de tração, horizonte.
+
+IMPLICAÇÃO DE PRODUTO (registrar, não urgente): se o Flow vira white-label (marca da loja/Wilson), a arquitetura de sponsors precisará eventualmente de um NÍVEL DE MARCA ACIMA do clube/professor ("este Flow inteiro é da loja X"). Não urgente, mas saber que vem influencia como o sponsor system evolui.
+
+FILOSOFIA: um produto, três+ modelos de receita (professor paga / clube paga / marca patrocina distribuição), servidos pela mesma base de sponsors. Tração primeiro (SPAC), parcerias depois.
+
 ## Fluxo de trabalho
 - **Claude Chat**: estratégia, decisões, prompts. **Claude Code**: executa código, commits, push. **IA do Supabase**: verifica e roda o SQL.
 - **Método por peça**: investigação read-only → decisão no chat → prompt com intocáveis explícitos → migração verificada antes de rodar → QA de produção no celular.
