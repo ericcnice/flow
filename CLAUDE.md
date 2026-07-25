@@ -72,6 +72,16 @@ VISÃO DE CLUBE (FUTURO, registrado — próximo grande bloco quando um clube fo
 - RANKING INTERNO gerenciado pelo Flow (o capitão Lucas do beach tênis já pediu; Letz Play faz mal feito). Peça de negócio grande: faz o clube DEPENDER do Flow (o ranking oficial vive no sistema).
 - O roster simples da A3 NÃO conflita: quando o clube-com-sócios existir, os alunos cadastrados soltos podem ser vinculados aos sócios. Começar simples não fecha portas.
 
+## Soberania de dados no roster (regra + Fatia 3 pendente)
+REGRA: quem tem conta é dono da própria identidade. `members.profile_id` é a fronteira — aluno SOLTO (profile_id null) tem nome/celular como ANOTAÇÃO do professor (tudo editável); aluno CADASTRADO tem a identidade vinda do profile DELE (somente leitura para o coach). Os campos PEDAGÓGICOS (nível, nº de sócio, horário) são sempre do coach, nos dois casos.
+- **Fatia 1 (no ar)**: RPC `coach_list_students` resolve `display_name`/`display_phone`/`avatar_url` (profile quando cadastrado; anotação quando solto; `deleted_at` → volta para a anotação, senão o aluno sumiria da lista). Embed members→profiles NÃO serve: `profiles` tem RLS self, o embed devolveria null EM SILÊNCIO e o card seguiria com o nome velho. O badge "Cadastrado" deriva de `is_claimed`, não do status do convite.
+- **Fatia 2 (no ar)**: `coach_update_student` congela name/phone quando `profile_id` não é null (`case` lendo a própria linha — a trava é no BANCO, tela é uma chamada de DevTools de distância).
+- **Fatia 3 (pendente — UI)**: modal em dois blocos — "dados do aluno" (somente leitura, com o tick verde de verificado) e "suas anotações" (pedagógico, editável).
+
+EMAIL NO BLOCO "DADOS DO ALUNO" (Fatia 3): além de nome/celular/foto, mostrar o EMAIL do profile. É dado de RETORNO do aluno (vem do login Google/OTP, como tudo que ele declara), NÃO algo que o coach digita — mesma lógica de soberania. MOTIVO PRÁTICO: DESAMBIGUAR alunos homônimos — com dois "Eric Nice" no roster, o email distingue ericnice@me.com de eric.nice@pwerio.com na hora. A RPC `coach_list_students` precisa passar a retornar o email do profile, só quando `is_claimed` (conta excluída/`deleted_at` → sem email, mesma regra de nome/phone).
+
+`birth_date` continua FORA da RPC e da tela — dado de menor, nunca exibido ao coach. Email é ok exibir; nascimento não. A distinção é deliberada: o retorno da RPC é escolhido a dedo, campo a campo, e é por isso que a leitura é RPC e não policy (RLS filtra LINHA, não coluna — abrir a linha entregaria o birth_date junto).
+
 ## Convite viral do professor (visão, fatia após o avatar)
 A máquina de captação via professor. DOIS tipos de convite:
 
