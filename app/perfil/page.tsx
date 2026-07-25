@@ -363,15 +363,20 @@ function AlunoCard({
           então sai da ordem de tabulação e do leitor de tela (tabIndex=-1 +
           aria-hidden) para não duplicar "Editar Fulano". 44×44 de alvo cada. */}
       <div className="flex shrink-0 items-center gap-1 pr-2">
-        <button
-          type="button"
-          onClick={() => onConvidar(a)}
-          disabled={convidando}
-          aria-label={`Convidar ${a.name ?? 'aluno'}`}
-          className="flex h-11 w-11 items-center justify-center rounded-lg text-white/45 transition hover:bg-white/10 hover:text-emerald-400 disabled:opacity-40"
-        >
-          {convidando ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-        </button>
+        {/* CONVIDAR só faz sentido para quem ainda não tem conta. Aluno
+            cadastrado já chegou — manter o botão seria oferecer uma ação sem
+            efeito e roubar espaço do que importa. */}
+        {!a.isClaimed && (
+          <button
+            type="button"
+            onClick={() => onConvidar(a)}
+            disabled={convidando}
+            aria-label={`Convidar ${a.name ?? 'aluno'}`}
+            className="flex h-11 w-11 items-center justify-center rounded-lg text-white/45 transition hover:bg-white/10 hover:text-emerald-400 disabled:opacity-40"
+          >
+            {convidando ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+          </button>
+        )}
         <button
           type="button"
           onClick={() => onEdit(a)}
@@ -553,6 +558,8 @@ function AlunoFormModal({
       return aluno.phone
     }
   })()
+  // Só dígitos para o wa.me (o E.164 traz '+' e a exibição traz espaços).
+  const waDigitos = (aluno?.phone ?? '').replace(/\D/g, '')
 
   const [nome, setNome] = useState(aluno?.name ?? '')
   const [celular, setCelular] = useState(telInicial)
@@ -710,7 +717,25 @@ function AlunoFormModal({
                       aria-label="Identidade confirmada pelo aluno"
                     />
                   </p>
-                  {telInicial && <p className="mt-0.5 truncate text-sm text-white/60">{telInicial}</p>}
+                  {/* CELULAR CLICÁVEL: abre a conversa no WhatsApp do professor.
+                      Mesmo tratamento de dígitos do convite (wa.me não aceita
+                      '+' nem espaços). Só aqui, no bloco de leitura — no card o
+                      telefone vive dentro do <button> de editar, e um <a> ali
+                      dentro seria HTML inválido além de roubar o toque. */}
+                  {telInicial && waDigitos && (
+                    <a
+                      href={`https://wa.me/${waDigitos}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="mt-0.5 inline-flex items-center gap-1.5 truncate text-sm text-white/60 transition hover:text-emerald-400"
+                    >
+                      <MessageCircle className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                      <span className="truncate">{telInicial}</span>
+                    </a>
+                  )}
+                  {telInicial && !waDigitos && (
+                    <p className="mt-0.5 truncate text-sm text-white/60">{telInicial}</p>
+                  )}
                   {aluno?.email && <p className="truncate text-sm text-white/50">{aluno.email}</p>}
                   {aluno?.idade !== null && aluno?.idade !== undefined && (
                     <p className="mt-0.5 text-sm text-white/50">
