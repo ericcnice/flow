@@ -67,6 +67,11 @@ REGRA DE OURO: a conversão vem do DESEJO, não da coerção. PULL, não push. A
 
 CONSEQUÊNCIA DE DESIGN: a assimetria tem que ser VISÍVEL e DESEJÁVEL (a foto/tick do cadastrado deve puxar o olho, ser bonita), não escondida. Cada jogo com um cadastrado ao lado de um anônimo é um mini-comercial da carteirinha rodando na própria quadra. O tick verde e a foto (já usados como prova social no convite do professor) ganham uma segunda função: anunciar a identidade para quem ainda não tem.
 
+## Marca do Flow — tipografia e símbolo (correção, Eric)
+A fonte do Flow **É Audiowide**, com um DEGRADÊ (gradiente azul→verde) aplicado. A Audiowide é o padrão de TODOS os logos de produtos da PWER IO — usada para consistência de marca entre os produtos. NÃO há fonte arredondada separada; o registro anterior sobre isso estava incorreto.
+
+O "w" isolado (símbolo/avatar do Flow) é a letra "w" em Audiowide com o degradê. É ele que preenche o lugar do logo quando não há clube/patrocinador no contexto (jogo avulso/praia) — hoje aquele espaço é um espaçador invisível na pílula do placar.
+
 ## Onde a foto do jogador aparece (regra: função, não decoração) — decisão Eric
 A foto/avatar aparece SÓ onde tem função; NUNCA polui a tela de trabalho.
 - SCOREBOARD (marcar pontos): SEM foto. Jogadores e juiz já conhecem os nomes; a foto não ajuda a marcar ponto e polui a tela deliberadamente enxuta (o exercício de tirar ícones p/ o settings). O tick verde da 1a pode ficar (é sutil), mas foto NÃO.
