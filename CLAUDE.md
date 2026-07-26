@@ -67,6 +67,20 @@ REGRA DE OURO: a conversão vem do DESEJO, não da coerção. PULL, não push. A
 
 CONSEQUÊNCIA DE DESIGN: a assimetria tem que ser VISÍVEL e DESEJÁVEL (a foto/tick do cadastrado deve puxar o olho, ser bonita), não escondida. Cada jogo com um cadastrado ao lado de um anônimo é um mini-comercial da carteirinha rodando na própria quadra. O tick verde e a foto (já usados como prova social no convite do professor) ganham uma segunda função: anunciar a identidade para quem ainda não tem.
 
+## Onde a foto do jogador aparece (regra: função, não decoração) — decisão Eric
+A foto/avatar aparece SÓ onde tem função; NUNCA polui a tela de trabalho.
+- SCOREBOARD (marcar pontos): SEM foto. Jogadores e juiz já conhecem os nomes; a foto não ajuda a marcar ponto e polui a tela deliberadamente enxuta (o exercício de tirar ícones p/ o settings). O tick verde da 1a pode ficar (é sutil), mas foto NÃO.
+- CELEBRAÇÃO (Game / Set / Fim de jogo): foto GRANDE. A pílula expande p/ baixo e mostra "Game, {Nome}" com a foto 512px (ou círculo com iniciais). Função: reconhecimento/emoção — e é o PICO do funil (o anônimo vê o momento glorioso do cadastrado com foto grande e quer o mesmo). Decisão da pílula expandir no Game/Set já registrada antes.
+- LINK DE TRANSMISSÃO (assistir 1 jogo): foto O TEMPO INTEIRO, grande e bonita (a estrela da tela de quem assiste).
+- TELÃO (vários jogos): foto o tempo inteiro, MENOR, em todos os jogos (grade de quem joga).
+Regra geral: contexto de TRABALHO (marcar ponto) = sem foto; contexto de EXIBIÇÃO/CELEBRAÇÃO (assistir, comemorar) = foto presente.
+
+## O preview no popup de editar atletas (o espelho da vaidade)
+No popup "Nomes da dupla" (onde se edita os jogadores), mostrar um PREVIEW da foto/carteirinha que vai aparecer nas transmissões/celebrações — "é assim que você vai aparecer para o mundo". Poder de produto (Eric):
+1. VAIDADE VIRA MOTOR: a pessoa vê sua foto no preview e quer que seja boa → sobe foto 512px caprichada. O preview PROVOCA o upload de qualidade (reforça a decisão das iniciais-como-padrão que forçam foto boa).
+2. FUNIL NO PONTO CERTO: no popup, o cadastrado tem foto/tick no preview; o anônimo tem iniciais cinza. A assimetria aparece no momento em que a pessoa pensa na própria identidade — "se eu me cadastrar, apareço assim". Conversão no ponto exato.
+O preview é o ESPELHO que faz a pessoa se arrumar — alimenta qualidade da foto E conversão.
+
 ## Modelo de identidade e negócio (Login Fase A)
 - **Hierarquia**: **Player** (todos; role padrão criado pela trigger `handle_new_user` no signup) → **Coach** (o super_admin promove via `members.role='coach'` no dashboard) → **Coach com marca+patrocinador no QR** (fatia futura; reusa `sponsors.member_id` apontando pro coach).
 - **Cadeia técnica existente**: `auth.users` → `profiles` (`id`, `name`, `email`, `phone`) → `members` (via `profile_id`, **hoje sempre null**) + `user_roles` (via `user_id`). A trigger de signup cria o `profile` + `user_roles='player'`; **NÃO cria `member`** e **NÃO promove coach**. `profiles.id = auth.users.id`; `user_roles` é a autorização de login (≠ `members.role`, que é atributo de pessoa).
