@@ -32,6 +32,7 @@ import { sportById, familyOf, formatPoint, defaultRulesFor, buildScoreCols, conc
 import { themeClassName, type ThemeId } from "@/lib/themes"
 import { clubFromCacheOrBundle } from "@/lib/supabase/club-catalog"
 import { AppAuthCta } from "@/components/auth/app-auth"
+import { FlowMark } from "@/components/brand/flow-mark"
 import { useSession } from "@/lib/hooks/use-session"
 import { createBrowserSupabaseClient } from "@/lib/supabase/browser-client"
 import { saveMatch, flushPendingMatches, type MatchRow } from "@/lib/supabase/matches"
@@ -2354,12 +2355,17 @@ export default function JogoPage() {
       }
       return serveBola(showAmarela && teamServing && idx === serverIdx, false)
     }
+    // COM clube → o logo dele (inalterado). SEM clube (jogo avulso/praia) → o "w"
+    // do Flow, no MESMO espaço de 28px que antes era um espaçador invisível: o
+    // layout não muda, só o vazio deixa de ser vazio. Opacidade baixa porque é
+    // ASSINATURA, não informação — não compete com o placar. Decorativo: se a
+    // Audiowide não carregar, a letra ainda aparece em fonte de fallback.
     const logoEl = logoForTeam(team) ? (
       <span className="relative block h-7 w-7 shrink-0 overflow-hidden rounded-full ring-1 ring-white/25">
         <Image src={logoForTeam(team)!} alt="" fill sizes="28px" className="object-cover" />
       </span>
     ) : (
-      <span className="h-7 w-7 shrink-0" aria-hidden />
+      <FlowMark size={28} className="opacity-40" />
     )
     // TICK VERDE de identidade VERIFICADA. A fonte que VIAJA é `playerIds` (o
     // profile_id que o dono gravou no slot e o set_config propagou) — por isso o

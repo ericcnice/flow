@@ -1,4 +1,5 @@
 import { SPORTS } from '@/components/landing/sport-icons'
+import { FlowWordmark } from '@/components/brand/flow-wordmark'
 
 export function SiteFooter() {
   return (
@@ -17,11 +18,11 @@ export function SiteFooter() {
           </div>
 
           <div className="flex w-full flex-col items-center justify-between gap-4 border-t border-border pt-8 sm:flex-row">
-            <div className="flex items-center gap-2.5">
-              <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary font-mono text-sm font-bold text-primary-foreground">
-                F
+            <div className="flex items-baseline gap-2">
+              <FlowWordmark size={20} />
+              <span className="text-xs font-medium tracking-tight text-muted-foreground">
+                / PWER
               </span>
-              <span className="font-semibold tracking-tight">Flow / PWER</span>
             </div>
             <p className="font-mono text-xs text-muted-foreground">
               © {new Date().getFullYear()} PWER Flow. Placar inteligente para
