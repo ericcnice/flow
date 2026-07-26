@@ -570,12 +570,28 @@ export default function JogoPage() {
             if (a?.kind === "point" || a?.kind === "game") cleanActions.push({ kind: a.kind, side: a.side })
           }
 
+          // CONTEXTO DE QUADRA pela URL (o link de compartilhar já carrega
+          // &clube= e &ad=, ver components/share-modal.tsx). Antes eram
+          // DESCARTADOS aqui — o 2º aparelho recebia o slug e jogava fora, então
+          // ficava sem o logo do clube, enquanto o /placar (que lê da URL desde
+          // sempre) mostrava certo. O `ad` importa igual: sem ele, encerrar a
+          // partida PELO 2º aparelho apagaria o "Oferecimento" do patrocinador
+          // da tela de fim.
+          //
+          // Fica na URL, e NÃO no state da sala, de propósito: é contexto de
+          // QUADRA (que o link carrega) e não dado de pessoa; e o catálogo de
+          // clubes resolve síncrono, offline-first, sem esperar broadcast.
+          const clubeParam = searchParams.get("clube")
+          const adParam = searchParams.get("ad")
+
           // Config SINTÉTICO mínimo: suficiente p/ a tela renderizar. Tema e
           // scoreType agora vêm da URL / histórico da sala, não mais fixos.
           const synthetic: GameConfig = {
             quadra,
             sport: resolvedSport,
             theme: resolvedTheme,
+            clube: clubeParam ?? undefined,
+            ad: adParam ?? undefined,
             // Join de link compartilhado: HERDA o formato do host pela URL
             // (&gameType=); fallback 'duplas' (padrão do clube) p/ links antigos.
             gameType: gameTypeParam === "simples" || gameTypeParam === "duplas" ? gameTypeParam : "duplas",
@@ -588,7 +604,9 @@ export default function JogoPage() {
           }
           setGameConfig(synthetic)
           setTheme(resolvedTheme)
-          setClube(null)
+          // Link ANTIGO (gerado antes desta correção) não traz &clube= → null,
+          // exatamente o comportamento de antes. Só links novos ganham o logo.
+          setClube(clubeParam)
           setBluePlayerName("Player 1")
           setRedPlayerName("Player 3")
           setStartTime(new Date(synthetic.startTime))
