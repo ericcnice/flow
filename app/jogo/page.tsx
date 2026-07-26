@@ -33,7 +33,6 @@ import { themeClassName, type ThemeId } from "@/lib/themes"
 import { clubFromCacheOrBundle } from "@/lib/supabase/club-catalog"
 import { AppAuthCta } from "@/components/auth/app-auth"
 import { useSession } from "@/lib/hooks/use-session"
-import { useAppAuthFlag } from "@/lib/hooks/use-app-auth-flag"
 import { createBrowserSupabaseClient } from "@/lib/supabase/browser-client"
 import { saveMatch, flushPendingMatches, type MatchRow } from "@/lib/supabase/matches"
 import { resolvePlayerCards, type PlayerCard } from "@/lib/supabase/player-cards"
@@ -315,6 +314,9 @@ export default function JogoPage() {
   // CARTÕES (1b.2a): nome+foto de quem tem carteirinha, resolvidos SÓ quando o
   // popup abre. Mapa profile_id → cartão; vazio é o caso normal (anônimo).
   const [playerCards, setPlayerCards] = useState<Map<string, PlayerCard>>(new Map())
+  // FOTO DO DONO por leitura LOCAL: ele lê o PRÓPRIO profile (RLS self-select),
+  // sem depender da RPC pública (que existe para TERCEIROS) nem de flag alguma.
+  const [ownerAvatarUrl, setOwnerAvatarUrl] = useState<string | null>(null)
   // Fase de seleção de sacador (B1b): as pílulas pulsam até o juiz ESCOLHER quem
   // saca. `serverChosen` desliga o pulso após a 1ª escolha; volta a false ao
   // reentrar no pré-jogo (undo até 0-0) — ver o effect abaixo.
@@ -615,13 +617,13 @@ export default function JogoPage() {
       const config = JSON.parse(storedConfig)
       setGameConfig(config)
 
-      // PASSO 1a — placeholder do slot do dono: se a flag está ligada, há sessão
-      // provável (cookie) e o blue1 ainda é fallback, mostra o skeleton discreto
-      // em vez do "Player 1" até o nome resolver (evita o flicker). Batched com o
-      // setGameConfig acima → o 1º render da pílula já nasce sem "Player 1".
-      // Anônimo (sem cookie) ou flag off → não liga. Timer de segurança solta o
-      // placeholder em DISCONNECT_GRACE... na verdade em 4s, se o nome não vier.
-      if (appAuthFlag && hasProbableSession() && isFallbackName(config.players.blue1)) {
+      // PASSO 1a — placeholder do slot do dono: com sessão provável (cookie) e o
+      // blue1 ainda em fallback, mostra o skeleton discreto em vez do "Player 1"
+      // até o nome resolver (evita o flicker). Batched com o setGameConfig acima
+      // → o 1º render da pílula já nasce sem "Player 1". ANÔNIMO (sem cookie)
+      // não liga — é o caso normal e nada muda para ele. Timer de segurança
+      // solta o placeholder em 4s se o nome não vier.
+      if (hasProbableSession() && isFallbackName(config.players.blue1)) {
         setOwnerNamePending(true)
         if (ownerPendingTimerRef.current) clearTimeout(ownerPendingTimerRef.current)
         ownerPendingTimerRef.current = setTimeout(() => setOwnerNamePending(false), 4000)
@@ -1776,7 +1778,10 @@ export default function JogoPage() {
   // encerrou logado; anônimo joga normal e não salva. Fire-and-forget + fila
   // offline (lib/supabase/matches). `saveState` alimenta o CTA da tela de fim.
   const { user: authUser } = useSession()
-  const appAuthFlag = useAppAuthFlag()
+  // A flag NEXT_PUBLIC_APP_AUTH NÃO é mais lida aqui. Ela governa a UI DE CONTA
+  // DA TELA DE FIM (o propósito original) e continua fazendo isso DENTRO do
+  // <AppAuthCta>, que se auto-gateia. A IDENTIDADE NO PLACAR (nome do dono,
+  // playerIds, tick, foto) é feature assumida e roda sempre que houver sessão.
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "queued">("idle")
   const savedMatchRef = useRef(false)
 
@@ -1934,37 +1939,54 @@ export default function JogoPage() {
   // 2º hop de rede) e refina com profiles.name; o placeholder some numa troca só.
   const prefillDoneRef = useRef(false)
   useEffect(() => {
-    if (!appAuthFlag || !authUser || prefillDoneRef.current) return
+    if (!authUser || prefillDoneRef.current) return
     const cfg = gameConfigRef.current
     if (!cfg) return // config ainda não carregou — re-tenta quando gameConfig chegar
-    if (!isFallbackName(cfg.players.blue1)) {
-      prefillDoneRef.current = true // já tem nome (digitado/pré) → não mexe no nome
-      // …mas a CARTEIRINHA ainda pode faltar: o dono pode ter digitado o próprio
-      // nome no setup antes de logar. Grava só o id (o nome fica como está).
-      if (!cfg.playerIds?.blue1) aplicarNomeDono(cfg.players.blue1, authUser.id)
-      soltarPlaceholder()
-      return
-    }
     prefillDoneRef.current = true // trava ANTES do await: roda uma vez só
 
-    // FILL RÁPIDO: nome do user_metadata (OAuth), disponível já com o authUser —
-    // vira o nome sem esperar o profiles.name (rede). Solta o placeholder.
+    // O slot é do dono enquanto for fallback ("Player 1"). Se já tem nome
+    // (digitado no setup, ou vindo de uma partida anterior), NÃO mexemos no
+    // nome — mas a CARTEIRINHA ainda pode faltar, e aí gravamos só o id.
+    const slotEmFallback = isFallbackName(cfg.players.blue1)
     const meta = (authUser.user_metadata ?? {}) as Record<string, unknown>
     const nomeMeta = (((meta.full_name as string) ?? (meta.name as string)) ?? "").trim()
-    if (nomeMeta) aplicarNomeDono(nomeMeta, authUser.id)
+
+    if (slotEmFallback) {
+      // FILL RÁPIDO: nome do user_metadata (OAuth), já disponível com o
+      // authUser — vira o nome sem esperar o profiles.name (rede).
+      if (nomeMeta) aplicarNomeDono(nomeMeta, authUser.id)
+    } else {
+      if (!cfg.playerIds?.blue1) aplicarNomeDono(cfg.players.blue1, authUser.id)
+      soltarPlaceholder()
+    }
 
     let alive = true
     void (async () => {
-      // REFINO: profiles.name (canônico, editado no /perfil). Não-bloqueante.
+      // LEITURA LOCAL DO PRÓPRIO PERFIL (RLS self-select). Traz duas coisas:
+      //  • name      — o canônico, editado no /perfil (refina o do metadata);
+      //  • avatar_url — a FOTO do dono, que NÃO precisa da RPC pública: aquela
+      //    existe para ler o perfil de TERCEIROS. Aqui o dono lê o dele, então
+      //    a foto aparece mesmo se a RPC falhar.
+      // Não-bloqueante: offline mantém o nome do metadata e cai na inicial.
       let nome = ""
+      let avatar: string | null = null
       try {
         const supabase = createBrowserSupabaseClient()
-        const { data } = await supabase.from("profiles").select("name").eq("id", authUser.id).maybeSingle()
+        const { data } = await supabase
+          .from("profiles")
+          .select("name, avatar_url")
+          .eq("id", authUser.id)
+          .maybeSingle()
         nome = (data?.name ?? "").trim()
+        avatar = (data?.avatar_url as string | null) ?? null
       } catch {
         // offline/erro: fica com o do metadata (ou o fallback)
       }
       if (!alive) return
+      if (avatar) setOwnerAvatarUrl(avatar)
+
+      if (!slotEmFallback) return // o nome já era da pessoa; só a foto interessava
+
       const cur = gameConfigRef.current
       // Só aplica se o slot ainda é do dono (fallback OU o nome do metadata que
       // pusemos) — nunca sobrescreve edição feita durante o fetch.
@@ -1977,7 +1999,7 @@ export default function JogoPage() {
       alive = false
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [appAuthFlag, authUser, gameConfig])
+  }, [authUser, gameConfig])
 
   if (loadError) {
     return (
@@ -3315,12 +3337,21 @@ export default function JogoPage() {
               : [cfg.players.red1, cfg.players.red2]
             return keys.map((k, i) => {
               const pid = cfg.playerIds?.[k]
-              const legado = k === "blue1" && cfg.ownerVerified === true
-              if (!pid && !legado) return null
-              const card = pid ? playerCards.get(pid) : undefined
+              // Sem carteirinha no slot → sem preview (input normal). O ramo
+              // "legado" (ownerVerified sem pid) FOI APOSENTADO: ele afirmava
+              // "verificado" sem identidade resolvível e, por não ter id, nunca
+              // conseguia buscar foto — mostrava tick + inicial para sempre.
+              // Agora o prefill grava playerIds sempre que há sessão, então o
+              // caminho é único.
+              if (!pid) return null
+              const card = playerCards.get(pid)
+              // FOTO DO DONO vem da leitura LOCAL (RLS self) e VENCE: funciona
+              // offline e mesmo que a RPC pública falhe. Terceiros seguem pela
+              // RPC (o card).
+              const ehDono = Boolean(authUser?.id) && pid === authUser?.id
               return {
                 nome: card?.displayName || nomes[i],
-                avatarUrl: card?.avatarUrl ?? null,
+                avatarUrl: (ehDono ? ownerAvatarUrl : null) ?? card?.avatarUrl ?? null,
                 verified: true,
               }
             }) as [SlotPreview | null, SlotPreview | null]
