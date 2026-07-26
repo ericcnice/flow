@@ -13,7 +13,7 @@ CONSEQUÊNCIA PARA IDENTIDADE NOS SLOTS: a identidade (carteirinha/profile_id no
 
 CONSEQUÊNCIA PARA ENFORCEMENT: por isso o "Jogo completo" e a identidade nos slots são EXIBIÇÃO, não permissão/enforcement de servidor. Enforcement real (servidor validando quem age) exigiria amarrar tudo a identidade+servidor, o que QUEBRARIA offline e anônimo. Não é só "mais simples" fazer exibido — é a ÚNICA forma que respeita as regras invioláveis. A trava "Jogo completo" é informativa (protege a experiência, não é segurança de servidor).
 
-## Princípios invioláveis
+## Regras operacionais do código
 - **Offline-first**: a jornada de QR nunca espera rede no caminho crítico; os timers das telas armam em t=0. Toda resolução de patrocinador tem fallback síncrono e timeout curto (2s) — pendurar na rede congelaria a abertura.
 - **`lib/scoring`**: NUNCA modificar sem os 73 testes passando (`npm test`). É o núcleo do produto.
 - **Jornada de QR em produção** (`components/club-opening.tsx`, rotas `app/[clube]/[esporte]/[quadra][/ad]`, `lib/supabase/sponsors.ts`, `lib/clubs-config.ts` / ADS): mudanças só com investigação prévia e escopo explícito. Slugs `ad1`/`ad2` já estão impressos em cartazes — nunca remover.
