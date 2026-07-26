@@ -70,7 +70,11 @@ CONSEQUÊNCIA DE DESIGN: a assimetria tem que ser VISÍVEL e DESEJÁVEL (a foto/
 ## Marca do Flow — tipografia e símbolo (correção, Eric)
 A fonte do Flow **É Audiowide**, com um DEGRADÊ (gradiente azul→verde) aplicado. A Audiowide é o padrão de TODOS os logos de produtos da PWER IO — usada para consistência de marca entre os produtos. NÃO há fonte arredondada separada; o registro anterior sobre isso estava incorreto.
 
-O "w" isolado (símbolo/avatar do Flow) é a letra "w" em Audiowide com o degradê. É ele que preenche o lugar do logo quando não há clube/patrocinador no contexto (jogo avulso/praia) — hoje aquele espaço é um espaçador invisível na pílula do placar.
+CORES OFICIAIS DA MARCA (usar em materiais, no site e no app):
+- **Logo Flow**: "flow" em MINÚSCULO, fonte Audiowide, com degradê LINEAR do AZUL **#0078FF** (início) ao VERDE **#00FF6F** (fim).
+- **"w" isolado** (símbolo/avatar): a letra "w" na MESMA fonte e MESMO degradê (#0078FF → #00FF6F).
+
+O "w" é o que preenche o lugar do logo quando não há clube/patrocinador no contexto (jogo avulso/praia) — hoje aquele espaço é um espaçador invisível na pílula do placar.
 
 ## Onde a foto do jogador aparece (regra: função, não decoração) — decisão Eric
 A foto/avatar aparece SÓ onde tem função; NUNCA polui a tela de trabalho.
