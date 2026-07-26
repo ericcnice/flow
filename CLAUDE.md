@@ -119,6 +119,17 @@ TERCEIRO CAMINHO (o WhatsApp): alguns celulares de amigos não leem QR (Eric pre
 
 Isto é a filosofia da 1c (o QR check-in do jogador / preencher slot). NÃO é a 1b.2a (que é só o preview da foto de quem já está no slot). A 1c redesenha o popup com: QR padrão + toggle manual + botão WhatsApp, resolvendo o teclado.
 
+## O popup de jogadores é ÚNICO (não por lado) — decisão Eric (resgatada)
+O popup de editar/gerenciar jogadores NÃO é por lado (azul/vermelho separados). É UM popup único que mostra TODOS os jogadores juntos (2 no simples, 4 no duplas), acessível tocando QUALQUER pílula — todas abrem o mesmo popup com todos os jogadores.
+
+DUAS RAZÕES:
+1. DRAG-AND-DROP exige ver todos juntos: para arrastar um jogador de um time para o outro (o "Rei da Quadra", trocar duplas), é preciso ver os dois lados numa tela só. Popups separados por lado tornam o drag-and-drop impossível.
+2. CARTEIRINHA é compacta: quando todos têm carteirinha, cada jogador ocupa espaço mínimo (foto + nome + tick, uma linha) — cabem os 4 num popup só. A divisão "por lado" era limitação do passado (campos de texto ocupavam espaço); com carteirinhas compactas, os 4 ficam juntos.
+
+CONSEQUÊNCIA: a "tensão do popup por lado vs QR geral" (que existia porque o popup era por lado) DESAPARECE. Com todos juntos, o QR geral é coerente por natureza (vê os slots, escaneia, entra no próximo livre — não há "lado errado"). A frase explicativa deixa de ser necessária; o layout (todos juntos) comunica.
+
+O popup único contém: todos os slots (carteirinha OU nome OU fallback), o QR geral (próximo livre), o toggle "digitar nome manual" (teclado sob demanda), e o drag-and-drop (reorganizar times — se nascer junto, melhor). Isso redefine a 1c.3: não é "adaptar o popup por lado", é "unificar num popup só com todos".
+
 ## Modelo de identidade e negócio (Login Fase A)
 - **Hierarquia**: **Player** (todos; role padrão criado pela trigger `handle_new_user` no signup) → **Coach** (o super_admin promove via `members.role='coach'` no dashboard) → **Coach com marca+patrocinador no QR** (fatia futura; reusa `sponsors.member_id` apontando pro coach).
 - **Cadeia técnica existente**: `auth.users` → `profiles` (`id`, `name`, `email`, `phone`) → `members` (via `profile_id`, **hoje sempre null**) + `user_roles` (via `user_id`). A trigger de signup cria o `profile` + `user_roles='player'`; **NÃO cria `member`** e **NÃO promove coach**. `profiles.id = auth.users.id`; `user_roles` é a autorização de login (≠ `members.role`, que é atributo de pessoa).
