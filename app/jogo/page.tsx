@@ -3,7 +3,7 @@
 import { Fragment, useState, useEffect, useRef, type CSSProperties, type ReactNode } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import Image from "next/image"
-import { NameEditModal } from "@/components/name-edit-modal"
+import { NameEditModal, type SlotPreview } from "@/components/name-edit-modal"
 import { ConfirmModal } from "@/components/confirm-modal"
 import { Settings, Volume2, VolumeX, Undo2, BarChart2, RotateCcw, LogOut, ArrowLeftRight, Share2, Users, UserMinus, X, BadgeCheck } from "lucide-react"
 import { ThirdSetModal } from "@/components/third-set-modal"
@@ -36,6 +36,7 @@ import { useSession } from "@/lib/hooks/use-session"
 import { useAppAuthFlag } from "@/lib/hooks/use-app-auth-flag"
 import { createBrowserSupabaseClient } from "@/lib/supabase/browser-client"
 import { saveMatch, flushPendingMatches, type MatchRow } from "@/lib/supabase/matches"
+import { resolvePlayerCards, type PlayerCard } from "@/lib/supabase/player-cards"
 import { resolveSponsor, type Sponsor } from "@/lib/supabase/sponsors"
 import type { GameState, Side } from "@/lib/scoring/types"
 
@@ -311,6 +312,9 @@ export default function JogoPage() {
   // Lado cujo popup de edição de nomes está aberto (B1a). null = fechado. A
   // edição inline antiga (Input no canto/faixa) morreu — agora é o popup grande.
   const [editingSide, setEditingSide] = useState<null | "blue" | "red">(null)
+  // CARTÕES (1b.2a): nome+foto de quem tem carteirinha, resolvidos SÓ quando o
+  // popup abre. Mapa profile_id → cartão; vazio é o caso normal (anônimo).
+  const [playerCards, setPlayerCards] = useState<Map<string, PlayerCard>>(new Map())
   // Fase de seleção de sacador (B1b): as pílulas pulsam até o juiz ESCOLHER quem
   // saca. `serverChosen` desliga o pulso após a 1ª escolha; volta a false ao
   // reentrar no pré-jogo (undo até 0-0) — ver o effect abaixo.
@@ -1828,6 +1832,41 @@ export default function JogoPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [gameState?.finished, gameState?.winner, authUser])
 
+  // CARTÕES DO POPUP (1b.2a — "o espelho"): resolve nome+foto dos slots QUE TÊM
+  // carteirinha, e só quando o popup ABRE. Slot anônimo não entra na lista → o
+  // módulo nem toca a rede. Offline/erro: cache ou vazio, e o avatar cai na
+  // inicial — o popup abre, edita e salva igual.
+  useEffect(() => {
+    if (!editingSide) return
+    const cfgAtual = gameConfigRef.current
+    const ids = (
+      editingSide === "blue"
+        ? [cfgAtual?.playerIds?.blue1, cfgAtual?.playerIds?.blue2]
+        : [cfgAtual?.playerIds?.red1, cfgAtual?.playerIds?.red2]
+    ).filter((v): v is string => typeof v === "string" && v.length > 0)
+    if (ids.length === 0) return
+
+    let alive = true
+    void (async () => {
+      // O callback cobre a revalidação de fundo (stale-while-revalidate): se a
+      // foto mudou desde o último jogo, a tela atualiza sozinha.
+      const cards = await resolvePlayerCards(ids, (frescos) => {
+        if (alive) setPlayerCards(new Map(frescos))
+      })
+      if (alive) setPlayerCards(cards)
+    })()
+    return () => {
+      alive = false
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    editingSide,
+    gameConfig?.playerIds?.blue1,
+    gameConfig?.playerIds?.blue2,
+    gameConfig?.playerIds?.red1,
+    gameConfig?.playerIds?.red2,
+  ])
+
   // Solta o placeholder do slot do dono (limpa o estado + o timer de segurança).
   const soltarPlaceholder = () => {
     if (ownerPendingTimerRef.current) {
@@ -3263,8 +3302,29 @@ export default function JogoPage() {
               ? [cfg.players.blue1, cfg.players.blue2]
               : [cfg.players.red1, cfg.players.red2]
           }
-          // Só o blue1 do dono verificado trava; os demais slots editam normal.
-          verifiedFirstName={editingSide === "blue" && cfg.ownerVerified ? cfg.players.blue1 : null}
+          // PREVIEW POR SLOT (1b.2a). A trava agora vem de `playerIds` — a
+          // verdade que VIAJA (1a) —, não do flag local `ownerVerified`: no 2º
+          // aparelho o nome do dono também fica travado, como manda a regra de
+          // "terceiros não alteram nome verificado". `ownerVerified` continua
+          // valendo como fallback local (partida antiga / offline puro).
+          previews={(() => {
+            const keys =
+              editingSide === "blue" ? (["blue1", "blue2"] as const) : (["red1", "red2"] as const)
+            const nomes = editingSide === "blue"
+              ? [cfg.players.blue1, cfg.players.blue2]
+              : [cfg.players.red1, cfg.players.red2]
+            return keys.map((k, i) => {
+              const pid = cfg.playerIds?.[k]
+              const legado = k === "blue1" && cfg.ownerVerified === true
+              if (!pid && !legado) return null
+              const card = pid ? playerCards.get(pid) : undefined
+              return {
+                nome: card?.displayName || nomes[i],
+                avatarUrl: card?.avatarUrl ?? null,
+                verified: true,
+              }
+            }) as [SlotPreview | null, SlotPreview | null]
+          })()}
           onSave={(p1, p2) => saveNames(editingSide, p1, p2)}
           onClose={() => setEditingSide(null)}
         />
