@@ -2,6 +2,17 @@
 
 PWA offline-first de placar para esportes de raquete (tênis, beach, padel, squash, ping pong, pickleball), em flow.pwer.com.br. Next.js 15.5 (App Router) / React 19 / TypeScript / Supabase. Voz de árbitro estilo Grand Slam; funciona sem rede.
 
+## PRINCÍPIOS ESTRUTURAIS INVIOLÁVEIS (regra de TODA decisão)
+Estas duas regras são a espinha do Flow. NENHUMA feature pode violá-las. Se uma feature exige quebrá-las, a feature está errada, não as regras.
+
+1. O FLOW FUNCIONA OFFLINE. O jogo TEM que rolar sem internet (quadra sem sinal, praia, qualquer lugar). Nada que dependa de servidor para JOGAR pode existir no caminho crítico. Servidor/realtime/identidade são ENRIQUECIMENTO OPCIONAL por cima de um núcleo offline autossuficiente. Matar o offline mata o produto.
+
+2. O USUÁRIO JOGA SEM LOGIN. Escanear e jogar, sem cadastro, sem fricção — respeitando privacidade e o momento de quem não quer/não pode logar. A carteirinha é CONVITE, nunca EXIGÊNCIA. O anônimo é cidadão de primeira classe, não um caso degradado. Tirar a fricção respeitando a privacidade É a beleza do app.
+
+CONSEQUÊNCIA PARA IDENTIDADE NOS SLOTS: a identidade (carteirinha/profile_id no slot) é 100% OPCIONAL e ADITIVA. Um slot pode ser (a) carteirinha (foto/tick/profile_id, quem escaneou logado), (b) string simples digitada (anônimo, offline), ou (c) fallback "Jogador N". Os três COEXISTEM no mesmo jogo. A identidade ENRIQUECE quando existe; a ausência NUNCA bloqueia.
+
+CONSEQUÊNCIA PARA ENFORCEMENT: por isso o "Jogo completo" e a identidade nos slots são EXIBIÇÃO, não permissão/enforcement de servidor. Enforcement real (servidor validando quem age) exigiria amarrar tudo a identidade+servidor, o que QUEBRARIA offline e anônimo. Não é só "mais simples" fazer exibido — é a ÚNICA forma que respeita as regras invioláveis. A trava "Jogo completo" é informativa (protege a experiência, não é segurança de servidor).
+
 ## Princípios invioláveis
 - **Offline-first**: a jornada de QR nunca espera rede no caminho crítico; os timers das telas armam em t=0. Toda resolução de patrocinador tem fallback síncrono e timeout curto (2s) — pendurar na rede congelaria a abertura.
 - **`lib/scoring`**: NUNCA modificar sem os 73 testes passando (`npm test`). É o núcleo do produto.
