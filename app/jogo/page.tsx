@@ -136,8 +136,17 @@ function isFallbackName(n: string): boolean {
   return !t || /^(player|jogador)\s*\d?$/i.test(t)
 }
 
-/** Rótulo fallback canônico por posição global (blue1=1, blue2=2, red1=3, red2=4). */
-function fallbackLabel(team: "blue" | "red", idx: number): string {
+/**
+ * Rótulo fallback por posição. Em DUPLAS a numeração é global (blue1=1, blue2=2,
+ * red1=3, red2=4). Em SIMPLES só existem blue1 e red1 — numerá-los 1 e 3 fazia o
+ * jogo de dois mostrar "Player 1 × Player 3", com o 2 sumido, parecendo defeito.
+ * Aqui red1 vira "Player 2".
+ *
+ * É SÓ EXIBIÇÃO: o valor guardado em `players` continua "Player 3" (o que
+ * isFallbackName reconhece), então motor, sync e save não veem diferença.
+ */
+function fallbackLabel(team: "blue" | "red", idx: number, duplas = true): string {
+  if (!duplas) return `Player ${team === "blue" ? 1 : 2}`
   return `Player ${team === "blue" ? idx + 1 : idx + 3}`
 }
 
@@ -146,9 +155,15 @@ function fallbackLabel(team: "blue" | "red", idx: number): string {
  * abrevia); nome digitado pelo usuário → abreviação broadcast quando pedida
  * ("Eric Nice" → "E. Nice"). A abreviação NÃO se aplica a fallbacks.
  */
-function displayName(raw: string, team: "blue" | "red", idx: number, abbrev: boolean): string {
+function displayName(
+  raw: string,
+  team: "blue" | "red",
+  idx: number,
+  abbrev: boolean,
+  duplas = true,
+): string {
   const t = (raw ?? "").trim()
-  if (!t || isFallbackName(t)) return fallbackLabel(team, idx)
+  if (!t || isFallbackName(t)) return fallbackLabel(team, idx, duplas)
   return abbrev ? abbrevName(t) : t
 }
 
@@ -2159,6 +2174,20 @@ export default function JogoPage() {
   const prefillDoneRef = useRef(false)
   useEffect(() => {
     if (!authUser || prefillDoneRef.current) return
+
+    // ⚠️ GUARDA DE POSSE — este effect escreve em BLUE1, o slot de quem CRIOU o
+    // jogo. Quem entrou por link tem SEMPRE `?match=` na URL (é o que define o
+    // ramo remoto, l. ~496); o dono está em /jogo?quadra=X, sem ele.
+    //
+    // Sem esta guarda, um convidado que logasse no meio da partida escrevia a
+    // própria identidade em blue1 e ATROPELAVA o dono nas duas telas. Ela ficou
+    // faltando quando a flag NEXT_PUBLIC_APP_AUTH saiu daqui: até então só o
+    // aparelho do dono rodava este código, e a posse era acidental.
+    //
+    // Fica MUTUAMENTE EXCLUSIVO com a reivindicação da 1c.1 (que exige `edit`,
+    // ou seja, convidado): um effect para o dono, outro para quem chega.
+    if (searchParams.get("match")) return
+
     const cfg = gameConfigRef.current
     if (!cfg) return // config ainda não carregou — re-tenta quando gameConfig chegar
     prefillDoneRef.current = true // trava ANTES do await: roda uma vez só
@@ -2175,7 +2204,14 @@ export default function JogoPage() {
       // authUser — vira o nome sem esperar o profiles.name (rede).
       if (nomeMeta) aplicarNomeDono(nomeMeta, authUser.id)
     } else {
-      if (!cfg.playerIds?.blue1) aplicarNomeDono(cfg.players.blue1, authUser.id)
+      // Nome JÁ preenchido. Só assumimos a carteirinha se ele for reconhecível
+      // como do próprio usuário — carimbar a identidade dele sobre o nome de um
+      // TERCEIRO é falsa atribuição, e o dono também pode ter digitado o nome de
+      // outra pessoa em blue1. Sem reconhecer, só a foto é resolvida (no async
+      // abaixo); o nome fica de quem é.
+      const ehMeuNome =
+        Boolean(nomeMeta) && cfg.players.blue1.trim().toLowerCase() === nomeMeta.toLowerCase()
+      if (ehMeuNome && !cfg.playerIds?.blue1) aplicarNomeDono(cfg.players.blue1, authUser.id)
       soltarPlaceholder()
     }
 
@@ -2204,7 +2240,18 @@ export default function JogoPage() {
       if (!alive) return
       if (avatar) setOwnerAvatarUrl(avatar)
 
-      if (!slotEmFallback) return // o nome já era da pessoa; só a foto interessava
+      if (!slotEmFallback) {
+        // Nome já preenchido: a foto acima era o que interessava. Mas o
+        // profiles.name é mais confiável que o metadata — se o nome em blue1 for
+        // o DELE, a carteirinha ainda pode ser assumida aqui. Se for de outra
+        // pessoa, nada é escrito.
+        const atual = gameConfigRef.current
+        if (nome && atual && !atual.playerIds?.blue1) {
+          const ehMeuNomeCanonico = atual.players.blue1.trim().toLowerCase() === nome.toLowerCase()
+          if (ehMeuNomeCanonico) aplicarNomeDono(atual.players.blue1, authUser.id)
+        }
+        return
+      }
 
       const cur = gameConfigRef.current
       // Só aplica se o slot ainda é do dono (fallback OU o nome do metadata que
@@ -2488,7 +2535,7 @@ export default function JogoPage() {
           : [cfg.players.red1]
     // Nomes exibidos: fallback → "Player N" INTEIRO (nunca abrevia); digitado →
     // abreviação broadcast.
-    const names = raw.map((n, i) => displayName(n, team, i, true))
+    const names = raw.map((n, i) => displayName(n, team, i, true, duplas))
     const prejogo = !started
     const showAmarela = serverEverChosen || started // antes da 1ª escolha: sem amarela
 
@@ -2769,7 +2816,7 @@ export default function JogoPage() {
                     1,
                     true,
                   )}`
-                : displayName(team === "blue" ? p.blue1 : p.red1, team, 0, true)
+                : displayName(team === "blue" ? p.blue1 : p.red1, team, 0, true, false)
             const logo = logoForTeam(team)
             const point = pointOf(sideOf(team))
             return (
