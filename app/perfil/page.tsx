@@ -1390,6 +1390,20 @@ function PerfilLogado({ user }: { user: User }) {
   const [aba, setAba] = useState<'jogador' | 'coach'>('jogador')
   const isCoach = role === 'coach'
 
+  // VOLTA REDONDA (?voltar=): quem chega DO JOGO volta PARA o jogo. Lido de
+  // window.location num effect — e não com useSearchParams — para a rota seguir
+  // ESTÁTICA (o mesmo motivo do origin em share-modal.tsx). Sem o param, nada
+  // muda: o botão continua "Início" → '/'.
+  //
+  // GUARDA contra open redirect: só caminho interno. Sem o teste do '//', um
+  // ?voltar=//site-malicioso.com viraria um redirect assinado pelo nosso
+  // domínio — a mesma tranca do /auth/callback.
+  const [voltar, setVoltar] = useState<string | null>(null)
+  useEffect(() => {
+    const bruto = new URLSearchParams(window.location.search).get('voltar')
+    if (bruto && bruto.startsWith('/') && !bruto.startsWith('//')) setVoltar(bruto)
+  }, [])
+
   // Logout: encerra a sessão e volta à home. (A ponte do coach e o pré-preench.
   // reagem à ausência de sessão normalmente; nada a "desfazer" aqui.)
   async function sair() {
@@ -1453,9 +1467,9 @@ function PerfilLogado({ user }: { user: User }) {
 
   return (
     <main className="mx-auto min-h-[100dvh] max-w-lg bg-neutral-950 px-5 py-8 text-white">
-      <Link href="/" className="inline-flex items-center gap-1.5 text-sm text-white/60 transition hover:text-white">
+      <Link href={voltar ?? '/'} className="inline-flex items-center gap-1.5 text-sm text-white/60 transition hover:text-white">
         <ArrowLeft className="h-4 w-4" />
-        Início
+        {voltar ? 'Voltar ao jogo' : 'Início'}
       </Link>
 
       {/* HEADER: avatar + nome + badges (tick verde verificado + pílula Coach

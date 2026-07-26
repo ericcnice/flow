@@ -1,6 +1,7 @@
 "use client"
 
 import { useRef, useState } from "react"
+import Link from "next/link"
 import { X, Check, BadgeCheck } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
@@ -16,6 +17,12 @@ export type SlotPreview = {
   nome: string
   avatarUrl: string | null
   verified: boolean
+  /**
+   * Este APARELHO é o dono deste slot (authUser.id === profile_id do slot).
+   * "VER viaja, EDITAR é local": a foto/nome/tick aparecem em todo aparelho,
+   * mas o atalho para editar a identidade é privilégio de quem é dono dela.
+   */
+  souEu: boolean
 }
 
 /**
@@ -84,6 +91,17 @@ export function NameEditModal({
   const changed =
     (!verified && p1.trim() !== orig.p1.trim()) ||
     (duplas && !verified1 && p2.trim() !== orig.p2.trim())
+
+  // VOLTA REDONDA: leva a URL ATUAL do jogo no ?voltar= para o /perfil saber
+  // para onde devolver. URL COMPLETA de propósito — num aparelho que entrou
+  // pelo QR, sem match/edit/v o retorno cairia numa partida diferente. Mesmo
+  // padrão do `next` do login (components/auth/app-auth.tsx). Inicializador
+  // preguiçoso com guarda de window: nunca lê no SSR.
+  const [perfilHref] = useState(() => {
+    if (typeof window === "undefined") return "/perfil"
+    const atual = window.location.pathname + window.location.search
+    return `/perfil?voltar=${encodeURIComponent(atual)}`
+  })
 
   const p2Ref = useRef<HTMLInputElement>(null)
   // Seleciona o texto ao focar (item 3): um toque substitui tudo, editar 1 letra
@@ -176,12 +194,17 @@ export function NameEditModal({
                 </span>
                 <BadgeCheck className="h-4 w-4 shrink-0 text-emerald-400" aria-hidden />
               </div>
-              <a
-                href="/perfil"
-                className="text-xs text-white/60 underline underline-offset-2 hover:text-white"
-              >
-                Identidade verificada — edite seu nome no perfil
-              </a>
+              {/* SÓ O DONO, no aparelho dele. Terceiro/anônimo não vê NADA aqui
+                  — o tick já comunica "verificado", e oferecer um atalho para
+                  editar identidade alheia seria promessa falsa. */}
+              {prev0?.souEu && (
+                <Link
+                  href={perfilHref}
+                  className="text-xs text-white/60 underline underline-offset-2 hover:text-white"
+                >
+                  Identidade verificada — edite seu nome no perfil
+                </Link>
+              )}
             </div>
           ) : (
             <label className="flex flex-col gap-1.5">

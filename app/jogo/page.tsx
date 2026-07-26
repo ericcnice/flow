@@ -3353,6 +3353,9 @@ export default function JogoPage() {
                 nome: card?.displayName || nomes[i],
                 avatarUrl: (ehDono ? ownerAvatarUrl : null) ?? card?.avatarUrl ?? null,
                 verified: true,
+                // "ver viaja, editar é local": só o dono, no aparelho dele,
+                // ganha o atalho para o /perfil.
+                souEu: ehDono,
               }
             }) as [SlotPreview | null, SlotPreview | null]
           })()}
