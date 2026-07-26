@@ -60,6 +60,13 @@ A INFRAESTRUTURA DE HOJE É A CARTEIRINHA: o cadastro, o claim, a landing /convi
 
 A carteirinha é o "passaporte" do jogador no ecossistema Flow. Cada convite (professor, jogo, oponente) é uma porta para CRIAR ou USAR a carteirinha. É por isso que a infra é tão reaproveitável — não construímos "cadastro de aluno", construímos "identidade do jogador".
 
+## O funil de conversão silencioso (a assimetria visual como isca)
+A identidade OPCIONAL nos slots não é só enriquecimento — é o MOTOR DE CONVERSÃO. No mesmo jogo, lado a lado: o jogador cadastrado aparece com FOTO + TICK VERDE, tratado por nome; o anônimo é "Jogador 2" (rótulo cinza). Essa assimetria, na tela que ambos olham, é um convite silencioso: "olha como fica com carteirinha". O anônimo vê o que PODERIA ser.
+
+REGRA DE OURO: a conversão vem do DESEJO, não da coerção. PULL, não push. A foto do outro NÃO é uma parede ("cadastre-se para continuar") — é uma VITRINE ("existe algo melhor quando você quiser"). O anônimo joga o jogo inteiro feliz sem se cadastrar; a carteirinha do vizinho é o anúncio, não o bloqueio. Respeita as regras invioláveis (offline/sem-login) E converte — o oposto de bloquear para forçar cadastro.
+
+CONSEQUÊNCIA DE DESIGN: a assimetria tem que ser VISÍVEL e DESEJÁVEL (a foto/tick do cadastrado deve puxar o olho, ser bonita), não escondida. Cada jogo com um cadastrado ao lado de um anônimo é um mini-comercial da carteirinha rodando na própria quadra. O tick verde e a foto (já usados como prova social no convite do professor) ganham uma segunda função: anunciar a identidade para quem ainda não tem.
+
 ## Modelo de identidade e negócio (Login Fase A)
 - **Hierarquia**: **Player** (todos; role padrão criado pela trigger `handle_new_user` no signup) → **Coach** (o super_admin promove via `members.role='coach'` no dashboard) → **Coach com marca+patrocinador no QR** (fatia futura; reusa `sponsors.member_id` apontando pro coach).
 - **Cadeia técnica existente**: `auth.users` → `profiles` (`id`, `name`, `email`, `phone`) → `members` (via `profile_id`, **hoje sempre null**) + `user_roles` (via `user_id`). A trigger de signup cria o `profile` + `user_roles='player'`; **NÃO cria `member`** e **NÃO promove coach**. `profiles.id = auth.users.id`; `user_roles` é a autorização de login (≠ `members.role`, que é atributo de pessoa).
