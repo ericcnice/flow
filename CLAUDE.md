@@ -130,6 +130,28 @@ CONSEQUÊNCIA: a "tensão do popup por lado vs QR geral" (que existia porque o p
 
 O popup único contém: todos os slots (carteirinha OU nome OU fallback), o QR geral (próximo livre), o toggle "digitar nome manual" (teclado sob demanda), e o drag-and-drop (reorganizar times — se nascer junto, melhor). Isso redefine a 1c.3: não é "adaptar o popup por lado", é "unificar num popup só com todos".
 
+## 1c.3 — plano e decisões (para amanhã)
+DECISÕES (Eric):
+- REORDENAR times = BOTÃO DE TROCA ("trocar com…"), NÃO drag-and-drop. Razão: em quadra (sol, mão suada, celular apoiado) arrastar é frágil; para 4 itens o botão é mais confiável, custa 0 KB (sem lib), resultado funcional idêntico. Não instalar @dnd-kit.
+- O popup unificado COEXISTE com o ShareModal (papéis distintos: ShareModal = "assistir/conectar aparelho" [QR editor + link transmissão]; popup unificado = "quem está jogando" [slots + identidade + QR para entrar]). O mesmo QR nos dois é ok. MAS extrair a montagem do link para um helper compartilhado (lib/share-links.ts com buildEditUrl/buildViewUrl) — duas fontes de verdade do link já causaram bug (o &clube= sumindo).
+
+DOIS RISCOS mapeados (tratar na implementação):
+1. PULSO não re-dispara: a animação .serve-pill-pulse (globals.css:519-530) não re-anima se a classe já está no nó (e está, na fase pré-jogo). Para o pulso de feedback funcionar no cenário comum (jogo não começou), remontar o nó (key) OU remover a classe num frame e readicionar. Esquecer = feedback invisível.
+2. SAQUE ao reordenar (o mais importante): trocar jogadores entre slots pode desalinhar quem saca — initialServer {A,B} guarda o ÍNDICE do jogador no lado. Reordenar precisa permutar o initialServer junto (ou zerá-lo), senão a bolinha fica no jogador errado. INVESTIGAR o saque ANTES de implementar o reordenar (fatia vi).
+
+FATIAMENTO (ordem):
+(i) Extrair <SlotRow> — refactor puro, popup ainda por lado, ZERO mudança visual (o conteúdo de slot está inline 4x hoje; extrair é pré-requisito da unificação). Marco mais seguro: tela idêntica = refactor certo.
+(ii) Popup único empilhado (Time A / vs / Time B), disparado por qualquer pílula; saveAllNames(players) novo no pai (NÃO chamar saveNames 2x — o 2º patch sobrescreveria o 1º); toggle simples/duplas preservado; morrem accentColor e editingSide.
+(iii) QR-padrão + toggle "digitar manual" (remove o autoFocus que sobe o teclado) — usa o helper de link.
+(iv) Pulso de feedback (1c.2) — independente, pequena, trata o risco 1.
+(v) "Jogo completo" — pequena, informativa.
+(vi) Reordenar (botão de troca) — por último; depende de (ii) + a investigação do saque (risco 2).
+
+PRESERVAR na unificação (o NameEditModal tem 13 responsabilidades — as invisíveis somem fácil): toggle simples/duplas (escreve ao vivo via set_config), trava por slot verificado, dirty check por slot, preview de avatar (1b.2a), link "editar no perfil" só p/ dono (souEu) + ?voltar=, salvar preservando travados, selectAll no foco, Enter navega/salva, fechar tocando fora + stopPropagation, botão Salvar condicional. O <SlotRow> encapsula: avatar + nome/input + tick + link do dono + foco.
+
+Começar amanhã por (i) — refactor sem mudança visual, destrava tudo. (iv) é o "troco" pequeno se (ii) esticar.
+INTOCÁVEIS: a 1c.1 (reivindicação), o conteúdo de slot validado, o motor, lib/scoring, multi-device, view_token, merge do sync, jornada anônima. 1c.3 reorganiza o continente; o mecanismo não muda. 100% front, sem Supabase.
+
 ## Modelo de identidade e negócio (Login Fase A)
 - **Hierarquia**: **Player** (todos; role padrão criado pela trigger `handle_new_user` no signup) → **Coach** (o super_admin promove via `members.role='coach'` no dashboard) → **Coach com marca+patrocinador no QR** (fatia futura; reusa `sponsors.member_id` apontando pro coach).
 - **Cadeia técnica existente**: `auth.users` → `profiles` (`id`, `name`, `email`, `phone`) → `members` (via `profile_id`, **hoje sempre null**) + `user_roles` (via `user_id`). A trigger de signup cria o `profile` + `user_roles='player'`; **NÃO cria `member`** e **NÃO promove coach**. `profiles.id = auth.users.id`; `user_roles` é a autorização de login (≠ `members.role`, que é atributo de pessoa).
