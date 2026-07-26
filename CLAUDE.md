@@ -67,6 +67,23 @@ REGRA DE OURO: a conversão vem do DESEJO, não da coerção. PULL, não push. A
 
 CONSEQUÊNCIA DE DESIGN: a assimetria tem que ser VISÍVEL e DESEJÁVEL (a foto/tick do cadastrado deve puxar o olho, ser bonita), não escondida. Cada jogo com um cadastrado ao lado de um anônimo é um mini-comercial da carteirinha rodando na própria quadra. O tick verde e a foto (já usados como prova social no convite do professor) ganham uma segunda função: anunciar a identidade para quem ainda não tem.
 
+## Flow Club como comunidade-lar (visão — Eric)
+Todo jogador pertence a PELO MENOS uma comunidade. Um jogador que entra organicamente, SEM clube associado, teria o FLOW CLUB como comunidade padrão — para não ficar "órfão"/sem pertencimento. Modelo real: uma pessoa joga em VÁRIOS clubes (sócia do SPAC, beach na praia, aula em outro lugar) — o Flow Club é o denominador comum, o lar quando não há outro.
+DISTINÇÃO: clubes reais têm QUADRAS FÍSICAS (QR na parede); o Flow Club é comunidade SEM lugar físico — QUADRAS VIRTUAIS, para o jogo em qualquer lugar (praia, quadra pública). Coerente com a âncora móvel (celular = quadra temporária).
+QUANDO: é conceito de COMUNIDADE/pertencimento que se conecta com a CARTEIRINHA — desenvolver quando a carteirinha amadurecer, NÃO agora. Hoje o Flow Club tem quadras de teste (q1/q2) como os outros; o conceito de quadra virtual vem junto com o conceito de comunidade. A carteirinha guardaria as comunidades do jogador (pode pertencer a vários clubes + o Flow Club).
+
+## Filiação automática ao Flow Club (o mecanismo — Eric)
+DISTINÇÃO que separa três coisas hoje grudadas:
+1. VÍNCULO com professor (aluno da Ana) = relação pessoa↔pessoa, INDEPENDE de clube.
+2. CONTEXTO do jogo (logo do SPAC/outro clube/nenhum) = decoração da partida, viaja no histórico, NÃO "filia" ninguém. Hoje o convite do professor NÃO prende o jogador a um clube — cria o vínculo aluno↔professor; o clube é só o contexto/bandeira no placar. (Confirmar na investigação.)
+3. FILIAÇÃO/pertencimento do jogador = a que comunidade ele pertence. Hoje não existe como conceito ativo.
+
+MECANISMO (a ideia): quando o jogador cria a carteirinha por QUALQUER porta (convite da Ana no SPAC, convite de outro professor/clube, ou orgânico), ganha AUTOMATICAMENTE a filiação ao FLOW CLUB (comunidade virtual). Assim NUNCA fica preso ao clube pela qual entrou — o Flow Club é dele, portátil, funciona em qualquer lugar. Adicionalmente pode ter vínculos com clubes físicos.
+
+PRINCÍPIO: a PORTA DE ENTRADA não determina o PERTENCIMENTO. Entrou pela Ana no SPAC? É aluno da Ana (vínculo pessoal) + membro do Flow Club (comunidade portátil) — NÃO "sócio do SPAC". O clube é onde o jogo ACONTECE (lugar); o Flow Club é a CASA do jogador (pertencimento). Todas as portas levam ao Flow Club como lar. O convite pode vir de qualquer professor/clube/nenhum — muda só o contexto (o logo); não muda que o convidado ganha carteirinha + filiação ao Flow Club.
+
+QUANDO: parte do conceito de comunidade — desenvolver quando a carteirinha amadurecer. Registrar agora para não perder; a filiação automática ao Flow Club é o mecanismo concreto do "Flow Club como comunidade-lar".
+
 ## Marca do Flow — tipografia e símbolo (correção, Eric)
 A fonte do Flow **É Audiowide**, com um DEGRADÊ (gradiente azul→verde) aplicado. A Audiowide é o padrão de TODOS os logos de produtos da PWER IO — usada para consistência de marca entre os produtos. NÃO há fonte arredondada separada; o registro anterior sobre isso estava incorreto.
 
