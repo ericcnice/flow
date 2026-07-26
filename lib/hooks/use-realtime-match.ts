@@ -73,6 +73,12 @@ export interface UseRealtimeMatch {
   remoteFirstServer: string | null
   /** state.players mais recente do remoto (raiz do state); null se ausente. */
   remotePlayers: any
+  /**
+   * state.playerIds mais recente do remoto (raiz do state): mapa OPCIONAL
+   * slot → profile_id de quem reivindicou aquele slot. AUSENTE é o caso normal
+   * (jogo anônimo/offline) — a identidade só ENRIQUECE, nunca é exigida.
+   */
+  remotePlayerIds: any
   /** state.theme mais recente do remoto (raiz do state); null se ausente. */
   remoteTheme: string | null
   /** state.scoreType mais recente do remoto (raiz do state); null se ausente. */
@@ -119,6 +125,7 @@ export function useRealtimeMatch(options?: UseRealtimeMatchOptions): UseRealtime
   const [remoteRules, setRemoteRules] = useState<any>(null)
   const [remoteFirstServer, setRemoteFirstServer] = useState<string | null>(null)
   const [remotePlayers, setRemotePlayers] = useState<any>(null)
+  const [remotePlayerIds, setRemotePlayerIds] = useState<any>(null)
   const [remoteTheme, setRemoteTheme] = useState<string | null>(null)
   const [remoteScoreType, setRemoteScoreType] = useState<string | null>(null)
   const [presenceCount, setPresenceCount] = useState(0)
@@ -139,6 +146,10 @@ export function useRealtimeMatch(options?: UseRealtimeMatchOptions): UseRealtime
     if (newState?.rules !== undefined) setRemoteRules(newState.rules ?? null)
     if (newState?.firstServer !== undefined) setRemoteFirstServer(newState.firstServer ?? null)
     if (newState?.players !== undefined) setRemotePlayers(newState.players ?? null)
+    // playerIds: chave NOVA e opcional na raiz do state. O broadcast manda o
+    // state inteiro, então ela viaja sozinha; salas antigas simplesmente não a
+    // têm (undefined → nunca sobrescreve o que o cliente já tem).
+    if (newState?.playerIds !== undefined) setRemotePlayerIds(newState.playerIds ?? null)
     if (newState?.theme !== undefined) setRemoteTheme(newState.theme ?? null)
     if (newState?.scoreType !== undefined) setRemoteScoreType(newState.scoreType ?? null)
   }, [])
@@ -358,6 +369,7 @@ export function useRealtimeMatch(options?: UseRealtimeMatchOptions): UseRealtime
     remotePlayers,
     remoteTheme,
     remoteScoreType,
+    remotePlayerIds,
     presenceCount,
     editorCount,
     create,

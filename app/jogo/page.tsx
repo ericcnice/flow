@@ -67,9 +67,17 @@ type GameConfig = {
   /** blue1 é a IDENTIDADE VERIFICADA do dono logado (Passo 1a/A4): pré-preenchida
    *  do profiles.name, TRAVADA no jogo (edita-se no /perfil, a fonte da verdade) e
    *  com tick verde. LOCAL a este device (persiste no localStorage; NÃO viaja no
-   *  set_config — o sync só carrega `players`, que já existe). Ausente/false =
-   *  nome comum, editável. Só vira true com a flag ligada. */
+   *  set_config). Continua existindo como fallback local — a fonte que VIAJA é
+   *  `playerIds` (abaixo). Ausente/false = nome comum, editável. */
   ownerVerified?: boolean
+  /** CARTEIRINHA POR SLOT (Fatia 1a): profile_id de quem reivindicou cada slot.
+   *  OPCIONAL e ADITIVO — ausente é o caso NORMAL (jogo anônimo/offline), e a
+   *  ausência nunca bloqueia nada. Diferente de `ownerVerified`, este mapa VIAJA
+   *  no set_config: o merge livre da RPC aceita chaves novas na raiz do state, e
+   *  o broadcast manda o state inteiro — então os outros aparelhos e o /placar
+   *  passam a ver quem tem identidade. `players` (as 4 strings) segue sendo a
+   *  fonte de exibição e do save; isto aqui só ENRIQUECE. */
+  playerIds?: Partial<Record<"blue1" | "blue2" | "red1" | "red2", string>>
   /** Sacador individual INICIAL por lado (0 = blue1/red1, 1 = blue2/red2). Campo
    *  aditivo do B1: aqui é só criado/persistido/propagado — a UI de escolha vem
    *  no B1b e a rotação derivada no B2. `firstServer` (Side, na semente do motor)
@@ -750,6 +758,7 @@ export default function JogoPage() {
   const applyLocalConfig = (patch: {
     scoreType?: "pontos" | "games"
     players?: Partial<GameConfig["players"]>
+    playerIds?: GameConfig["playerIds"]
     maxSets?: number
     theme?: ThemeId
   }) => {
@@ -781,6 +790,24 @@ export default function JogoPage() {
         updated.players = mergedPlayers
         changed = true
         playersChanged = true
+      }
+    }
+    // MERGE DE playerIds — REGRA DIFERENTE da de `players`, de propósito.
+    // Em `players` a regra é "local não-fallback vence" (protege o nome do dono
+    // contra o seed "Player N"). Aqui a regra é QUEM REIVINDICA VENCE: um id
+    // remoto presente sempre entra, porque significa "alguém acabou de colocar
+    // a carteirinha dele neste slot". E a AUSÊNCIA no patch NUNCA apaga o que já
+    // existe — senão um aparelho com estado velho (sem a chave) derrubaria a
+    // identidade de quem entrou agora. Só acrescenta, nunca esvazia.
+    if (patch.playerIds && typeof patch.playerIds === "object") {
+      const mergedIds = { ...(prev.playerIds ?? {}) }
+      for (const [k, v] of Object.entries(patch.playerIds)) {
+        const key = k as keyof NonNullable<GameConfig["playerIds"]>
+        if (typeof v === "string" && v) mergedIds[key] = v
+      }
+      if (JSON.stringify(mergedIds) !== JSON.stringify(prev.playerIds ?? {})) {
+        updated.playerIds = mergedIds
+        changed = true
       }
     }
     let maxSetsChanged = false
@@ -891,6 +918,12 @@ export default function JogoPage() {
       applyLocalConfig({ players: rt.remotePlayers })
     }
 
+    // playerIds → carteirinha por slot. Ausente no remoto (sala antiga, jogo
+    // anônimo) = nada acontece: o app segue exatamente como antes.
+    if (rt.remotePlayerIds && typeof rt.remotePlayerIds === "object") {
+      applyLocalConfig({ playerIds: rt.remotePlayerIds })
+    }
+
     // theme → aplica setTheme + gameConfig via applyLocalConfig (dedup por
     // conteúdo: só muda se diferente do tema atual). Não afeta o motor.
     if (rt.remoteTheme) {
@@ -949,7 +982,14 @@ export default function JogoPage() {
      console.error("[realtime] Falha ao aplicar config remota (set_config) — ignorado, estado local preservado.", err)
    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rt.remotePlayers, rt.remoteFirstServer, rt.remoteRules, rt.remoteTheme, rt.remoteScoreType])
+  }, [
+    rt.remotePlayers,
+    rt.remotePlayerIds,
+    rt.remoteFirstServer,
+    rt.remoteRules,
+    rt.remoteTheme,
+    rt.remoteScoreType,
+  ])
 
   useEffect(() => {
     // Update elapsed time
@@ -1802,15 +1842,24 @@ export default function JogoPage() {
   // (ownerVerified fica local, sync intocado) e SOLTA o placeholder. Idempotente:
   // se o nome já é o atual, só solta o placeholder (sem set_config redundante). O
   // chamador garante que o slot ainda é do dono (nunca sobrescreve edição).
-  const aplicarNomeDono = (nome: string) => {
+  const aplicarNomeDono = (nome: string, uid?: string) => {
     const cur = gameConfigRef.current
     if (!cur) return
-    if (nome === cur.players.blue1) {
+
+    const nomeIgual = nome === cur.players.blue1
+    // A CARTEIRINHA é o que faz o tick VIAJAR. Só grava se ainda não está lá —
+    // assim as duas passadas do prefill (metadata → profiles.name) não repetem
+    // o set_config à toa.
+    const idNovo = uid && cur.playerIds?.blue1 !== uid ? uid : null
+
+    if (nomeIgual && !idNovo) {
       soltarPlaceholder()
       return
     }
-    const players = { ...cur.players, blue1: nome }
-    const newConfig: GameConfig = { ...cur, players, ownerVerified: true }
+
+    const players = nomeIgual ? cur.players : { ...cur.players, blue1: nome }
+    const playerIds = idNovo ? { ...(cur.playerIds ?? {}), blue1: idNovo } : cur.playerIds
+    const newConfig: GameConfig = { ...cur, players, playerIds, ownerVerified: true }
     setGameConfig(newConfig)
     gameConfigRef.current = newConfig
     try {
@@ -1818,8 +1867,17 @@ export default function JogoPage() {
     } catch {
       // aba privada / cota: segue só em memória
     }
-    setBluePlayerName(cur.gameType === "duplas" ? `${players.blue1}/${players.blue2}` : players.blue1)
-    sendRealtimeAction({ kind: "set_config", patch: { players } })
+    if (!nomeIgual) {
+      setBluePlayerName(cur.gameType === "duplas" ? `${players.blue1}/${players.blue2}` : players.blue1)
+    }
+    // `playerIds` viaja JUNTO com `players`: a RPC faz merge livre na raiz do
+    // state (aceita chaves novas) e o broadcast manda o state inteiro — os
+    // outros aparelhos e o /placar recebem a carteirinha de graça. Offline, o
+    // sendRealtimeAction simplesmente não tem sala: nada quebra, o jogo segue.
+    sendRealtimeAction({
+      kind: "set_config",
+      patch: idNovo ? { players, playerIds } : { players },
+    })
     soltarPlaceholder()
   }
 
@@ -1841,7 +1899,10 @@ export default function JogoPage() {
     const cfg = gameConfigRef.current
     if (!cfg) return // config ainda não carregou — re-tenta quando gameConfig chegar
     if (!isFallbackName(cfg.players.blue1)) {
-      prefillDoneRef.current = true // já tem nome (digitado/pré) → nada a fazer, não re-tenta
+      prefillDoneRef.current = true // já tem nome (digitado/pré) → não mexe no nome
+      // …mas a CARTEIRINHA ainda pode faltar: o dono pode ter digitado o próprio
+      // nome no setup antes de logar. Grava só o id (o nome fica como está).
+      if (!cfg.playerIds?.blue1) aplicarNomeDono(cfg.players.blue1, authUser.id)
       soltarPlaceholder()
       return
     }
@@ -1851,7 +1912,7 @@ export default function JogoPage() {
     // vira o nome sem esperar o profiles.name (rede). Solta o placeholder.
     const meta = (authUser.user_metadata ?? {}) as Record<string, unknown>
     const nomeMeta = (((meta.full_name as string) ?? (meta.name as string)) ?? "").trim()
-    if (nomeMeta) aplicarNomeDono(nomeMeta)
+    if (nomeMeta) aplicarNomeDono(nomeMeta, authUser.id)
 
     let alive = true
     void (async () => {
@@ -1869,7 +1930,7 @@ export default function JogoPage() {
       // Só aplica se o slot ainda é do dono (fallback OU o nome do metadata que
       // pusemos) — nunca sobrescreve edição feita durante o fetch.
       const doDono = !!cur && (isFallbackName(cur.players.blue1) || cur.players.blue1 === nomeMeta)
-      if (nome && doDono) aplicarNomeDono(nome)
+      if (nome && doDono) aplicarNomeDono(nome, authUser.id)
       // Sem nome em lugar nenhum → solta o placeholder (cai no "Player 1").
       if (!nomeMeta && !nome) soltarPlaceholder()
     })()
@@ -2169,10 +2230,15 @@ export default function JogoPage() {
     ) : (
       <span className="h-7 w-7 shrink-0" aria-hidden />
     )
-    // TICK VERDE de identidade VERIFICADA (Passo 1a/A4): só no slot 0 do time do
-    // dono (blue1) quando ownerVerified. Discreto, DENTRO do espaço do nome (não
-    // desloca logo do clube nem a bola) — a Quadra 2.0 não muda de layout.
-    const verifiedSlot0 = team === "blue" && cfg.ownerVerified === true
+    // TICK VERDE de identidade VERIFICADA. A fonte que VIAJA é `playerIds` (o
+    // profile_id que o dono gravou no slot e o set_config propagou) — por isso o
+    // tick agora aparece TAMBÉM nos outros aparelhos e na transmissão, não só
+    // aqui. `ownerVerified` fica como fallback LOCAL: cobre a partida que já
+    // estava em andamento antes desta fatia e o caso offline puro, em que o
+    // set_config nunca saiu do aparelho. Discreto, DENTRO do espaço do nome.
+    const slotKey = team === "blue" ? "blue1" : "red1"
+    const verifiedSlot0 =
+      Boolean(cfg.playerIds?.[slotKey]) || (team === "blue" && cfg.ownerVerified === true)
     const tick = (
       <BadgeCheck
         className="h-3.5 w-3.5 shrink-0 text-emerald-400"

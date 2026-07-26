@@ -21,6 +21,7 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react"
 import Image from "next/image"
 import { useRouter, useSearchParams } from "next/navigation"
+import { BadgeCheck } from "lucide-react"
 
 import { ScoringEngine } from "@/lib/scoring/engine"
 import { sportById, familyOf, formatPoint, defaultRulesFor, buildScoreCols, concededUnitFlags, displayServer, type SportId } from "@/lib/sports-catalog"
@@ -45,6 +46,7 @@ export function BroadcastScoreboard({
   server,
   winner,
   names,
+  verified,
   points,
   conceded = [],
 }: {
@@ -54,6 +56,8 @@ export function BroadcastScoreboard({
   server: Side
   winner: Side | null
   names: { A: string; B: string }
+  /** Identidade CONFIRMADA por lado (playerIds do state). Ausente = anônimo. */
+  verified?: { A: boolean; B: boolean }
   points: { A: string; B: string }
   /** Por UNIDADE (índice = setNum-1): true se foi fechada por CONCESSÃO. Nessas,
    *  mostramos só um indicador de vitória (●/○), nunca o placar de pontos. */
@@ -91,6 +95,15 @@ export function BroadcastScoreboard({
               <td className="sb-name">
                 <span className={`sb-dot ${isServing ? "on" : ""}`} aria-hidden />
                 <span>{name}</span>
+                {/* TICK do jogador com carteirinha. Só LEITURA: o /placar nunca
+                    toca edit_token nem identidade de escrita — apenas exibe o
+                    que veio no state. Sem playerIds (o normal), nada muda. */}
+                {verified?.[side] && (
+                  <BadgeCheck
+                    className="ml-1 inline h-3.5 w-3.5 align-[-2px] text-emerald-400"
+                    aria-label="Identidade verificada pelo Flow"
+                  />
+                )}
               </td>
               {cols.map((c) => {
                 const mine = side === "A" ? c.a : c.b
@@ -173,6 +186,9 @@ export function BroadcastView() {
 
   const [nameA, setNameA] = useState("Jogador 1")
   const [nameB, setNameB] = useState("Jogador 2")
+  // Carteirinha por lado (Fatia 1a): quem tem profile_id no slot principal
+  // ganha o tick. AUSENTE é o caso normal — jogo anônimo não muda em nada.
+  const [verified, setVerified] = useState<{ A: boolean; B: boolean }>({ A: false, B: false })
 
   const [elapsedTime, setElapsedTime] = useState("00:00:00")
   const [startTime, setStartTime] = useState<Date | null>(null)
@@ -257,6 +273,12 @@ export function BroadcastView() {
           setNameA(teamName(rState.players, "blue", gt))
           setNameB(teamName(rState.players, "red", gt))
         }
+        if (rState.playerIds && typeof rState.playerIds === "object") {
+          setVerified({
+            A: Boolean(rState.playerIds.blue1),
+            B: Boolean(rState.playerIds.red1),
+          })
+        }
 
         rebuildEngine(rRules, rFirst, cleanActions)
         // O cronômetro do espectador conta desde a abertura (o startTime real não
@@ -298,6 +320,14 @@ export function BroadcastView() {
       setNameA(teamName(rt.remotePlayers, "blue", gameType))
       setNameB(teamName(rt.remotePlayers, "red", gameType))
     }
+    // Quem REIVINDICA vence e a ausência nunca apaga: só ligamos o tick, nunca
+    // desligamos por um patch que veio sem a chave.
+    if (rt.remotePlayerIds && typeof rt.remotePlayerIds === "object") {
+      setVerified((prev) => ({
+        A: prev.A || Boolean(rt.remotePlayerIds.blue1),
+        B: prev.B || Boolean(rt.remotePlayerIds.red1),
+      }))
+    }
     if (rt.remoteTheme) setTheme(rt.remoteTheme as ThemeId)
 
     let nextFirst = firstServerRef.current
@@ -317,7 +347,7 @@ export function BroadcastView() {
     }
     if (needRebuild) rebuildEngine(nextRules, nextFirst, actionsRef.current)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rt.remotePlayers, rt.remoteFirstServer, rt.remoteRules, rt.remoteTheme, gameType])
+  }, [rt.remotePlayers, rt.remotePlayerIds, rt.remoteFirstServer, rt.remoteRules, rt.remoteTheme, gameType])
 
   // Cronômetro (mesmo padrão do /jogo).
   useEffect(() => {
@@ -424,6 +454,7 @@ export function BroadcastView() {
               server={displayServer(gs)}
               winner={gs.winner ?? null}
               names={{ A: nameA, B: nameB }}
+              verified={verified}
               points={{ A: pointOf("A"), B: pointOf("B") }}
               conceded={conceded}
             />
