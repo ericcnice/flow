@@ -81,6 +81,18 @@ No popup "Nomes da dupla" (onde se edita os jogadores), mostrar um PREVIEW da fo
 2. FUNIL NO PONTO CERTO: no popup, o cadastrado tem foto/tick no preview; o anônimo tem iniciais cinza. A assimetria aparece no momento em que a pessoa pensa na própria identidade — "se eu me cadastrar, apareço assim". Conversão no ponto exato.
 O preview é o ESPELHO que faz a pessoa se arrumar — alimenta qualidade da foto E conversão.
 
+## O popup de preencher slot: QR como PADRÃO, teclado como opção (decisão Eric — filosofia da 1c)
+Quando o popup de editar/preencher um slot de jogador abre, o PADRÃO NÃO é o teclado subindo para digitar nome. O padrão é o QR CODE limpo (grande, sozinho — ou com o link de WhatsApp abaixo), convidando o outro jogador a ESCANEAR e entrar com a CARTEIRINHA. Um toggle em cima ("inserir nome manual") é que faz o teclado subir para digitar um nome anônimo.
+
+POR QUE (inverter o default):
+1. O default convida à IDENTIDADE: a primeira coisa que aparece é "traga sua carteirinha" (escaneie), não "digite um nome qualquer". Empurra suavemente para o cadastro (o funil) sem OBRIGAR (o toggle manual respeita o anônimo).
+2. RESOLVE O TECLADO DE RAIZ: o teclado comia 50%+ da tela quando subia automático. Com o QR como padrão, o teclado NEM SOBE por default — a tela fica livre para o QR grande (que precisa de espaço para escanear). O teclado só aparece sob o toggle. Os dois modos não competem.
+3. Coerente com as regras invioláveis: mostra o caminho preferido (identidade) mas garante o anônimo a um toque (o toggle). PULL forte, sem PUSH coercitivo. "Força" a logar só no sentido de tornar a identidade o caminho natural — nunca bloqueia o anônimo.
+
+TERCEIRO CAMINHO (o WhatsApp): alguns celulares de amigos não leem QR (Eric presenciou). Então além do QR, um botão "enviar link por WhatsApp" — o mesmo destino do QR (entrar no slot), por link. Cobre quem não escaneia.
+
+Isto é a filosofia da 1c (o QR check-in do jogador / preencher slot). NÃO é a 1b.2a (que é só o preview da foto de quem já está no slot). A 1c redesenha o popup com: QR padrão + toggle manual + botão WhatsApp, resolvendo o teclado.
+
 ## Modelo de identidade e negócio (Login Fase A)
 - **Hierarquia**: **Player** (todos; role padrão criado pela trigger `handle_new_user` no signup) → **Coach** (o super_admin promove via `members.role='coach'` no dashboard) → **Coach com marca+patrocinador no QR** (fatia futura; reusa `sponsors.member_id` apontando pro coach).
 - **Cadeia técnica existente**: `auth.users` → `profiles` (`id`, `name`, `email`, `phone`) → `members` (via `profile_id`, **hoje sempre null**) + `user_roles` (via `user_id`). A trigger de signup cria o `profile` + `user_roles='player'`; **NÃO cria `member`** e **NÃO promove coach**. `profiles.id = auth.users.id`; `user_roles` é a autorização de login (≠ `members.role`, que é atributo de pessoa).
