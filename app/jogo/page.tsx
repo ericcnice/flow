@@ -78,7 +78,7 @@ type GameConfig = {
    *  o broadcast manda o state inteiro — então os outros aparelhos e o /placar
    *  passam a ver quem tem identidade. `players` (as 4 strings) segue sendo a
    *  fonte de exibição e do save; isto aqui só ENRIQUECE. */
-  playerIds?: Partial<Record<"blue1" | "blue2" | "red1" | "red2", string>>
+  playerIds?: Partial<Record<SlotKey, string>>
   /** Sacador individual INICIAL por lado (0 = blue1/red1, 1 = blue2/red2). Campo
    *  aditivo do B1: aqui é só criado/persistido/propagado — a UI de escolha vem
    *  no B1b e a rotação derivada no B2. `firstServer` (Side, na semente do motor)
@@ -104,6 +104,9 @@ type GameConfig = {
    *  segue disponível independente disto. Ausente/false = sem aviso. */
   sideChangeAlert?: boolean
 }
+
+/** Os quatro lugares de jogador, na ordem global (blue1=1 … red2=4). */
+type SlotKey = "blue1" | "blue2" | "red1" | "red2"
 
 // Ação registrada para persistência: o estado do motor é reconstruído por
 // replay (o engine não expõe setter de estado — ver lib/scoring/engine.ts).
@@ -1943,6 +1946,96 @@ export default function JogoPage() {
     rt.remotePlayerIds,
   ])
 
+  // ---------------------------------------------- 1c.1: o convidado reivindica
+  // QUATRO GUARDAS, nesta ordem:
+  //  (a) tem `edit` na URL  → é PARTICIPANTE (quem entrou pelo QR de compartilhar).
+  //      Espectador (/placar, ou link só com view) nunca ocupa lugar;
+  //  (b) tem sessão         → ANÔNIMO NÃO REIVINDICA. Escaneia, joga, e nada
+  //      muda para ele — é o inviolável, não um caso degradado;
+  //  (c) ainda não estou em slot nenhum → idempotência: cobre reload e re-render;
+  //  (d) uma vez por sala   → ref chaveado por matchId.
+  //
+  // Espera `rt.remotePlayers` de propósito: o config sintético nasce todo em
+  // fallback, então reivindicar antes do 1º sync escolheria um slot que a sala
+  // já pode ter ocupado.
+  const reivindicacaoFeitaRef = useRef<string | null>(null)
+  const meuNomeRef = useRef<string>("")
+  const retentativasRef = useRef(0)
+  useEffect(() => {
+    if (!searchParams.get("edit")) return // (a)
+    if (!authUser) return // (b)
+    const cur = gameConfigRef.current
+    if (!cur?.matchId) return
+    const ids = cur.playerIds ?? {}
+    if (Object.values(ids).includes(authUser.id)) return // (c)
+    if (reivindicacaoFeitaRef.current === cur.matchId) return // (d)
+    if (!rt.remotePlayers) return // ainda sem o estado da sala
+
+    if (!proximoSlotLivre(cur)) return // jogo completo → 1c.2 avisa
+    reivindicacaoFeitaRef.current = cur.matchId // trava ANTES do await
+
+    let alive = true
+    void (async () => {
+      // Nome: metadata (instantâneo) e refino pelo profile — o dono faz igual.
+      const meta = (authUser.user_metadata ?? {}) as Record<string, unknown>
+      let nome = (((meta.full_name as string) ?? (meta.name as string)) ?? "").trim()
+      try {
+        const supabase = createBrowserSupabaseClient()
+        const { data } = await supabase
+          .from("profiles")
+          .select("name")
+          .eq("id", authUser.id)
+          .maybeSingle()
+        const doBanco = (data?.name ?? "").trim()
+        if (doBanco) nome = doBanco
+      } catch {
+        // offline: fica com o do metadata
+      }
+      if (!alive) return
+      if (!nome) {
+        // Sem nome em lugar nenhum: não ocupa o slot com string vazia. Solta a
+        // trava para tentar de novo numa próxima passada.
+        reivindicacaoFeitaRef.current = null
+        return
+      }
+      meuNomeRef.current = nome
+
+      // RELÊ o slot livre agora (o estado pode ter mudado durante o await) —
+      // reduz a janela da corrida antes mesmo do desempate pós-eco.
+      const agora = gameConfigRef.current
+      if (!agora) return
+      if (Object.values(agora.playerIds ?? {}).includes(authUser.id)) return
+      const slot = proximoSlotLivre(agora)
+      if (!slot) return
+      reivindicarSlot(slot, authUser.id, nome)
+    })()
+    return () => {
+      alive = false
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authUser, gameConfig, rt.remotePlayers])
+
+  // DESEMPATE PÓS-ECO (a corrida): dois aparelhos escaneando juntos leem o mesmo
+  // "próximo livre" e escrevem no mesmo slot — o último a chegar no servidor
+  // vence, e o perdedor ficaria achando que entrou. Quando o eco do broadcast
+  // volta SEM o meu id em slot nenhum, pego o próximo livre e tento de novo.
+  // Máx. 2 retentativas (a mesa tem 4 lugares; mais que isso é sinal de outra
+  // coisa, e loop é pior que não entrar).
+  useEffect(() => {
+    if (!authUser || !reivindicacaoFeitaRef.current) return
+    const remotos = rt.remotePlayerIds
+    if (!remotos || typeof remotos !== "object") return
+    if (Object.values(remotos).includes(authUser.id)) return // consegui, tudo certo
+    if (retentativasRef.current >= 2) return
+    const cur = gameConfigRef.current
+    if (!cur) return
+    const slot = proximoSlotLivre(cur)
+    if (!slot || !meuNomeRef.current) return
+    retentativasRef.current += 1
+    reivindicarSlot(slot, authUser.id, meuNomeRef.current)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rt.remotePlayerIds, authUser])
+
   // Solta o placeholder do slot do dono (limpa o estado + o timer de segurança).
   const soltarPlaceholder = () => {
     if (ownerPendingTimerRef.current) {
@@ -1950,6 +2043,61 @@ export default function JogoPage() {
       ownerPendingTimerRef.current = null
     }
     setOwnerNamePending(false)
+  }
+
+  // ------------------------------------------------- 1c.1: REIVINDICAR UM SLOT
+  // Quem escaneia o QR e está LOGADO entra no próximo lugar livre com a própria
+  // carteirinha. É o caminho IRMÃO do prefill do dono (que cuida do blue1) —
+  // não o substitui.
+
+  /** Slots que EXISTEM no formato atual. Simples só tem os dois primeiros. */
+  const slotsDoFormato = (gameType: string): SlotKey[] =>
+    gameType === "duplas" ? ["blue1", "blue2", "red1", "red2"] : ["blue1", "red1"]
+
+  /**
+   * O PRÓXIMO SLOT LIVRE, na ordem global (blue1=1, blue2=2, red1=3, red2=4).
+   *
+   * DUAS regras que decidem o resultado:
+   *  • o formato manda — em SIMPLES o 2º que escaneia vai para RED1 (o
+   *    oponente), nunca para blue2, que nem existe naquele jogo;
+   *  • "livre" exige as DUAS condições: nome ainda em fallback E sem
+   *    carteirinha. Um slot com nome DIGITADO ("Bruno") está ocupado por um
+   *    anônimo — atropelá-lo apagaria uma pessoa real da partida.
+   *
+   * blue1 é sempre pulado: é o slot de quem criou o jogo neste aparelho.
+   * Sem nenhum livre → null ("jogo completo"; o aviso visual é a 1c.2).
+   */
+  const proximoSlotLivre = (cfg: GameConfig): SlotKey | null => {
+    for (const slot of slotsDoFormato(cfg.gameType)) {
+      if (slot === "blue1") continue
+      if (isFallbackName(cfg.players[slot]) && !cfg.playerIds?.[slot]) return slot
+    }
+    return null
+  }
+
+  /**
+   * Escreve a carteirinha no slot e propaga. Espelha o aplicarNomeDono: mesmo
+   * conjunto de escritas (config + localStorage + nomes exibidos) e o MESMO
+   * canal de propagação (set_config com players + playerIds), que a 1a provou
+   * funcionar para qualquer aparelho com o edit_token — não só para o dono.
+   */
+  const reivindicarSlot = (slot: SlotKey, uid: string, nome: string) => {
+    const cur = gameConfigRef.current
+    if (!cur) return
+    const players = { ...cur.players, [slot]: nome }
+    const playerIds = { ...(cur.playerIds ?? {}), [slot]: uid }
+    const newConfig: GameConfig = { ...cur, players, playerIds }
+    setGameConfig(newConfig)
+    gameConfigRef.current = newConfig
+    try {
+      localStorage.setItem(`tennis_match_${quadra}`, JSON.stringify(newConfig))
+    } catch {
+      // aba privada / cota: segue só em memória
+    }
+    const duplas = cur.gameType === "duplas"
+    setBluePlayerName(duplas ? `${players.blue1}/${players.blue2}` : players.blue1)
+    setRedPlayerName(duplas ? `${players.red1}/${players.red2}` : players.red1)
+    sendRealtimeAction({ kind: "set_config", patch: { players, playerIds } })
   }
 
   // Aplica o nome do dono no slot blue1 + marca IDENTIDADE VERIFICADA (local).
