@@ -697,6 +697,10 @@ export default function JogoPage() {
                 firstServer: firstServerRef.current,
                 rules: rulesRef.current,
                 players: seedConfig.players,
+                // CARTEIRINHA no seed: sem isto, a sala nascia sem playerIds e
+                // o tick/foto do dono só chegariam por set_config posterior.
+                // Ausente quando ninguém está logado — é o caso normal.
+                ...(seedConfig.playerIds ? { playerIds: seedConfig.playerIds } : {}),
                 theme: config.theme ?? theme,
                 sport: config.sport ?? sportRef.current,
               }
@@ -1165,8 +1169,12 @@ export default function JogoPage() {
     value?: string
     patch?: Record<string, any>
   }) => {
-    const editToken = gameConfig?.editToken || searchParams.get("edit") || undefined
-    const matchId = gameConfig?.matchId || searchParams.get("match") || undefined
+    // REF, não state: o resto do arquivo já usa gameConfigRef.current por este
+    // motivo — os tokens entram no config de forma ASSÍNCRONA (createLiveMatch),
+    // e uma closure com o state velho enviaria "sem sala" mesmo já havendo uma.
+    const cur = gameConfigRef.current
+    const editToken = cur?.editToken || searchParams.get("edit") || undefined
+    const matchId = cur?.matchId || searchParams.get("match") || undefined
     if (!editToken || !matchId) return
     void Promise.resolve(rt.applyAction(editToken, matchId, action)).catch((err) => {
       console.error("Envio de ação ao Supabase falhou (jogo segue local):", err)
@@ -1870,6 +1878,50 @@ export default function JogoPage() {
     gameConfig?.playerIds?.blue2,
     gameConfig?.playerIds?.red1,
     gameConfig?.playerIds?.red2,
+  ])
+
+  // RETRY DA IDENTIDADE (correção da CORRIDA): o prefill do dono roda assim que
+  // a sessão chega — tipicamente ANTES de a sala existir. Como sendRealtimeAction
+  // sai calado sem matchId/editToken, aquele set_config caía no chão e a sala
+  // nascia com "Player 1"; o 2º aparelho então lia fielmente o fallback.
+  //
+  // Este effect é a segunda chance: quando os tokens aparecem E o dono está
+  // identificado, reemite { players, playerIds }. Cobre os três cenários —
+  // jogo novo (sala nasce depois do prefill), reload e sala pré-existente.
+  //
+  // ESPERA O 1º ESTADO REMOTO (rt.remotePlayers) de propósito: reenviar antes
+  // empurraria o `players` local — possivelmente velho — por cima do que outro
+  // aparelho já escreveu (o patch substitui a chave inteira no jsonb). Depois do
+  // primeiro sync, gameConfigRef já está mesclado com o remoto e o envio é seguro.
+  const identidadePropagadaRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (!authUser) return // anônimo: nada a propagar, nada muda
+    const cur = gameConfigRef.current
+    if (!cur?.matchId || !cur?.editToken) return
+    if (cur.playerIds?.blue1 !== authUser.id) return // o dono não está no slot
+    if (identidadePropagadaRef.current === cur.matchId) return // uma vez por sala
+
+    const remotos = rt.remotePlayers
+    if (!remotos || typeof remotos !== "object") return // ainda sem estado remoto
+
+    // A sala já tem a identidade? Então não há o que reenviar.
+    const nomeFaltando = isFallbackName(String(remotos.blue1 ?? ""))
+    const idFaltando = (rt.remotePlayerIds?.blue1 ?? null) !== authUser.id
+    identidadePropagadaRef.current = cur.matchId
+    if (!nomeFaltando && !idFaltando) return
+
+    sendRealtimeAction({
+      kind: "set_config",
+      patch: { players: { ...cur.players }, playerIds: { ...(cur.playerIds ?? {}) } },
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    authUser,
+    gameConfig?.matchId,
+    gameConfig?.editToken,
+    gameConfig?.playerIds?.blue1,
+    rt.remotePlayers,
+    rt.remotePlayerIds,
   ])
 
   // Solta o placeholder do slot do dono (limpa o estado + o timer de segurança).
