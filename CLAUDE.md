@@ -187,6 +187,29 @@ VALOR COMERCIAL: a quadra que auto-organiza a fila é feature de GESTÃO DE QUAD
 
 QUANDO: depende de validar o SPAC. Observar na validação quão comum é a FILA no mundo real: se a maioria é "marquei com amigos, jogamos, saímos" (degraus 1-2 bastam), a fila é luxo futuro; se as quadras vivem lotadas com espera (o "Rei da Quadra" do beach sugere que sim), a fila é core. Degrau 1 (slots de identidade) é o próximo passo natural e reusa a carteirinha; a fila é o destino, não a próxima fatia.
 
+## Fila por esporte + os DOIS QRs + o televisor (arquitetura, refinada com o SPAC real)
+A FILA É DIFERENTE POR ESPORTE — é a estrutura, não um detalhe:
+- BEACH (fila de raquete): ordem PURA de chegada, não importa quem é a dupla (a raquete enfileirada fora da quadra é a verdade). Fila individual/simples por ordem. Descontraído — QR estático serve.
+- TÊNIS (fila de grupo pré-formado): a dupla/simples E OS ADVERSÁRIOS já vêm definidos, marcados com antecedência (dias/semana antes). A fila é de GRUPOS já montados. Regra do clube: só entra na fila se TODOS os jogadores estiverem PRESENTES (check-in de todos). Isso evita "guardar fila".
+
+AS TRÊS COLUNAS (modelo já prototipado por Eric no app antigo, funcionando no front — repo separado v0-game-flow, referência de lógica quando construir):
+1. PLAYERS WAITING: marcaram para o dia, podem não estar no clube ainda (status "Waiting Check-in" / "Checked-in"). Sala de espera, serve p/ todos os esportes.
+2. PLAYER GROUPS: onde os esportes divergem. Beach: grupo forma por ordem de fila (todos precisam estar checked-in). Tênis: grupo pré-avisado que "acende verde" conforme cada jogador faz check-in.
+3. COURT WAITING: grupos prontos (todos verdes) esperando quadra livre → vão à quadra quando alguma libera.
+Toggle "Peak Hours" = só duplas jogam / preferência a duplas.
+
+OS DOIS QRs (funções e segurança diferentes — decisão importante):
+1. QR DA QUADRA (ESTÁTICO): fica NA quadra. Serve o PLACAR ("jogo nesta quadra, marca meus pontos"). Contexto de jogo em andamento. Estático ok — você já está fisicamente na quadra.
+2. QR DO TELEVISÃO (DINÂMICO, muda a cada X tempo): fica no TELEVISOR do dept. de esportes. Serve o CHECK-IN DE FILA ("estou presente no clube, entro na fila"). DINÂMICO POR SEGURANÇA: só quem está FISICAMENTE na frente da tela escaneia — foto no WhatsApp não serve (o QR já mudou). A PRESENÇA FÍSICA vira a prova, exatamente o que a regra do tênis exige. Substitui o leitor facial (Hikvision) que Eric tinha planejado — o QR dinâmico faz o mesmo, barato e de fácil adoção com a carteirinha.
+
+POR QUE DINÂMICO SÓ NA FILA: entrar na fila (tênis) exige PROVA DE PRESENÇA → dinâmico. Jogar na quadra não exige (já está lá) → estático. NÃO é "escanear o mesmo QR 2x" — são DOIS QRs, dois momentos, dois requisitos.
+
+POR QUE NÃO PRÉ-ATRIBUIR QUADRA: os jogos são por PARTIDA, não por tempo (1-2h, imprevisível). Não dá pra saber qual/quando a quadra libera. A fila é dinâmica: o grupo espera, e quando ALGUMA quadra libera, o próximo é chamado PARA AQUELA.
+
+O TELEVISOR = PAINEL DE CONTROLE DA FILA (não só telão de placar): o telão do SPAC já mostra quadras ocupadas, tempo de jogo, fila de espera (ReservaQuadras hoje). O Flow adiciona: o QR DINÂMICO de check-in + integração com a CARTEIRINHA (fila mostra pessoas identificadas; check-in pela carteirinha). Isso reformula "o telão" — não é só placar, é o painel da fila com o QR de check-in.
+
+CHECK-IN FRICTIONLESS (o alvo de UX): cheguei ao clube → escaneio o televisor → se beach, aparece meu lugar na fila (ou "entre, divirta-se" se vazio); se tênis, o sistema sabe que meu grupo foi pré-marcado e me diz "seu parceiro Fulano já fez check-in / ainda não chegou, você ainda não está na fila". Simples, sem humano no balcão.
+
 ## Distribuição, parcerias e white-label (visão estratégica)
 O Flow foi construído com "superfícies de marca" que já existem (QR contextual, card de patrocinador na abertura, "Powered by Flow" clicável/rastreável, placar compartilhado, telão futuro). A mesma infraestrutura de sponsors que serve professor/clube serve parceiros comerciais — o Flow é WHITE-LABEL-READY sem reconstrução.
 
