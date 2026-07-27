@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import { X, Copy, Check, Share2, Users } from "lucide-react"
 import { QRCodeGenerator } from "@/components/qr-code"
+import { buildEditUrl, buildViewUrl } from "@/lib/share-links"
 
 interface ShareModalProps {
   isOpen: boolean
@@ -73,41 +74,15 @@ export function ShareModal({
 
   const ready = Boolean(matchId && viewToken && editToken)
 
-  // Formato das URLs (ver explicação no PR): reaproveitam o estilo de query já
-  // usado no app (quadra=...), carregando o id da sala + o token adequado + o
-  // sport (para o device remoto instanciar o módulo de scoring correto).
-  //  - Editor  → /jogo   (tela de operação) com o edit_token (SEGREDO do dono).
-  //  - Espectador → /placar (tela read-only) com o view_token (seguro de expor).
-  // Params que viajam na URL para o device remoto nascer coerente (sport, tema,
-  // e o modo de contagem inicial). O servidor não guarda esses campos.
-  const extraParams =
-    (sport ? `&sport=${encodeURIComponent(sport)}` : "") +
-    (theme ? `&theme=${encodeURIComponent(theme)}` : "") +
-    (scoreType ? `&scoreType=${encodeURIComponent(scoreType)}` : "") +
-    (clube ? `&clube=${encodeURIComponent(clube)}` : "") +
-    (ad ? `&ad=${encodeURIComponent(ad)}` : "") +
-    (gameType ? `&gameType=${encodeURIComponent(gameType)}` : "")
-  // O link de EDITOR carrega o edit_token (permissão de escrita) E o view_token
-  // como &v= — este último é OBRIGATÓRIO para o convidado calcular o mesmo nome
-  // de canal (getLiveMatchTopic usa o view_token) que o servidor usa ao
-  // transmitir; sem ele o editor convidado assinaria o canal errado e nunca
-  // receberia os broadcasts do dono.
-  const editUrl = useMemo(
-    () =>
-      ready
-        ? `${origin}/jogo?quadra=${quadra}&match=${matchId}&edit=${editToken}&v=${encodeURIComponent(
-            viewToken || "",
-          )}${extraParams}`
-        : "",
-    [ready, origin, quadra, matchId, editToken, viewToken, extraParams],
+  // As URLs vêm do helper COMPARTILHADO (lib/share-links): a mesma montagem que
+  // a aba Players do setup usa. Antes isto era inline aqui, e foi assim que o
+  // `&clube=` ficou de fora de um dos caminhos — uma fonte só fecha essa porta.
+  const linkParams = useMemo(
+    () => ({ origin, quadra, matchId, viewToken, editToken, sport, theme, scoreType, clube, ad, gameType }),
+    [origin, quadra, matchId, viewToken, editToken, sport, theme, scoreType, clube, ad, gameType],
   )
-  const viewUrl = useMemo(
-    () =>
-      ready
-        ? `${origin}/placar?quadra=${quadra}&match=${matchId}&view=${viewToken}${extraParams}`
-        : "",
-    [ready, origin, quadra, matchId, viewToken, extraParams],
-  )
+  const editUrl = useMemo(() => buildEditUrl(linkParams), [linkParams])
+  const viewUrl = useMemo(() => buildViewUrl(linkParams), [linkParams])
 
   // Reset do feedback "Copiado!" a cada abertura.
   useEffect(() => {

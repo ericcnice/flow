@@ -21,6 +21,7 @@
 import { useMemo, useState, type ReactNode } from "react"
 import { X, ChevronDown } from "lucide-react"
 import { SlotRow, type SlotPreview } from "@/components/slot-row"
+import { QRCodeGenerator } from "@/components/qr-code"
 import { SportCourtGlyph } from "@/components/sport-court"
 import { SPORTS, ruleControlsFor, defaultRulesFor, sideChangeOf, type RuleControl, type SportId } from "@/lib/sports-catalog"
 import { THEMES, DEFAULT_THEME, themeClassName, type ThemeId } from "@/lib/themes"
@@ -164,6 +165,7 @@ function AbaPlayers({
   previews,
   perfilHref,
   onSalvar,
+  entrarUrl,
 }: {
   duplas: boolean
   /** Estado do formato — o MESMO do SportSetup, não uma cópia. */
@@ -174,6 +176,7 @@ function AbaPlayers({
   previews?: Partial<Record<SetupSlotKey, SlotPreview | null>>
   perfilHref: string
   onSalvar: () => void
+  entrarUrl?: string
 }) {
   const linha = (slot: SetupSlotKey, label: string) => (
     <SlotRow
@@ -223,6 +226,35 @@ function AbaPlayers({
           {linha("red1", "Player 2")}
         </>
       )}
+
+      {/* ENTRAR NO JOGO — o QR fica SEMPRE visível abaixo dos jogadores, sem
+          toggle: os dois caminhos convivem. Quem tem carteirinha escaneia e cai
+          no próximo slot livre (1c.1); para quem não tem, o organizador digita
+          o nome ali em cima. É um uso de 1-2 vezes no começo da partida, então
+          ele não precisa disputar o topo — mas precisa estar à mão.
+          Sem sala (offline/jogo local) não há link: a seção some e a aba segue
+          servindo para editar nomes. */}
+      {entrarUrl && (
+        <div
+          className="mt-1 flex flex-col items-center gap-2 rounded-2xl border-2 p-4"
+          style={{ borderColor: "var(--setup-card-borda)" }}
+        >
+          <span
+            className="text-xs font-bold uppercase tracking-wide"
+            style={{ color: "var(--setup-card-cinza)" }}
+          >
+            Entrar no jogo
+          </span>
+          {/* Fundo branco atrás do QR: o off-white do card reduz o contraste que
+              a leitura por câmera precisa. */}
+          <span className="rounded-xl bg-white p-2.5">
+            <QRCodeGenerator value={entrarUrl} size={168} />
+          </span>
+          <span className="text-center text-sm" style={{ color: "var(--setup-card-cinza)" }}>
+            Escaneie para entrar nesta partida.
+          </span>
+        </div>
+      )}
     </div>
   )
 }
@@ -239,6 +271,7 @@ export function SportSetup({
   playerPreviews,
   onPlayersSave,
   onGameTypeChange,
+  entrarUrl,
   initialTab = "jogo",
   onConfirm,
   onClose,
@@ -278,6 +311,13 @@ export function SportSetup({
    * existe para receber um patch.
    */
   onGameTypeChange?: (gameType: string) => void
+  /**
+   * LINK de editor da partida (o do QR da aba Players). Vem pronto do pai, que
+   * monta com o helper compartilhado lib/share-links — a MESMA montagem do
+   * ShareModal. Vazio/ausente = sala ainda não existe: a seção do QR nem
+   * aparece, e a aba segue servindo para editar nomes.
+   */
+  entrarUrl?: string
   /**
    * Aba em que a tela ABRE. O botão Ajustes entra por "jogo"; tocar uma pílula
    * de jogador entrará por "players" (fatia d). Default "jogo" — por isso o
@@ -474,6 +514,7 @@ export function SportSetup({
               duplas={gameType === "duplas"}
               gameType={gameType}
               onFormato={escolherFormato}
+              entrarUrl={entrarUrl}
               nomes={nomes}
               setNomes={setNomes}
               previews={playerPreviews}

@@ -37,6 +37,7 @@ import { useSession } from "@/lib/hooks/use-session"
 import { createBrowserSupabaseClient } from "@/lib/supabase/browser-client"
 import { saveMatch, flushPendingMatches, type MatchRow } from "@/lib/supabase/matches"
 import { resolvePlayerCards, type PlayerCard } from "@/lib/supabase/player-cards"
+import { buildEditUrl } from "@/lib/share-links"
 import { resolveSponsor, type Sponsor } from "@/lib/supabase/sponsors"
 import type { GameState, Side } from "@/lib/scoring/types"
 
@@ -3419,6 +3420,22 @@ export default function JogoPage() {
             // AO VIVO só no jogo: mudar o Formato aplica na hora e propaga.
             // O /setup não passa nada e segue diferido (aplica no JOGAR).
             onGameTypeChange={setMatchGameType}
+            // O MESMO link do QR de compartilhar, montado pelo helper
+            // compartilhado — inclui clube/ad, que já sumiram de um caminho
+            // quando a montagem era duplicada.
+            entrarUrl={buildEditUrl({
+              origin: typeof window !== "undefined" ? window.location.origin : "",
+              quadra,
+              matchId: cfg.matchId,
+              viewToken: cfg.viewToken,
+              editToken: cfg.editToken,
+              sport,
+              theme,
+              scoreType: cfg.scoreType,
+              clube: clube ?? undefined,
+              ad: cfg.ad,
+              gameType: cfg.gameType,
+            })}
             // ABA PLAYERS (fatia c): os quatro nomes + a carteirinha de cada
             // slot. Só o "ingame" passa isto — no /setup a partida ainda não
             // existe, e sem jogadores a aba nem aparece.
