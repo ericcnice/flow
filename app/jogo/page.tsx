@@ -11,7 +11,7 @@ import { ShareModal } from "@/components/share-modal"
 // Superfície de configuração ÚNICA: a MESMA tela de setup (esporte + regras),
 // aberta agora também DE DENTRO do jogo pelo botão de config (aposenta o GameMenu
 // antigo neste fluxo).
-import { SportSetup } from "@/components/sport-setup"
+import { SportSetup, type SportSetupTab } from "@/components/sport-setup"
 // Layout do placar de transmissão, compartilhado com a tela /placar (espectador):
 // o overlay "placar geral" e a tela read-only renderizam a MESMA tabela.
 import { BroadcastScoreboard } from "@/components/broadcast-view"
@@ -380,6 +380,15 @@ export default function JogoPage() {
   const [animatingRed, setAnimatingRed] = useState(false)
   // Overlay de configuração (a mesma tela de setup, aberta dentro do jogo).
   const [setupOpen, setSetupOpen] = useState(false)
+  // ABA em que o setup abre. Duas portas para a MESMA tela: o ícone Ajustes
+  // entra pelas regras; tocar uma pílula entra pelos jogadores. Como o setup é
+  // renderizado condicionalmente, ele remonta a cada abertura e o initialTab
+  // vale sempre — não fica preso na aba da vez anterior.
+  const [setupTab, setSetupTab] = useState<SportSetupTab>("jogo")
+  const abrirSetup = (tab: SportSetupTab) => {
+    setSetupTab(tab)
+    setSetupOpen(true)
+  }
   const [showOverview, setShowOverview] = useState(false)
   const overviewTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -2699,9 +2708,12 @@ export default function JogoPage() {
     // container ao redor é pointer-events-none → tocar fora da pílula marca ponto).
     const pill =
       "glass pointer-events-auto w-full rounded-full px-3 py-1 shadow-lg ring-1 ring-white/10 min-h-[52px]"
+    // A PÍLULA agora abre a ABA PLAYERS do setup (fatia d) — não mais o popup
+    // escuro por lado. A aba mostra TODOS os jogadores, então qualquer pílula
+    // leva ao mesmo lugar; `team` deixou de importar para esta ação.
     const editOnClick = (e: { stopPropagation: () => void }) => {
       e.stopPropagation()
-      setEditingSide(team)
+      abrirSetup("players")
     }
     const nameCentered = slot0Pending ? (
       <span className="flex min-w-0 flex-1 items-center justify-center">{placeholderNode}</span>
@@ -3026,7 +3038,7 @@ export default function JogoPage() {
           {menuBtn(<RotateCcw className="h-6 w-6" />, "Recomeçar", () =>
             runMenu(() => setConfirmRestartOpen(true)),
           )}
-          {menuBtn(<Settings className="h-6 w-6" />, "Ajustes", () => runMenu(() => setSetupOpen(true)))}
+          {menuBtn(<Settings className="h-6 w-6" />, "Ajustes", () => runMenu(() => abrirSetup("jogo")))}
         </div>
 
         {/* LINHA 2: segmentado PONTOS|GAMES sozinho, largo e centrado. */}
@@ -3178,7 +3190,7 @@ export default function JogoPage() {
         {menuBtn(<RotateCcw className="h-6 w-6" />, "Recomeçar", () =>
           runMenu(() => setConfirmRestartOpen(true)),
         )}
-        {menuBtn(<Settings className="h-6 w-6" />, "Ajustes", () => runMenu(() => setSetupOpen(true)))}
+        {menuBtn(<Settings className="h-6 w-6" />, "Ajustes", () => runMenu(() => abrirSetup("jogo")))}
         {/* Segmentado na MESMA linha (flex-wrap cai abaixo se não couber). */}
         <div className="flex items-center gap-1 self-center rounded-full bg-white/10 p-1">
           {(
@@ -3435,6 +3447,7 @@ export default function JogoPage() {
             // genérico (sem clube) → expandido (a escolha importa mais).
             sportFromCourt={!!clube}
             context="ingame"
+            initialTab={setupTab}
             // ABA PLAYERS (fatia c): os quatro nomes + a carteirinha de cada
             // slot. Só o "ingame" passa isto — no /setup a partida ainda não
             // existe, e sem jogadores a aba nem aparece.
