@@ -1674,6 +1674,34 @@ export default function JogoPage() {
     sendRealtimeAction({ kind: "set_config", patch: { players } })
   }
 
+  // FORMATO (simples↔duplas) AO VIVO, durante a partida. Recuperado da fatia (e)
+  // — vivia no popup de nomes, agora serve o toggle "Formato" da aba
+  // Jogo/Quadra quando o setup está em context="ingame".
+  //
+  // NÃO toca o motor: `gameType` mora só no gameConfig, e a contagem de
+  // games/sets é a mesma nos dois formatos — a diferença é quantos JOGADORES.
+  // Por isso o PLACAR EM ANDAMENTO É PRESERVADO; nada de rebuildEngine aqui.
+  //
+  // Re-deriva os nomes exibidos NO PRÓPRIO APARELHO (o receptor remoto faz o
+  // mesmo pela ponte do gameType, via a flag playersChanged do applyLocalConfig).
+  const setMatchGameType = (newGt: string) => {
+    const cfg = gameConfigRef.current
+    if (!cfg) return
+    if (cfg.gameType === newGt) return // dedup: sem broadcast à toa
+    const newConfig: GameConfig = { ...cfg, gameType: newGt }
+    setGameConfig(newConfig)
+    gameConfigRef.current = newConfig
+    try {
+      localStorage.setItem(`tennis_match_${quadra}`, JSON.stringify(newConfig))
+    } catch {
+      // aba privada / cota
+    }
+    const p = newConfig.players
+    setBluePlayerName(newGt === "duplas" ? `${p.blue1}/${p.blue2}` : p.blue1)
+    setRedPlayerName(newGt === "duplas" ? `${p.red1}/${p.red2}` : p.red1)
+    sendRealtimeAction({ kind: "set_config", patch: { gameType: newGt } })
+  }
+
   // RECOMEÇAR a partida: zera o placar MANTENDO a config (jogadores, gameType,
   // initialServer, tema — tudo vive no gameConfig, fora do motor). Reconstrói o
   // motor com ações vazias, permanece na tela de jogo e volta à fase PRÉ-JOGO
@@ -3388,6 +3416,9 @@ export default function JogoPage() {
             sportFromCourt={!!clube}
             context="ingame"
             initialTab={setupTab}
+            // AO VIVO só no jogo: mudar o Formato aplica na hora e propaga.
+            // O /setup não passa nada e segue diferido (aplica no JOGAR).
+            onGameTypeChange={setMatchGameType}
             // ABA PLAYERS (fatia c): os quatro nomes + a carteirinha de cada
             // slot. Só o "ingame" passa isto — no /setup a partida ainda não
             // existe, e sem jogadores a aba nem aparece.

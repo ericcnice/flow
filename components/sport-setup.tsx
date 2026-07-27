@@ -184,6 +184,7 @@ export function SportSetup({
   players,
   playerPreviews,
   onPlayersSave,
+  onGameTypeChange,
   initialTab = "jogo",
   onConfirm,
   onClose,
@@ -215,6 +216,14 @@ export function SportSetup({
   playerPreviews?: Partial<Record<SetupSlotKey, SlotPreview | null>>
   /** Salva os QUATRO nomes de uma vez (um único set_config no pai). */
   onPlayersSave?: (players: SetupPlayers) => void
+  /**
+   * FORMATO ao vivo. Presente (ingame) → tocar Simples/Duplas aplica NA HORA e
+   * propaga; a aba Players revela/oculta o 3º e 4º slots no mesmo instante.
+   * Ausente (/setup, partida nova) → comportamento DIFERIDO de sempre: a
+   * escolha só vale no CTA, junto do resto da config — a partida ainda nem
+   * existe para receber um patch.
+   */
+  onGameTypeChange?: (gameType: string) => void
   /**
    * Aba em que a tela ABRE. O botão Ajustes entra por "jogo"; tocar uma pílula
    * de jogador entrará por "players" (fatia d). Default "jogo" — por isso o
@@ -427,7 +436,11 @@ export function SportSetup({
                 <button
                   key={opt.value}
                   type="button"
-                  onClick={() => setGameType(opt.value)}
+                  onClick={() => {
+                    setGameType(opt.value)
+                    // Ingame: aplica e propaga já. New: só marca — o JOGAR leva.
+                    onGameTypeChange?.(opt.value)
+                  }}
                   className={`rule-option ${gameType === opt.value ? "on" : ""}`}
                   aria-pressed={gameType === opt.value}
                 >
