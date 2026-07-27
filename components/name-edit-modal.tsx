@@ -1,11 +1,9 @@
 "use client"
 
 import { useRef, useState } from "react"
-import Link from "next/link"
-import { X, Check, BadgeCheck } from "lucide-react"
-import { Input } from "@/components/ui/input"
+import { X, Check } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { PlayerAvatar } from "@/components/player-avatar"
+import { SlotRow } from "@/components/slot-row"
 
 /**
  * PREVIEW de um slot — "é assim que você vai aparecer". `verified` é a verdade
@@ -103,10 +101,9 @@ export function NameEditModal({
     return `/perfil?voltar=${encodeURIComponent(atual)}`
   })
 
+  // Ref do 2º campo: o Enter no 1º avança o foco para cá (o selectAll agora vive
+  // dentro do <SlotRow>, junto do input que ele governa).
   const p2Ref = useRef<HTMLInputElement>(null)
-  // Seleciona o texto ao focar (item 3): um toque substitui tudo, editar 1 letra
-  // ainda é possível. Vale p/ autoFocus, Tab e toque.
-  const selectAll = (e: { currentTarget: { select: () => void } }) => e.currentTarget.select()
 
   // Trocar o formato grava JÁ (mesmo campo do settings) e revela/oculta o 2º
   // campo imediatamente. Sincroniza via onGameTypeChange (set_config no pai).
@@ -180,98 +177,38 @@ export function NameEditModal({
             ))}
           </div>
 
-          {verified ? (
-            // 1º nome TRAVADO: é a identidade VERIFICADA do dono. Não editável
-            // aqui — a fonte da verdade é o /perfil. Terceiros nunca a alteram.
-            <div className="flex flex-col gap-1.5">
-              <span className="text-xs font-semibold uppercase tracking-wide text-white/60">
-                {duplas ? "Player 1" : "Nome"}
-              </span>
-              <div className="flex h-14 items-center gap-2.5 rounded-md border border-emerald-400/30 bg-emerald-400/5 px-3">
-                <PlayerAvatar url={prev0?.avatarUrl} nome={verifiedFirstName ?? ""} size={40} />
-                <span className="min-w-0 flex-1 truncate text-base font-semibold text-white">
-                  {verifiedFirstName}
-                </span>
-                <BadgeCheck className="h-4 w-4 shrink-0 text-emerald-400" aria-hidden />
-              </div>
-              {/* SÓ O DONO, no aparelho dele. Terceiro/anônimo não vê NADA aqui
-                  — o tick já comunica "verificado", e oferecer um atalho para
-                  editar identidade alheia seria promessa falsa. */}
-              {prev0?.souEu && (
-                <Link
-                  href={perfilHref}
-                  className="text-xs text-white/60 underline underline-offset-2 hover:text-white"
-                >
-                  Identidade verificada — edite seu nome no perfil
-                </Link>
-              )}
-            </div>
-          ) : (
-            <label className="flex flex-col gap-1.5">
-              <span className="text-xs font-semibold uppercase tracking-wide text-white/60">
-                {duplas ? "Player 1" : "Nome"}
-              </span>
-              {/* Avatar FORA do <Input> (o preview não interfere na digitação). */}
-              <div className="flex items-center gap-2.5">
-                <PlayerAvatar url={prev0?.avatarUrl} nome={p1} size={40} />
-                <Input
-                  value={p1}
-                  onChange={(e) => setP1(e.target.value)}
-                  onFocus={selectAll}
-                  onKeyDown={(e) => {
-                    if (e.key !== "Enter") return
-                    // Enter/OK: em duplas avança p/ o campo 2 (foco + select); em
-                    // simples salva.
-                    if (duplas) p2Ref.current?.focus()
-                    else salvar()
-                  }}
-                  autoFocus
-                  placeholder="Nome"
-                  className="h-12 flex-1 border-white/20 bg-white/10 text-base text-white placeholder:text-white/40"
-                />
-              </div>
-            </label>
-          )}
+          {/* SLOT 1 do lado. O <SlotRow> decide travado (carteirinha) vs input —
+              a mesma marcação que estava aqui, agora reusável pelos 4 slots do
+              popup único (fatia ii). */}
+          <SlotRow
+            label={duplas ? "Player 1" : "Nome"}
+            valor={p1}
+            onChange={setP1}
+            onEnter={() => {
+              // Enter/OK: em duplas avança p/ o campo 2 (foco + select); em
+              // simples salva.
+              if (duplas) p2Ref.current?.focus()
+              else salvar()
+            }}
+            preview={prev0}
+            perfilHref={perfilHref}
+            autoFocus
+            linkPerfil
+          />
 
-          {duplas &&
-            (verified1 ? (
-              // Slot 2 com carteirinha: mesma trava do slot 1 (a 1c pode pôr
-              // identidade aqui quando alguém entrar pelo QR).
-              <div className="flex flex-col gap-1.5">
-                <span className="text-xs font-semibold uppercase tracking-wide text-white/60">
-                  Player 2
-                </span>
-                <div className="flex h-14 items-center gap-2.5 rounded-md border border-emerald-400/30 bg-emerald-400/5 px-3">
-                  <PlayerAvatar url={prev1?.avatarUrl} nome={prev1?.nome ?? ""} size={40} />
-                  <span className="min-w-0 flex-1 truncate text-base font-semibold text-white">
-                    {prev1?.nome}
-                  </span>
-                  <BadgeCheck className="h-4 w-4 shrink-0 text-emerald-400" aria-hidden />
-                </div>
-              </div>
-            ) : (
-              <label className="flex flex-col gap-1.5">
-                <span className="text-xs font-semibold uppercase tracking-wide text-white/60">
-                  Player 2
-                </span>
-                <div className="flex items-center gap-2.5">
-                  <PlayerAvatar url={prev1?.avatarUrl} nome={p2} size={40} />
-                  <Input
-                    ref={p2Ref}
-                    value={p2}
-                    onChange={(e) => setP2(e.target.value)}
-                    onFocus={selectAll}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") salvar()
-                    }}
-                    // Slot 1 travado → o foco começa no 2º.
-                    autoFocus={verified}
-                    placeholder="Nome"
-                    className="h-12 flex-1 border-white/20 bg-white/10 text-base text-white placeholder:text-white/40"
-                  />
-                </div>
-              </label>
-            ))}
+          {duplas && (
+            <SlotRow
+              label="Player 2"
+              valor={p2}
+              onChange={setP2}
+              onEnter={salvar}
+              preview={prev1}
+              perfilHref={perfilHref}
+              // Slot 1 travado → o foco começa no 2º.
+              autoFocus={verified}
+              inputRef={p2Ref}
+            />
+          )}
 
           {/* O ESPELHO: vale para os dois casos (com e sem carteirinha) — não
               aponta o dedo para quem não tem foto, só diz onde aquilo aparece. */}
