@@ -378,6 +378,33 @@ IMPLICAÇÃO DE PRODUTO (registrar, não urgente): se o Flow vira white-label (m
 
 FILOSOFIA: um produto, três+ modelos de receita (professor paga / clube paga / marca patrocina distribuição), servidos pela mesma base de sponsors. Tração primeiro (SPAC), parcerias depois.
 
+## PWA — pendência a arrumar (Eric sinalizou)
+O PWA instalado está BAGUNÇANDO o app e precisa ser arrumado depois. Dois problemas observados:
+
+1. **SESSÃO SEPARADA do navegador**: o PWA tem localStorage isolado — logar no navegador NÃO loga no PWA (e vice-versa). Atrapalha a jornada de login e CONFUNDE O DIAGNÓSTICO: "está logado" depende de QUAL contexto abriu a tela (webview do scanner de QR, navegador, PWA instalado), e o app trata sessão ausente como anônimo legítimo — sem erro nenhum para denunciar.
+2. **FALTA NAVEGAÇÃO**: da home não há caminho para voltar ao jogo, nem para /perfil, nem para o histórico. Eric ficou PRESO na home, sem barra de URL para digitar (o PWA não tem). Hoje o PWA não é um app navegável.
+
+O QUE FALTA: a "casca" — header/tab bar com Jogar / Perfil / Histórico / Login acessível de TODAS as telas. É UI de navegação pura, ISOLADA do motor, do sync, do Lamport e do scoring.
+
+QUANDO: fatia própria, DEPOIS da correção da carteirinha imortal (o bug atual dos slots).
+
+## PENDÊNCIA — a CARTEIRINHA IMORTAL (bug conhecido, correção desenhada)
+SINTOMA: convidado logado escaneia um QR de jogo com slots aparentemente livres e NÃO entra em slot nenhum. Falha 100% silenciosa (sem log, sem UI, sem retry).
+
+CAUSA: um `playerId` gruda no slot e NUNCA sai. `proximoSlotLivre` exige as DUAS condições (`isFallbackName(nome) && !playerIds[slot]`) — então um slot com nome "Player 2" mas com id grudado de um jogo anterior é pulado. Se o id grudado for do PRÓPRIO convidado, a guarda (c) da 1c.1 (`Object.values(ids).includes(authUser.id)`) barra ainda antes.
+
+POR QUE O ID GRUDA (nenhum caminho o remove): `saveAllNames` reescreve só `players` e não toca em `playerIds`; o merge de `playerIds` é aditivo por desenho ("só acrescenta, nunca esvazia"); `startNewMatch` (troca de esporte) faz `{...gameConfig}` e preserva matchId/tokens/players/playerIds; `restartMatch`/`playAgain` mantêm tudo; e todo reload de `/jogo?quadra=X` com matchId+viewToken REASSINA A MESMA SALA. A sala vive o dia inteiro — só "Encerrar partida" apaga as chaves.
+
+O SLOT FICA BRICADO: `previewDoSlot` devolve `verified: true` sempre que há id, e o `SlotRow` verificado renderiza TRAVADO (sem `<Input>`). Um slot com id grudado não pode ser editado NEM liberado por nenhum caminho da UI.
+
+POR QUE PASSOU DESPERCEBIDO: o tick só é calculado para o slot 0 de cada lado (`blue1`/`red1`) — `blue2` e `red2` com id grudado não mostram tick nenhum e exibem "Player N" limpo. A contaminação é do SERVIDOR (a sala), não do aparelho: apagar o PWA/localStorage do celular não muda nada, porque o ramo remoto nasce sem `playerIds` e recebe os velhos pelo merge da sala.
+
+TESTE DE 10 SEGUNDOS: abrir a aba Players. Slot TRAVADO (texto + tick, sem campo) exibindo "Player N" = id grudado confirmado.
+
+CORREÇÃO DESENHADA (ordem): (1) `saveAllNames` remove `playerIds[slot]` quando o nome volta ao fallback — apagar o nome passa a significar "lugar livre"; (2) `startNewMatch` zera `playerIds` (jogo novo = mesa limpa; `restartMatch`/`playAgain` MANTÊM, que é o certo — mesmo jogo, placar zerado); (3) botão "remover jogador" no slot (a válvula que não existe — e que a fila/Rei da Quadra vai precisar); (4) falha VISÍVEL no claim (os returns mudos viram estado: "entrando…" → "jogo completo" / "não foi possível entrar"); (5) `subscribe` do hook limpa também `remotePlayerIds`, `remotePlayersRev`, `remoteGameType`, `remoteInitialServer` (hoje só limpa `players`).
+
+INTOCÁVEIS na correção: Lamport/`playersRev`/merge de `players` (aaaa57a), sync de nomes, motor, `lib/scoring`, placar.
+
 ## Fluxo de trabalho
 - **Claude Chat**: estratégia, decisões, prompts. **Claude Code**: executa código, commits, push. **IA do Supabase**: verifica e roda o SQL.
 - **Método por peça**: investigação read-only → decisão no chat → prompt com intocáveis explícitos → migração verificada antes de rodar → QA de produção no celular.
