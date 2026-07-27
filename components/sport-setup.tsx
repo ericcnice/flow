@@ -26,6 +26,13 @@ import { THEMES, DEFAULT_THEME, themeClassName, type ThemeId } from "@/lib/theme
 
 export type SportSetupContext = "new" | "ingame"
 
+/**
+ * Abas da superfície de configuração. "jogo" = as REGRAS (o conteúdo de sempre);
+ * "players" = os JOGADORES, que hoje vivem num popup escuro separado e migram
+ * para cá numa fatia seguinte. Nesta fatia a aba Players é só o lugar reservado.
+ */
+export type SportSetupTab = "jogo" | "players"
+
 // Nomes curtos e discretos exibidos sob cada mini-quadra do seletor.
 const SHORT_NAME: Record<SportId, string> = {
   tennis: "Tênis",
@@ -44,6 +51,7 @@ export function SportSetup({
   initialGameType,
   sportFromCourt,
   context,
+  initialTab = "jogo",
   onConfirm,
   onClose,
   footer,
@@ -64,6 +72,12 @@ export function SportSetup({
    *  aberto sem contexto (desktop/ajustes) → seletor já expandido. */
   sportFromCourt?: boolean
   context: SportSetupContext
+  /**
+   * Aba em que a tela ABRE. O botão Ajustes entra por "jogo"; tocar uma pílula
+   * de jogador entrará por "players" (fatia d). Default "jogo" — por isso o
+   * /setup (partida nova) não precisa passar nada e não muda de comportamento.
+   */
+  initialTab?: SportSetupTab
   /** Chamado no CTA. sportChanged=true quando o esporte mudou; theme = tema
    *  escolhido; sideChangeAlert = aviso de troca; gameType = simples/duplas. */
   onConfirm: (
@@ -89,6 +103,7 @@ export function SportSetup({
   // (QR) — o banner-título mostra o esporte e as regras ganham a 1ª dobra;
   // EXPANDIDO quando aberto sem contexto (a escolha do esporte importa mais).
   const [selectorOpen, setSelectorOpen] = useState<boolean>(!sportFromCourt)
+  const [aba, setAba] = useState<SportSetupTab>(initialTab)
 
   const controls = useMemo<RuleControl[]>(() => ruleControlsFor(sport), [sport])
   const sportChanged = sport !== initialSport
@@ -176,8 +191,46 @@ export function SportSetup({
           )}
         </div>
 
-        {/* MIOLO rolável (safety-net; o alvo é caber sem rolar): regras + ações. */}
-        <div className="flex-1 overflow-y-auto px-4 pt-2 pb-3 space-y-3">
+        {/* BARRA DE ABAS — filho FIXO do flex column, entre o banner e o miolo.
+            O miolo é flex-1, então ele se ajusta sozinho e nada precisa de
+            altura calculada. Reusa .rule-group/.rule-option: a mesma linguagem
+            dos botões de escolha do card, sem CSS novo. */}
+        <div className="px-4 pt-3" role="tablist" aria-label="Seções da configuração">
+          <div className="rule-group">
+            {[
+              { v: "jogo" as const, label: "Jogo/Quadra" },
+              { v: "players" as const, label: "Players" },
+            ].map((t) => (
+              <button
+                key={t.v}
+                type="button"
+                role="tab"
+                aria-selected={aba === t.v}
+                onClick={() => setAba(t.v)}
+                className={`rule-option ${aba === t.v ? "on" : ""}`}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* MIOLO rolável (safety-net; o alvo é caber sem rolar): regras + ações.
+            O CONTAINER é o mesmo de sempre (scroll, paddings, espaçamento); só o
+            CONTEÚDO alterna por aba — assim a config não sente a mudança. */}
+        <div className="flex-1 overflow-y-auto px-4 pt-2 pb-3 space-y-3" role="tabpanel">
+          {aba === "players" ? (
+            /* PLACEHOLDER: os slots migram para cá na fatia (c). Até lá, os
+               jogadores seguem no popup atual — nada foi removido. */
+            <div
+              className="flex h-full min-h-[40vh] flex-col items-center justify-center gap-1 text-center"
+              style={{ color: "var(--setup-card-cinza)" }}
+            >
+              <span className="text-base font-bold">Jogadores</span>
+              <span className="text-sm">Em breve nesta tela.</span>
+            </div>
+          ) : (
+            <>
           {context === "ingame" && sportChanged && (
             <p className="text-xs leading-snug" style={{ color: "var(--setup-card-cinza)" }}>
               Trocar de esporte inicia uma NOVA partida (o placar atual será descartado).
@@ -281,6 +334,8 @@ export function SportSetup({
           </div>
 
           {footer}
+            </>
+          )}
         </div>
 
         {/* BASE do card: CTA JOGAR FIXO (fora do scroll), sempre visível. */}
