@@ -95,6 +95,22 @@ PRINCÍPIO: a PORTA DE ENTRADA não determina o PERTENCIMENTO. Entrou pela Ana n
 
 QUANDO: parte do conceito de comunidade — desenvolver quando a carteirinha amadurecer. Registrar agora para não perder; a filiação automática ao Flow Club é o mecanismo concreto do "Flow Club como comunidade-lar".
 
+## A QUADRA VIRTUAL do Flow Club — /flow/{esporte} SEM número (arquitetura — Eric)
+DISTINÇÃO FUNDAMENTAL entre quadra física e virtual:
+- Clube FÍSICO (ex.: spac/tenis/q1): quadra REAL, UMA pessoa/jogo por vez (a quadra física existe no mundo, não comporta dois jogos simultâneos). q1, q2, q3 numeradas. O clube registra os jogos SE QUISER.
+- Flow Club VIRTUAL (flow/tenis, SEM número): quadra VIRTUAL INFINITA — milhares de pessoas "jogam tênis no Flow" SIMULTANEAMENTE, cada uma registrando seu jogo, sem colidir. A quadra virtual não é UM lugar, é um CONTEXTO DE REGISTRO. Sempre disponível, para todos, ao mesmo tempo.
+
+POR QUE: o Flow Club não tem quadras físicas — então não deve imitar a limitação de uma (uma-por-vez). flow/tenis (virtual) permite uso simultâneo por milhares. Resolve o problema real: mandar /flow/tenis/q1 (numerada) faz dois amigos colidirem se abrirem q1 juntos; flow/tenis (virtual) dá a cada um seu jogo independente.
+
+CONSEQUÊNCIAS:
+1. REMOVE a fricção da porta de entrada: o jogador avulso NÃO precisa de QR de quadra física, NÃO precisa que o clube adira, NÃO precisa reservar. Abre flow/tenis, joga, guarda. É a jornada dos PRIMEIROS USUÁRIOS REAIS (os amigos de Eric não vão pela quadra física do SPAC — vão pela quadra virtual do Flow).
+2. SEPARA os dois mundos: clube físico = numeradas, uma por vez, registro OPCIONAL do clube; Flow Club = virtual, simultânea, registro SEMPRE do jogador. O REGISTRO DO JOGO NÃO DEPENDE DO CLUBE.
+3. É a materialização de "a carteirinha é do jogador": a quadra virtual é onde se registra quando o clube não está envolvido = a maioria do tempo. O clube é opcional; a quadra virtual é o padrão universal.
+
+EVOLUÇÃO (visão, pós-base): estatísticas no perfil derivadas do histórico — "jogou mais com a Kika/Rodrigo, X tempo em quadra, X jogos, X vitórias/derrotas". É a CAMADA ACIMA do histórico: primeiro o histórico confiável (cada jogo salvo, participantes identificados via 1c), depois as stats derivadas. Ordem: quadra virtual + registro de todos → histórico confiável → stats no perfil. As stats fazem o histórico valer ainda mais, mas vêm DEPOIS da base.
+
+PRIORIDADE: a jornada da quadra virtual (jogador avulso registra sem clube) é CENTRAL para a v1 — é o que os primeiros usuários reais usam. Não é detalhe; é a porta de entrada.
+
 ## Marca do Flow — tipografia e símbolo (correção, Eric)
 A fonte do Flow **É Audiowide**, com um DEGRADÊ (gradiente azul→verde) aplicado. A Audiowide é o padrão de TODOS os logos de produtos da PWER IO — usada para consistência de marca entre os produtos. NÃO há fonte arredondada separada; o registro anterior sobre isso estava incorreto.
 
