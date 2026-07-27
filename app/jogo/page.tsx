@@ -811,6 +811,13 @@ export default function JogoPage() {
   // Aplica ao gameConfig LOCAL um patch de campos de configuração vindos do
   // remoto (scoreType, players, maxSets, theme). Atualiza também os nomes
   // exibidos (derivados de players) e o tema. "último patch vence" (sem acumular).
+  // Sala cujo PRIMEIRO sync de `players` já foi aplicado — a janela em que o
+  // guard não-destrutivo age (ver o merge abaixo). O valor inicial é um
+  // SENTINELA que nenhum matchId (nem a ausência dele) iguala: assim a primeira
+  // aplicação é sempre tratada como "primeira vez", errando para o lado de
+  // PROTEGER o nome.
+  const playersSyncFeitoRef = useRef<string | null>("__sem-sala__")
+
   const applyLocalConfig = (patch: {
     scoreType?: "pontos" | "games"
     players?: Partial<GameConfig["players"]>
@@ -831,17 +838,26 @@ export default function JogoPage() {
     }
     let playersChanged = false
     if (patch.players) {
-      // GUARD NÃO-DESTRUTIVO (correção do "nome do dono some"): um valor REMOTO
-      // fallback/vazio ("Player N"/"Jogador N"/"") NUNCA sobrescreve um nome LOCAL
-      // real. Merge POR CAMPO: se o remoto é fallback e o local é real, mantém o
-      // local; senão aplica o remoto. Protege o nome do dono (blue1) contra o seed
-      // e o eco fallback da sala, e blue2/red* também. Nome remoto REAL continua
-      // aplicando normal (propagação p/ o espectador intacta).
+      // GUARD NÃO-DESTRUTIVO (correção do "nome do dono some", 55aacfa): um valor
+      // REMOTO fallback/vazio ("Player N"/"Jogador N"/"") não sobrescreve um nome
+      // LOCAL real.
+      //
+      // ⚠️ SÓ NA PRIMEIRA APLICAÇÃO desta sala — e a razão é o bug original: o
+      // valor ruim vinha do SEED, entregue pela LEITURA INICIAL (getLiveMatchState
+      // resolvia DEPOIS de o prefill já ter posto o nome do dono). Passada essa
+      // corrida, não existe outra fonte de fallback: todo `players` remoto é um
+      // set_config DELIBERADO de algum aparelho.
+      //
+      // Manter o guard para sempre custava caro: APAGAR um nome nunca propagava
+      // (o vazio remoto era descartado), então um slot liberado no computador
+      // continuava ocupado no celular — e a 1c.1 corretamente não reivindicava
+      // uma vaga que, para ela, não existia.
+      const primeiraVez = playersSyncFeitoRef.current !== (prev.matchId ?? null)
       const mergedPlayers = { ...prev.players }
       for (const [k, v] of Object.entries(patch.players)) {
         const key = k as keyof GameConfig["players"]
         const localVal = prev.players[key]
-        if (isFallbackName((v ?? "").trim()) && !isFallbackName(localVal)) continue
+        if (primeiraVez && isFallbackName((v ?? "").trim()) && !isFallbackName(localVal)) continue
         mergedPlayers[key] = v as string
       }
       if (JSON.stringify(mergedPlayers) !== JSON.stringify(prev.players)) {
@@ -849,6 +865,9 @@ export default function JogoPage() {
         changed = true
         playersChanged = true
       }
+      // A partir daqui esta sala já teve seu primeiro sync de players. Chaveado
+      // por matchId: entrar em OUTRA partida recomeça protegido.
+      playersSyncFeitoRef.current = prev.matchId ?? null
     }
     // MERGE DE playerIds — REGRA DIFERENTE da de `players`, de propósito.
     // Em `players` a regra é "local não-fallback vence" (protege o nome do dono
