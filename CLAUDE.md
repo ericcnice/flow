@@ -46,6 +46,17 @@ CONSEQUÊNCIA PARA ENFORCEMENT: por isso o "Jogo completo" e a identidade nos sl
 - Slug de venue idêntico nos dois sistemas: `CLUBS` estático (`lib/clubs-config.ts`) valida a jornada; `venues` (banco) serve o admin. Clube novo entra nos DOIS.
 - Slug travado no dashboard até a unificação. Rename futuro será com popup de aviso (QRs impressos param), NÃO redirect.
 
+## Validação de campo — SPAC (Eric levou ao clube)
+Dois amigos quiseram usar o Flow IMEDIATAMENTE ao ver, sem serem convencidos. As DUAS primeiras perguntas deles: (1) posso guardar o HISTÓRICO? (2) posso TRANSMITIR o resultado para um TELÃO nas quadras? — exatamente as features que o produto já intui como núcleo. Validação de que a visão está certa: os usuários PEDIRAM o que já estava planejado.
+
+O PORQUÊ EMOCIONAL (a conversa na mesa): "você lembra quanto foi nosso jogo semana passada?" / "não, mas quem jogava com a Kika? quanto foi?" — a memória dos jogos SE PERDE, e as pessoas QUEREM lembrar/contar história/saber contra quem jogaram. O Flow não guarda "dados", guarda MEMÓRIA DE JOGO. Essa é a narrativa que vende.
+
+DESCOBERTA COMPORTAMENTAL (Rodrigo Leite): "hoje é tudo data driven, temos que ter esses dados... e vamos levar os jogos mais a sério pois sabemos que vamos guardar os resultados." → saber que o resultado FICA REGISTRADO muda como as pessoas jogam (mais engajamento, mais seriedade). O histórico é MOTOR DE ENGAJAMENTO, não só memória passiva. Registrar o jogo ELEVA o jogo.
+
+A JORNADA REAL (lição de Eric): enviou /flow/tenis/q1 (clube demo), mas percebeu que NÃO é a jornada certa. O jogador NÃO quer "entrar na quadra do clube" — quer abrir o app, jogar, guardar SEU histórico, transmitir para amigos/família — INDEPENDENTE de QR na quadra, INDEPENDENTE do clube ter aderido. A jornada que importa é a do JOGADOR que quer o próprio histórico, não a do clube. Valida a carteirinha como ATIVO PORTÁTIL do jogador (pertence a si + ao Flow Club, não ao clube; o clube é onde o jogo acontece, a carteirinha é do jogador).
+
+CONSEQUÊNCIA: o LOGIN DE TODOS os participantes é central. Se só um loga, só um tem histórico. Para "quem jogou com a Kika e quanto foi" funcionar, TODOS precisam estar identificados e com o jogo salvo no histórico de CADA UM. É por isso que a 1c (QR check-in, todos entram com carteirinha) é o coração — transforma "o jogo do Eric" em "um jogo que Kika, Rodrigo e Eric guardam, cada um no seu histórico".
+
 ## A CARTEIRINHA FLOW (conceito central de identidade)
 O profile do jogador (nome, foto, tick verde de verificado, celular confirmado, histórico de jogos) É uma CARTEIRINHA de identidade portátil do jogador — "este é o Eric Nice, verificado, com estes jogos". Não é "cadastro de aluno"; é "identidade do jogador", que serve a TODOS os contextos.
 
