@@ -79,6 +79,18 @@ export interface UseRealtimeMatch {
    * (jogo anônimo/offline) — a identidade só ENRIQUECE, nunca é exigida.
    */
   remotePlayerIds: any
+  /**
+   * state.gameType mais recente ('simples'|'duplas'); null se ausente.
+   * O toggle SEMPRE gravou este campo na sala — o que faltava era alguém lê-lo
+   * de volta, e por isso trocar o formato ficava preso num aparelho só.
+   */
+  remoteGameType: string | null
+  /**
+   * state.initialServer mais recente: { A: 0|1, B: 0|1 } — o JOGADOR que saca
+   * DENTRO de cada lado. `firstServer` (o LADO) sempre viajou; este não, então
+   * em duplas a bolinha parava em jogadores diferentes nas duas telas.
+   */
+  remoteInitialServer: any
   /** state.theme mais recente do remoto (raiz do state); null se ausente. */
   remoteTheme: string | null
   /** state.scoreType mais recente do remoto (raiz do state); null se ausente. */
@@ -126,6 +138,8 @@ export function useRealtimeMatch(options?: UseRealtimeMatchOptions): UseRealtime
   const [remoteFirstServer, setRemoteFirstServer] = useState<string | null>(null)
   const [remotePlayers, setRemotePlayers] = useState<any>(null)
   const [remotePlayerIds, setRemotePlayerIds] = useState<any>(null)
+  const [remoteGameType, setRemoteGameType] = useState<string | null>(null)
+  const [remoteInitialServer, setRemoteInitialServer] = useState<any>(null)
   const [remoteTheme, setRemoteTheme] = useState<string | null>(null)
   const [remoteScoreType, setRemoteScoreType] = useState<string | null>(null)
   const [presenceCount, setPresenceCount] = useState(0)
@@ -150,6 +164,10 @@ export function useRealtimeMatch(options?: UseRealtimeMatchOptions): UseRealtime
     // state inteiro, então ela viaja sozinha; salas antigas simplesmente não a
     // têm (undefined → nunca sobrescreve o que o cliente já tem).
     if (newState?.playerIds !== undefined) setRemotePlayerIds(newState.playerIds ?? null)
+    // gameType e initialServer: chaves que o set_config JÁ gravava e que nenhum
+    // cliente lia — a "meia-ponte" que dessincronizava formato e saque.
+    if (newState?.gameType !== undefined) setRemoteGameType(newState.gameType ?? null)
+    if (newState?.initialServer !== undefined) setRemoteInitialServer(newState.initialServer ?? null)
     if (newState?.theme !== undefined) setRemoteTheme(newState.theme ?? null)
     if (newState?.scoreType !== undefined) setRemoteScoreType(newState.scoreType ?? null)
   }, [])
@@ -370,6 +388,8 @@ export function useRealtimeMatch(options?: UseRealtimeMatchOptions): UseRealtime
     remoteTheme,
     remoteScoreType,
     remotePlayerIds,
+    remoteGameType,
+    remoteInitialServer,
     presenceCount,
     editorCount,
     create,

@@ -806,6 +806,8 @@ export default function JogoPage() {
     scoreType?: "pontos" | "games"
     players?: Partial<GameConfig["players"]>
     playerIds?: GameConfig["playerIds"]
+    gameType?: string
+    initialServer?: GameConfig["initialServer"]
     maxSets?: number
     theme?: ThemeId
   }) => {
@@ -857,6 +859,35 @@ export default function JogoPage() {
         changed = true
       }
     }
+    // GAMETYPE remoto. Muda quantos nomes cada lado exibe (duplas = "N1/N2"),
+    // então precisa do MESMO tratamento de `playersChanged` — daí entrar na
+    // mesma flag. Sem isso, trocar o formato no outro aparelho deixaria a faixa
+    // de nomes inconsistente com os slots.
+    if (
+      (patch.gameType === "simples" || patch.gameType === "duplas") &&
+      prev.gameType !== patch.gameType
+    ) {
+      updated.gameType = patch.gameType
+      changed = true
+      playersChanged = true // re-deriva os nomes exibidos abaixo
+    }
+
+    // INITIAL SERVER remoto: qual JOGADOR de cada lado saca. Dedup por conteúdo
+    // (o eco da própria escolha bate com o local e é ignorado).
+    if (patch.initialServer && typeof patch.initialServer === "object") {
+      const a = patch.initialServer.A === 1 ? 1 : 0
+      const b = patch.initialServer.B === 1 ? 1 : 0
+      const atual = prev.initialServer ?? { A: 0, B: 0 }
+      if (atual.A !== a || atual.B !== b) {
+        updated.initialServer = { A: a, B: b } as { A: 0 | 1; B: 0 | 1 }
+        changed = true
+        // O saque veio de fora: alguém JÁ escolheu. Derivar isto do próprio
+        // patch evita criar mais um campo no state só para dizer "houve
+        // escolha" — a bola amarela do convidado acende pelo dado que chegou.
+        setServerEverChosen(true)
+      }
+    }
+
     let maxSetsChanged = false
     if (typeof patch.maxSets === "number" && prev.maxSets !== patch.maxSets) {
       updated.maxSets = patch.maxSets
@@ -971,6 +1002,18 @@ export default function JogoPage() {
       applyLocalConfig({ playerIds: rt.remotePlayerIds })
     }
 
+    // gameType → formato da partida. O applyLocalConfig re-deriva os nomes
+    // exibidos junto (duplas mostra "N1/N2"), pelo mesmo caminho de `players`.
+    if (rt.remoteGameType === "simples" || rt.remoteGameType === "duplas") {
+      applyLocalConfig({ gameType: rt.remoteGameType })
+    }
+
+    // initialServer → o jogador que saca dentro de cada lado. Completa o par com
+    // `firstServer` (o lado), que já vinha logo abaixo.
+    if (rt.remoteInitialServer && typeof rt.remoteInitialServer === "object") {
+      applyLocalConfig({ initialServer: rt.remoteInitialServer })
+    }
+
     // theme → aplica setTheme + gameConfig via applyLocalConfig (dedup por
     // conteúdo: só muda se diferente do tema atual). Não afeta o motor.
     if (rt.remoteTheme) {
@@ -995,6 +1038,11 @@ export default function JogoPage() {
     ) {
       nextFirstServer = rt.remoteFirstServer
       needRebuild = true
+      // Em SIMPLES o initialServer nunca muda ({A:0,B:0}), então é a troca de
+      // LADO que denuncia a escolha. Mesma derivação, sem campo novo: só marca
+      // quando o valor REALMENTE difere do local — o seed da sala chega igual
+      // ao que o convidado já montou, e não acende nada à toa.
+      setServerEverChosen(true)
     }
 
     // VALIDAÇÃO DE COMPATIBILIDADE (correção do crash): só adota rules remotas se
@@ -1032,6 +1080,8 @@ export default function JogoPage() {
   }, [
     rt.remotePlayers,
     rt.remotePlayerIds,
+    rt.remoteGameType,
+    rt.remoteInitialServer,
     rt.remoteFirstServer,
     rt.remoteRules,
     rt.remoteTheme,
