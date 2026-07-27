@@ -19,7 +19,7 @@
  */
 
 import { useMemo, useState, type ReactNode } from "react"
-import { X, ChevronDown, Check } from "lucide-react"
+import { X, ChevronDown } from "lucide-react"
 import { SlotRow, type SlotPreview } from "@/components/slot-row"
 import { SportCourtGlyph } from "@/components/sport-court"
 import { SPORTS, ruleControlsFor, defaultRulesFor, sideChangeOf, type RuleControl, type SportId } from "@/lib/sports-catalog"
@@ -114,6 +114,10 @@ function CardTime({
  * `linkPerfil` vai SEMPRE ligado: qualquer slot com souEu mostra o atalho. A
  * assimetria do popup (link só no 1º) era resquício de quando só blue1 podia ter
  * identidade — com a 1c.1, qualquer lugar pode ser de alguém.
+ *
+ * SEM botão de salvar: o nome grava ao SAIR do campo (onBlur) e, como rede de
+ * segurança, em qualquer saída da aba (trocar de aba, fechar, JOGAR). Quem toca
+ * direto no JOGAR sem sair do campo não perde o que digitou.
  */
 function AbaPlayers({
   duplas,
@@ -121,7 +125,6 @@ function AbaPlayers({
   setNomes,
   previews,
   perfilHref,
-  sujo,
   onSalvar,
 }: {
   duplas: boolean
@@ -129,7 +132,6 @@ function AbaPlayers({
   setNomes: (fn: (p: SetupPlayers) => SetupPlayers) => void
   previews?: Partial<Record<SetupSlotKey, SlotPreview | null>>
   perfilHref: string
-  sujo: boolean
   onSalvar: () => void
 }) {
   const linha = (slot: SetupSlotKey, label: string) => (
@@ -139,6 +141,7 @@ function AbaPlayers({
       valor={nomes[slot]}
       onChange={(v) => setNomes((p) => ({ ...p, [slot]: v }))}
       onEnter={onSalvar}
+      onBlur={onSalvar}
       preview={previews?.[slot] ?? null}
       perfilHref={perfilHref}
       linkPerfil
@@ -165,18 +168,6 @@ function AbaPlayers({
           <Vs />
           {linha("red1", "Player 2")}
         </>
-      )}
-
-      {/* SALVAR só aparece quando há mudança — sem competir com o CTA JOGAR da
-          base, que é sobre as regras/começar. Enter em qualquer campo faz o
-          mesmo. */}
-      {sujo && (
-        <button type="button" onClick={onSalvar} className="play-button mt-1">
-          <span className="inline-flex items-center justify-center gap-2">
-            <Check className="h-5 w-5" />
-            SALVAR NOMES
-          </span>
-        </button>
       )}
     </div>
   )
@@ -304,7 +295,10 @@ export function SportSetup({
       {onClose && (
         <button
           type="button"
-          onClick={onClose}
+          onClick={() => {
+            salvarNomes()
+            onClose()
+          }}
           aria-label="Fechar e voltar ao jogo"
           className="absolute top-3 right-3 z-30 rounded-full p-2 active:scale-95 transition-transform"
           style={{ color: "var(--setup-card-cinza)" }}
@@ -385,7 +379,12 @@ export function SportSetup({
                 type="button"
                 role="tab"
                 aria-selected={aba === t.v}
-                onClick={() => setAba(t.v)}
+                onClick={() => {
+                  // Sair da aba Players salva o pendente (rede de segurança do
+                  // onBlur). Só grava se mudou — sem broadcast à toa.
+                  if (aba === "players" && t.v !== "players") salvarNomes()
+                  setAba(t.v)
+                }}
                 className={`rule-option ${aba === t.v ? "on" : ""}`}
               >
                 {t.label}
@@ -406,7 +405,6 @@ export function SportSetup({
               setNomes={setNomes}
               previews={playerPreviews}
               perfilHref={perfilHref}
-              sujo={nomesSujos}
               onSalvar={salvarNomes}
             />
           ) : (
@@ -523,7 +521,12 @@ export function SportSetup({
           <button
             type="button"
             className="play-button"
-            onClick={() => onConfirm(sport, rules, sportChanged, theme, sideChangeAlert, gameType)}
+            onClick={() => {
+              // Quem digita e toca DIRETO no JOGAR não perde o nome: o blur do
+              // campo pode não chegar antes. `salvarNomes` só age se mudou.
+              salvarNomes()
+              onConfirm(sport, rules, sportChanged, theme, sideChangeAlert, gameType)
+            }}
           >
             JOGAR
           </button>

@@ -95,6 +95,7 @@ export function SlotRow({
   valor,
   onChange,
   onEnter,
+  onBlur,
   preview,
   perfilHref,
   autoFocus = false,
@@ -109,6 +110,9 @@ export function SlotRow({
   onChange: (v: string) => void
   /** Enter no campo — o pai decide (avançar para o próximo, ou salvar). */
   onEnter: () => void
+  /** Saiu do campo. A aba Players usa para salvar sem botão. Opcional: o popup
+   *  escuro não passa, e segue com o "Salvar" dele. */
+  onBlur?: () => void
   /** Carteirinha do slot: decide travado vs input, e alimenta avatar/tick. */
   preview: SlotPreview | null
   /** Destino do atalho de identidade (já com o ?voltar= do jogo). */
@@ -185,6 +189,7 @@ export function SlotRow({
           value={valor}
           onChange={(e) => onChange(e.target.value)}
           onFocus={selectAll}
+          onBlur={onBlur}
           onKeyDown={(e) => {
             if (e.key === "Enter") onEnter()
           }}

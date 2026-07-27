@@ -1973,18 +1973,27 @@ export default function JogoPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [gameState?.finished, gameState?.winner, authUser])
 
-  // CARTÕES DO POPUP (1b.2a — "o espelho"): resolve nome+foto dos slots QUE TÊM
-  // carteirinha, e só quando o popup ABRE. Slot anônimo não entra na lista → o
-  // módulo nem toca a rede. Offline/erro: cache ou vazio, e o avatar cai na
-  // inicial — o popup abre, edita e salva igual.
+  // CARTÕES (nome+foto) dos slots que TÊM carteirinha. Resolvidos quando alguma
+  // superfície de jogadores abre — o popup escuro (editingSide) OU a aba Players
+  // do setup (setupOpen).
+  //
+  // ⚠️ Antes isto dependia SÓ do editingSide e buscava apenas os dois slots
+  // daquele lado — por isso a aba Players mostrava a inicial em vez da foto:
+  // ninguém tinha ido buscar cartão nenhum. Agora busca os QUATRO de uma vez
+  // (a RPC é em lote e o módulo cacheia), servindo as duas telas.
+  //
+  // Slot anônimo não entra na lista → o módulo nem toca a rede. Offline/erro:
+  // cache ou vazio, e o avatar cai na inicial — as duas telas abrem e salvam
+  // igual.
   useEffect(() => {
-    if (!editingSide) return
+    if (!editingSide && !setupOpen) return
     const cfgAtual = gameConfigRef.current
-    const ids = (
-      editingSide === "blue"
-        ? [cfgAtual?.playerIds?.blue1, cfgAtual?.playerIds?.blue2]
-        : [cfgAtual?.playerIds?.red1, cfgAtual?.playerIds?.red2]
-    ).filter((v): v is string => typeof v === "string" && v.length > 0)
+    const ids = [
+      cfgAtual?.playerIds?.blue1,
+      cfgAtual?.playerIds?.blue2,
+      cfgAtual?.playerIds?.red1,
+      cfgAtual?.playerIds?.red2,
+    ].filter((v): v is string => typeof v === "string" && v.length > 0)
     if (ids.length === 0) return
 
     let alive = true
@@ -2002,6 +2011,7 @@ export default function JogoPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     editingSide,
+    setupOpen,
     gameConfig?.playerIds?.blue1,
     gameConfig?.playerIds?.blue2,
     gameConfig?.playerIds?.red1,
