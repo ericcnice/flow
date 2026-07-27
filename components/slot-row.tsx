@@ -28,7 +28,24 @@ import Link from "next/link"
 import { BadgeCheck } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { PlayerAvatar } from "@/components/player-avatar"
-import type { SlotPreview } from "@/components/name-edit-modal"
+
+/**
+ * PREVIEW de um slot — "é assim que você vai aparecer". `verified` é a verdade
+ * que VIAJA (playerIds/profile_id no state, Fatia 1a), não um flag local: um
+ * slot com carteirinha fica TRAVADO em qualquer aparelho, porque terceiros não
+ * alteram nome verificado.
+ */
+export type SlotPreview = {
+  nome: string
+  avatarUrl: string | null
+  verified: boolean
+  /**
+   * Este APARELHO é o dono deste slot (authUser.id === profile_id do slot).
+   * "VER viaja, EDITAR é local": a foto/nome/tick aparecem em todo aparelho,
+   * mas o atalho para editar a identidade é privilégio de quem é dono dela.
+   */
+  souEu: boolean
+}
 
 export type SlotRowVariant = "dark" | "card"
 

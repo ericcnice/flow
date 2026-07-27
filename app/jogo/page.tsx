@@ -1657,6 +1657,47 @@ export default function JogoPage() {
     sendRealtimeAction({ kind: "set_config", patch: { players } })
   }
 
+  // PREVIEW de um slot qualquer (a aba Players precisa dos quatro). Mesma regra
+  // do popup: sem carteirinha → null (o slot fica editável); com carteirinha →
+  // nome resolvido, foto (a do DONO vem da leitura local; a de terceiro, da RPC
+  // pública) e `souEu` para o atalho do /perfil.
+  const previewDoSlot = (slot: SlotKey): SlotPreview | null => {
+    const cfg = gameConfigRef.current
+    if (!cfg) return null
+    const pid = cfg.playerIds?.[slot]
+    if (!pid) return null
+    const card = playerCards.get(pid)
+    const ehDono = Boolean(authUser?.id) && pid === authUser?.id
+    return {
+      nome: card?.displayName || cfg.players[slot],
+      avatarUrl: (ehDono ? ownerAvatarUrl : null) ?? card?.avatarUrl ?? null,
+      verified: true,
+      souEu: ehDono,
+    }
+  }
+
+  // SALVA OS QUATRO NOMES de uma vez (aba Players). Um ÚNICO set_config: o
+  // patch.players SUBSTITUI a chave inteira no jsonb, então dois patches em
+  // sequência fariam o segundo apagar o primeiro. `playerIds` não entra —
+  // renomear não mexe em carteirinha.
+  const saveAllNames = (novos: Record<SlotKey, string>) => {
+    const cfg = gameConfigRef.current
+    if (!cfg) return
+    const players = { ...cfg.players, ...novos }
+    const newConfig: GameConfig = { ...cfg, players }
+    setGameConfig(newConfig)
+    gameConfigRef.current = newConfig
+    try {
+      localStorage.setItem(`tennis_match_${quadra}`, JSON.stringify(newConfig))
+    } catch {
+      // aba privada / cota: segue só em memória
+    }
+    const duplas = cfg.gameType === "duplas"
+    setBluePlayerName(duplas ? `${players.blue1}/${players.blue2}` : players.blue1)
+    setRedPlayerName(duplas ? `${players.red1}/${players.red2}` : players.red1)
+    sendRealtimeAction({ kind: "set_config", patch: { players } })
+  }
+
   // Troca o FORMATO da partida (simples↔duplas) do popup de nomes — mesmo campo
   // que o toggle do settings grava. Persiste, re-deriva os nomes combinados e
   // propaga via set_config (como o settings). As pílulas passam a mostrar 1↔2.
@@ -3384,6 +3425,17 @@ export default function JogoPage() {
             // genérico (sem clube) → expandido (a escolha importa mais).
             sportFromCourt={!!clube}
             context="ingame"
+            // ABA PLAYERS (fatia c): os quatro nomes + a carteirinha de cada
+            // slot. Só o "ingame" passa isto — no /setup a partida ainda não
+            // existe, e sem jogadores a aba nem aparece.
+            players={cfg.players}
+            playerPreviews={{
+              blue1: previewDoSlot("blue1"),
+              blue2: previewDoSlot("blue2"),
+              red1: previewDoSlot("red1"),
+              red2: previewDoSlot("red2"),
+            }}
+            onPlayersSave={saveAllNames}
             onClose={() => setSetupOpen(false)}
             onConfirm={onSetupConfirm}
             footer={

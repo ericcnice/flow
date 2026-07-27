@@ -3,25 +3,12 @@
 import { useRef, useState } from "react"
 import { X, Check } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { SlotRow } from "@/components/slot-row"
+import { SlotRow, type SlotPreview } from "@/components/slot-row"
 
-/**
- * PREVIEW de um slot — "é assim que você vai aparecer". `verified` é a verdade
- * que VIAJA (playerIds/profile_id no state, Fatia 1a), não um flag local: um
- * slot com carteirinha fica TRAVADO em qualquer aparelho, porque terceiros não
- * alteram nome verificado.
- */
-export type SlotPreview = {
-  nome: string
-  avatarUrl: string | null
-  verified: boolean
-  /**
-   * Este APARELHO é o dono deste slot (authUser.id === profile_id do slot).
-   * "VER viaja, EDITAR é local": a foto/nome/tick aparecem em todo aparelho,
-   * mas o atalho para editar a identidade é privilégio de quem é dono dela.
-   */
-  souEu: boolean
-}
+// SlotPreview mora em slot-row.tsx (onde é mais usado) e é RE-EXPORTADO aqui
+// para quem já importava daqui. Antes o tipo vivia neste arquivo e o slot-row o
+// importava de volta — um ciclo entre os dois módulos.
+export type { SlotPreview } from "@/components/slot-row"
 
 /**
  * Popup grande de edição de nomes de UM lado (QUADRA 2.0, B1a). Substitui a

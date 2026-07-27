@@ -19,7 +19,8 @@
  */
 
 import { useMemo, useState, type ReactNode } from "react"
-import { X, ChevronDown } from "lucide-react"
+import { X, ChevronDown, Check } from "lucide-react"
+import { SlotRow, type SlotPreview } from "@/components/slot-row"
 import { SportCourtGlyph } from "@/components/sport-court"
 import { SPORTS, ruleControlsFor, defaultRulesFor, sideChangeOf, type RuleControl, type SportId } from "@/lib/sports-catalog"
 import { THEMES, DEFAULT_THEME, themeClassName, type ThemeId } from "@/lib/themes"
@@ -33,6 +34,10 @@ export type SportSetupContext = "new" | "ingame"
  */
 export type SportSetupTab = "jogo" | "players"
 
+/** Os quatro lugares da partida, na ordem global (blue1=1 … red2=4). */
+export type SetupSlotKey = "blue1" | "blue2" | "red1" | "red2"
+export type SetupPlayers = Record<SetupSlotKey, string>
+
 // Nomes curtos e discretos exibidos sob cada mini-quadra do seletor.
 const SHORT_NAME: Record<SportId, string> = {
   tennis: "Tênis",
@@ -43,6 +48,140 @@ const SHORT_NAME: Record<SportId, string> = {
   pickleball: "Pickleball",
 }
 
+
+/** Separador discreto entre os dois lados. */
+function Vs() {
+  return (
+    <div className="flex items-center gap-3 py-0.5" aria-hidden>
+      <span className="h-px flex-1" style={{ backgroundColor: "var(--setup-card-borda)" }} />
+      <span
+        className="text-xs font-black uppercase tracking-[0.2em]"
+        style={{ color: "var(--setup-card-cinza)" }}
+      >
+        vs
+      </span>
+      <span className="h-px flex-1" style={{ backgroundColor: "var(--setup-card-borda)" }} />
+    </div>
+  )
+}
+
+/**
+ * CARD DE TIME (só em duplas): agrupa os dois parceiros. A cor do tema entra
+ * como ACENTO (o ponto ao lado do rótulo), nunca como fundo — o fundo é o papel
+ * claro do card, igual ao resto da tela. A distinção dos times vem do
+ * agrupamento + do acento, não de duas cores brigando com o conteúdo.
+ */
+function CardTime({
+  rotulo,
+  acento,
+  children,
+}: {
+  rotulo: string
+  acento: string
+  children: ReactNode
+}) {
+  return (
+    <div
+      className="space-y-3 rounded-2xl border-2 p-3"
+      style={{ borderColor: "var(--setup-card-borda)" }}
+    >
+      <div className="flex items-center gap-2">
+        <span
+          className="h-3 w-3 shrink-0 rounded-full ring-1 ring-black/10"
+          style={{ backgroundColor: acento }}
+          aria-hidden
+        />
+        <span
+          className="text-xs font-bold uppercase tracking-wide"
+          style={{ color: "var(--setup-card-cinza)" }}
+        >
+          {rotulo}
+        </span>
+      </div>
+      {children}
+    </div>
+  )
+}
+
+/**
+ * ABA PLAYERS — os jogadores da partida na linguagem do card claro.
+ *
+ * DUPLAS: dois CARDS DE TIME empilhados (Doubles 1 / vs / Doubles 2), cada um
+ * com seus dois slots. SIMPLES: os dois slots DIRETOS, sem card aninhado — não
+ * há "time" para agrupar, e uma caixa em volta de um jogador só seria moldura
+ * vazia.
+ *
+ * `linkPerfil` vai SEMPRE ligado: qualquer slot com souEu mostra o atalho. A
+ * assimetria do popup (link só no 1º) era resquício de quando só blue1 podia ter
+ * identidade — com a 1c.1, qualquer lugar pode ser de alguém.
+ */
+function AbaPlayers({
+  duplas,
+  nomes,
+  setNomes,
+  previews,
+  perfilHref,
+  sujo,
+  onSalvar,
+}: {
+  duplas: boolean
+  nomes: SetupPlayers
+  setNomes: (fn: (p: SetupPlayers) => SetupPlayers) => void
+  previews?: Partial<Record<SetupSlotKey, SlotPreview | null>>
+  perfilHref: string
+  sujo: boolean
+  onSalvar: () => void
+}) {
+  const linha = (slot: SetupSlotKey, label: string) => (
+    <SlotRow
+      variant="card"
+      label={label}
+      valor={nomes[slot]}
+      onChange={(v) => setNomes((p) => ({ ...p, [slot]: v }))}
+      onEnter={onSalvar}
+      preview={previews?.[slot] ?? null}
+      perfilHref={perfilHref}
+      linkPerfil
+    />
+  )
+
+  return (
+    <div className="space-y-3">
+      {duplas ? (
+        <>
+          <CardTime rotulo="Doubles 1" acento="var(--lado-a-bg)">
+            {linha("blue1", "Player 1")}
+            {linha("blue2", "Player 2")}
+          </CardTime>
+          <Vs />
+          <CardTime rotulo="Doubles 2" acento="var(--lado-b-bg)">
+            {linha("red1", "Player 3")}
+            {linha("red2", "Player 4")}
+          </CardTime>
+        </>
+      ) : (
+        <>
+          {linha("blue1", "Player 1")}
+          <Vs />
+          {linha("red1", "Player 2")}
+        </>
+      )}
+
+      {/* SALVAR só aparece quando há mudança — sem competir com o CTA JOGAR da
+          base, que é sobre as regras/começar. Enter em qualquer campo faz o
+          mesmo. */}
+      {sujo && (
+        <button type="button" onClick={onSalvar} className="play-button mt-1">
+          <span className="inline-flex items-center justify-center gap-2">
+            <Check className="h-5 w-5" />
+            SALVAR NOMES
+          </span>
+        </button>
+      )}
+    </div>
+  )
+}
+
 export function SportSetup({
   initialSport,
   initialRules,
@@ -51,6 +190,9 @@ export function SportSetup({
   initialGameType,
   sportFromCourt,
   context,
+  players,
+  playerPreviews,
+  onPlayersSave,
   initialTab = "jogo",
   onConfirm,
   onClose,
@@ -72,6 +214,16 @@ export function SportSetup({
    *  aberto sem contexto (desktop/ajustes) → seletor já expandido. */
   sportFromCourt?: boolean
   context: SportSetupContext
+  /**
+   * JOGADORES da partida (aba Players). AUSENTE = a aba nem aparece — é o caso
+   * do /setup (partida nova), onde ainda não existe partida para ter nomes. Um
+   * dado só, uma condição só: sem jogadores, sem aba.
+   */
+  players?: SetupPlayers
+  /** Carteirinha por slot (foto/tick/souEu). Ausente = todos editáveis. */
+  playerPreviews?: Partial<Record<SetupSlotKey, SlotPreview | null>>
+  /** Salva os QUATRO nomes de uma vez (um único set_config no pai). */
+  onPlayersSave?: (players: SetupPlayers) => void
   /**
    * Aba em que a tela ABRE. O botão Ajustes entra por "jogo"; tocar uma pílula
    * de jogador entrará por "players" (fatia d). Default "jogo" — por isso o
@@ -104,6 +256,32 @@ export function SportSetup({
   // EXPANDIDO quando aberto sem contexto (a escolha do esporte importa mais).
   const [selectorOpen, setSelectorOpen] = useState<boolean>(!sportFromCourt)
   const [aba, setAba] = useState<SportSetupTab>(initialTab)
+
+  // NOMES em edição na aba Players. Estado LOCAL (como o popup faz) — só vira
+  // set_config quando a pessoa confirma, para cada tecla digitada não virar um
+  // broadcast.
+  const [nomes, setNomes] = useState<SetupPlayers>(
+    players ?? { blue1: "", blue2: "", red1: "", red2: "" },
+  )
+  const nomesSujos = players
+    ? (Object.keys(players) as SetupSlotKey[]).some((k) => nomes[k] !== players[k])
+    : false
+  // A aba Players só existe quando HÁ jogadores (ingame). No /setup a partida
+  // ainda não nasceu — sem dado, sem aba.
+  const temPlayers = Boolean(players)
+  const abaAtual: SportSetupTab = temPlayers ? aba : "jogo"
+
+  // Atalho para o /perfil levando de volta AO JOGO (mesmo padrão do popup).
+  const [perfilHref] = useState(() => {
+    if (typeof window === "undefined") return "/perfil"
+    const atual = window.location.pathname + window.location.search
+    return `/perfil?voltar=${encodeURIComponent(atual)}`
+  })
+
+  const salvarNomes = () => {
+    if (!nomesSujos) return
+    onPlayersSave?.(nomes)
+  }
 
   const controls = useMemo<RuleControl[]>(() => ruleControlsFor(sport), [sport])
   const sportChanged = sport !== initialSport
@@ -195,6 +373,7 @@ export function SportSetup({
             O miolo é flex-1, então ele se ajusta sozinho e nada precisa de
             altura calculada. Reusa .rule-group/.rule-option: a mesma linguagem
             dos botões de escolha do card, sem CSS novo. */}
+        {temPlayers && (
         <div className="px-4 pt-3" role="tablist" aria-label="Seções da configuração">
           <div className="rule-group">
             {[
@@ -214,21 +393,22 @@ export function SportSetup({
             ))}
           </div>
         </div>
+        )}
 
         {/* MIOLO rolável (safety-net; o alvo é caber sem rolar): regras + ações.
             O CONTAINER é o mesmo de sempre (scroll, paddings, espaçamento); só o
             CONTEÚDO alterna por aba — assim a config não sente a mudança. */}
         <div className="flex-1 overflow-y-auto px-4 pt-2 pb-3 space-y-3" role="tabpanel">
-          {aba === "players" ? (
-            /* PLACEHOLDER: os slots migram para cá na fatia (c). Até lá, os
-               jogadores seguem no popup atual — nada foi removido. */
-            <div
-              className="flex h-full min-h-[40vh] flex-col items-center justify-center gap-1 text-center"
-              style={{ color: "var(--setup-card-cinza)" }}
-            >
-              <span className="text-base font-bold">Jogadores</span>
-              <span className="text-sm">Em breve nesta tela.</span>
-            </div>
+          {abaAtual === "players" ? (
+            <AbaPlayers
+              duplas={gameType === "duplas"}
+              nomes={nomes}
+              setNomes={setNomes}
+              previews={playerPreviews}
+              perfilHref={perfilHref}
+              sujo={nomesSujos}
+              onSalvar={salvarNomes}
+            />
           ) : (
             <>
           {context === "ingame" && sportChanged && (
