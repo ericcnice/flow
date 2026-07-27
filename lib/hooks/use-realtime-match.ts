@@ -80,6 +80,17 @@ export interface UseRealtimeMatch {
    */
   remotePlayerIds: any
   /**
+   * state.playersRev mais recente: a VERSÃO do `players` (relógio de Lamport
+   * do emissor). null quando ausente — sala antiga ou emissor que não versiona;
+   * nesse caso o consumidor cai no guard não-destrutivo de sempre.
+   *
+   * Existe porque TODO broadcast carrega o state INTEIRO e o Realtime NÃO
+   * garante ordem: um payload de um ponto marcado ANTES pode chegar DEPOIS de
+   * uma edição de nome e desfazê-la. A versão é o que distingue "mais novo" de
+   * "atrasado" sem depender do conteúdo.
+   */
+  remotePlayersRev: number | null
+  /**
    * state.gameType mais recente ('simples'|'duplas'); null se ausente.
    * O toggle SEMPRE gravou este campo na sala — o que faltava era alguém lê-lo
    * de volta, e por isso trocar o formato ficava preso num aparelho só.
@@ -138,6 +149,7 @@ export function useRealtimeMatch(options?: UseRealtimeMatchOptions): UseRealtime
   const [remoteFirstServer, setRemoteFirstServer] = useState<string | null>(null)
   const [remotePlayers, setRemotePlayers] = useState<any>(null)
   const [remotePlayerIds, setRemotePlayerIds] = useState<any>(null)
+  const [remotePlayersRev, setRemotePlayersRev] = useState<number | null>(null)
   const [remoteGameType, setRemoteGameType] = useState<string | null>(null)
   const [remoteInitialServer, setRemoteInitialServer] = useState<any>(null)
   const [remoteTheme, setRemoteTheme] = useState<string | null>(null)
@@ -164,6 +176,12 @@ export function useRealtimeMatch(options?: UseRealtimeMatchOptions): UseRealtime
     // state inteiro, então ela viaja sozinha; salas antigas simplesmente não a
     // têm (undefined → nunca sobrescreve o que o cliente já tem).
     if (newState?.playerIds !== undefined) setRemotePlayerIds(newState.playerIds ?? null)
+    // A versão vem JUNTO do players no mesmo payload; quem decide o que fazer
+    // com ela é o consumidor (o merge), não o hook.
+    if (newState?.playersRev !== undefined) {
+      const r = Number(newState.playersRev)
+      setRemotePlayersRev(Number.isFinite(r) ? r : null)
+    }
     // gameType e initialServer: chaves que o set_config JÁ gravava e que nenhum
     // cliente lia — a "meia-ponte" que dessincronizava formato e saque.
     if (newState?.gameType !== undefined) setRemoteGameType(newState.gameType ?? null)
@@ -388,6 +406,7 @@ export function useRealtimeMatch(options?: UseRealtimeMatchOptions): UseRealtime
     remoteTheme,
     remoteScoreType,
     remotePlayerIds,
+    remotePlayersRev,
     remoteGameType,
     remoteInitialServer,
     presenceCount,

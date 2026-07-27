@@ -811,9 +811,17 @@ export default function JogoPage() {
   // Aplica ao gameConfig LOCAL um patch de campos de configuração vindos do
   // remoto (scoreType, players, maxSets, theme). Atualiza também os nomes
   // exibidos (derivados de players) e o tema. "último patch vence" (sem acumular).
+  // RELÓGIO DE LAMPORT do `players`. Guarda a MAIOR versão já vista (própria ou
+  // remota). Quem escreve depois de ver algo sempre supera o que viu — por isso
+  // Math.max(Date.now(), vista+1) e não o relógio puro: um aparelho adiantado
+  // não trava a edição dos outros, e um atrasado não é ignorado para sempre.
+  const ultimaRevVistaRef = useRef(0)
+
   const applyLocalConfig = (patch: {
     scoreType?: "pontos" | "games"
     players?: Partial<GameConfig["players"]>
+    /** Versão do `players` que veio no mesmo payload (ausente = sala antiga). */
+    playersRev?: number | null
     playerIds?: GameConfig["playerIds"]
     gameType?: string
     initialServer?: GameConfig["initialServer"]
@@ -831,23 +839,41 @@ export default function JogoPage() {
     }
     let playersChanged = false
     if (patch.players) {
-      // GUARD NÃO-DESTRUTIVO (correção do "nome do dono some"): um valor REMOTO
-      // fallback/vazio ("Player N"/"Jogador N"/"") NUNCA sobrescreve um nome LOCAL
-      // real. Merge POR CAMPO: se o remoto é fallback e o local é real, mantém o
-      // local; senão aplica o remoto. Protege o nome do dono (blue1) contra o seed
-      // e o eco fallback da sala, e blue2/red* também. Nome remoto REAL continua
-      // aplicando normal (propagação p/ o espectador intacta).
-      const mergedPlayers = { ...prev.players }
-      for (const [k, v] of Object.entries(patch.players)) {
-        const key = k as keyof GameConfig["players"]
-        const localVal = prev.players[key]
-        if (isFallbackName((v ?? "").trim()) && !isFallbackName(localVal)) continue
-        mergedPlayers[key] = v as string
-      }
-      if (JSON.stringify(mergedPlayers) !== JSON.stringify(prev.players)) {
-        updated.players = mergedPlayers
-        changed = true
-        playersChanged = true
+      // ORDENAÇÃO POR VERSÃO (relógio de Lamport) — a raiz do problema.
+      //
+      // TODO broadcast carrega o state INTEIRO (inclusive `players`), e o
+      // Realtime NÃO garante ordem de entrega: o payload de um ponto marcado
+      // ANTES pode chegar DEPOIS de uma edição de nome e desfazê-la. Era isso
+      // que o guard de conteúdo mascarava pela metade — e por isso apagar um
+      // nome nunca propagava (o vazio é indistinguível de um eco velho).
+      //
+      // Com a versão, a decisão é objetiva:
+      //  • rev >= a maior já vista → payload NOVO: aplica TUDO, inclusive vazio;
+      //  • rev  < a maior já vista → payload ATRASADO: ignora por completo;
+      //  • rev AUSENTE → sala antiga (ou emissor sem versão): cai no GUARD de
+      //    sempre, então nada regride para partidas criadas antes disto.
+      const rev = typeof patch.playersRev === "number" ? patch.playersRev : null
+
+      if (rev !== null && rev < ultimaRevVistaRef.current) {
+        // Atrasado: descarta o bloco de players inteiro.
+      } else {
+        const semVersao = rev === null
+        const mergedPlayers = { ...prev.players }
+        for (const [k, v] of Object.entries(patch.players)) {
+          const key = k as keyof GameConfig["players"]
+          const localVal = prev.players[key]
+          // GUARD NÃO-DESTRUTIVO (55aacfa) — só no caminho SEM versão: um valor
+          // REMOTO fallback/vazio não sobrescreve um nome LOCAL real. Protege o
+          // nome do dono contra o seed da sala, que não carrega versão.
+          if (semVersao && isFallbackName((v ?? "").trim()) && !isFallbackName(localVal)) continue
+          mergedPlayers[key] = v as string
+        }
+        if (rev !== null) ultimaRevVistaRef.current = Math.max(ultimaRevVistaRef.current, rev)
+        if (JSON.stringify(mergedPlayers) !== JSON.stringify(prev.players)) {
+          updated.players = mergedPlayers
+          changed = true
+          playersChanged = true
+        }
       }
     }
     // MERGE DE playerIds — REGRA DIFERENTE da de `players`, de propósito.
@@ -1002,7 +1028,9 @@ export default function JogoPage() {
     // players → gameConfig local. applyLocalConfig já deduplica por conteúdo
     // (só muda se diferente do players atual) e atualiza os nomes exibidos.
     if (rt.remotePlayers && typeof rt.remotePlayers === "object") {
-      applyLocalConfig({ players: rt.remotePlayers })
+      // A versão viaja JUNTO: é ela que decide se este payload é novo ou
+      // atrasado. Ausente → o merge cai no guard de sempre.
+      applyLocalConfig({ players: rt.remotePlayers, playersRev: rt.remotePlayersRev })
     }
 
     // playerIds → carteirinha por slot. Ausente no remoto (sala antiga, jogo
@@ -1088,6 +1116,7 @@ export default function JogoPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     rt.remotePlayers,
+    rt.remotePlayersRev,
     rt.remotePlayerIds,
     rt.remoteGameType,
     rt.remoteInitialServer,
@@ -1272,7 +1301,25 @@ export default function JogoPage() {
     const editToken = cur?.editToken || searchParams.get("edit") || undefined
     const matchId = cur?.matchId || searchParams.get("match") || undefined
     if (!editToken || !matchId) return
-    void Promise.resolve(rt.applyAction(editToken, matchId, action)).catch((err) => {
+
+    // VERSÃO DO `players` — PONTO ÚNICO de incremento, de propósito.
+    //
+    // Todos os escritores de nome passam por aqui (saveAllNames,
+    // reivindicarSlot, aplicarNomeDono, o retry de identidade). Versionar em
+    // cada um deles seria pedir para esquecer um — e um escritor sem versão
+    // teria as escritas IGNORADAS para sempre pelos outros aparelhos, o modo de
+    // falha mais perigoso deste desenho. Aqui é impossível esquecer.
+    //
+    // Lamport: max(agora, maior vista + 1). Supera sempre o que já se viu, sem
+    // depender de o relógio do aparelho estar certo.
+    let enviada = action
+    if (action.patch && action.patch.players !== undefined) {
+      const rev = Math.max(Date.now(), ultimaRevVistaRef.current + 1)
+      ultimaRevVistaRef.current = rev
+      enviada = { ...action, patch: { ...action.patch, playersRev: rev } }
+    }
+
+    void Promise.resolve(rt.applyAction(editToken, matchId, enviada)).catch((err) => {
       console.error("Envio de ação ao Supabase falhou (jogo segue local):", err)
     })
   }
