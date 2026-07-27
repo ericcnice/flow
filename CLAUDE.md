@@ -111,6 +111,18 @@ EVOLUÇÃO (visão, pós-base): estatísticas no perfil derivadas do histórico 
 
 PRIORIDADE: a jornada da quadra virtual (jogador avulso registra sem clube) é CENTRAL para a v1 — é o que os primeiros usuários reais usam. Não é detalhe; é a porta de entrada.
 
+## Quadra virtual + histórico — achados da investigação (corrige premissas)
+1. A SALA já é POR JOGO (createLiveMatch gera id+tokens aleatórios; a quadra NÃO entra na identidade da sala). Dois amigos abrindo /flow/tenis/q1 em celulares diferentes JÁ jogam partidas independentes hoje — o multi-device só acontece ao compartilhar o link. A "colisão de dois amigos" NÃO existe.
+2. A COLISÃO REAL é a CHAVE de localStorage: tennis_match_${quadra} (só a quadra, SEM o clube). spac/tenis/q1 e flow/tenis/q1 compartilham a mesma chave no mesmo aparelho → jogar num atropela o outro; reabrir a quadra retoma o jogo antigo. É isso que a quadra virtual resolve. A chave (quadra) é usada em 3 lugares (tennis_match_/engine_/score_) + viaja no &quadra= dos links + aparece no /placar + matches.court_slug — trocar a semântica dela é o ponto delicado.
+3. O HISTÓRICO JÁ EXISTE (não é feature nova): public.matches (owner_id, sport, venue_slug, game_type, result jsonb com nomes+placar, timestamps); /perfil lista "Meus jogos"; /jogo salva ao encerrar SE logado. Funciona hoje para quem encerra logado — só que quase ninguém alcança (depende de estar logado no aparelho que encerra).
+4. O BURACO do "quem jogou com a Kika": matches tem UM owner_id; os outros participantes são só STRINGS em result.players — SEM profile_id por participante, e RLS self (só o dono vê). Falta: gravar participantes por profile_id (coluna participant_ids uuid[] OU tabela match_participants) + RLS "vejo partidas em que participei" + gravar do playerIds (a 1c.1 já entrega a matéria-prima).
+
+FATIAS (independentes, ambas MÉDIAS — não a feature gigante):
+- A — QUADRA VIRTUAL: rota /[clube]/[esporte] (2 segmentos, sem número) + a chave da partida deixar de ser a quadra (id por partida). Risco nas 3 chaves + links + /placar, não na rota. CAMINHO BARATO: manter 3 segmentos e SÓ corrigir a chave primeiro (para de atropelar) — a URL sem número vira acabamento, não pré-requisito.
+- B — HISTÓRICO COMPARTILHADO: participant_ids uuid[] em matches (policy auth.uid()=any(participant_ids), mais simples que tabela) + gravar do playerIds + listar no /perfil de cada participante.
+Ordem: A → B. Dentro de A, começar pela CHAVE (o atropelo real) antes da rota bonita.
+PERGUNTAS Supabase (antes de implementar B): create_live_match confirma sala nova a cada chamada; quantas linhas em matches / com owner_id / venue=flow (dimensionar uso); validar participant_ids uuid[] + policy any() (índice gin, performance); court_visits/telemetria do dashboard se a quadra virar id único (visit-stats tem grade hardcoded).
+
 ## Marca do Flow — tipografia e símbolo (correção, Eric)
 A fonte do Flow **É Audiowide**, com um DEGRADÊ (gradiente azul→verde) aplicado. A Audiowide é o padrão de TODOS os logos de produtos da PWER IO — usada para consistência de marca entre os produtos. NÃO há fonte arredondada separada; o registro anterior sobre isso estava incorreto.
 
