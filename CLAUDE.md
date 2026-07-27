@@ -405,6 +405,30 @@ CORREÇÃO DESENHADA (ordem): (1) `saveAllNames` remove `playerIds[slot]` quando
 
 INTOCÁVEIS na correção: Lamport/`playersRev`/merge de `players` (aaaa57a), sync de nomes, motor, `lib/scoring`, placar.
 
+## PENDÊNCIA — a CORRIDA DO CLAIM (1c.1): diagnóstico FECHADO, correção é o 1º item do dia seguinte
+SINTOMA: convidado LOGADO escaneia o QR de um jogo com slots livres e editáveis e não entra em slot nenhum. Nada na tela, nada no console. Distinto da carteirinha imortal (lá o slot está travado com tick; aqui está editável, realmente livre).
+
+HIPÓTESES REFUTADAS POR EVIDÊNCIA (não repetir a investigação):
+- **jogo cheio / carteirinha imortal** — slots vinham EDITÁVEIS e sem tick = sem id grudado.
+- **anônimo** — pweriollc logado, confirmado no /perfil.
+- **localStorage velho** — o ramo remoto (`:543`) sai em `:656` ANTES da leitura em `:661`; com `match=` na URL o localStorage da quadra nunca é lido.
+- **nome vazio** — o /perfil (`app/perfil/page.tsx:1419-1428`) e o claim (`app/jogo/page.tsx:2125-2131`) leem a MESMA `profiles.name`, e o banco SOBRESCREVE o metadata. Se o /perfil mostra o nome, o claim lê o mesmo nome.
+- **descompasso cookie × localStorage** — REFUTADA pela mesma evidência que parecia sustentá-la. São DOIS clients Supabase deliberados: `lib/supabase/client.ts` (createClient, localStorage) serve as SALAS ANÔNIMAS do Realtime, sem identidade; `lib/supabase/browser-client.ts` (@supabase/ssr, COOKIE) serve o LOGIN — a sessão vive em cookie por design, porque o servidor não enxerga localStorage. **localStorage vazio em flow.pwer.com.br é o comportamento CORRETO.** O claim lê pela fonte certa (`use-session.ts:25-38`, `getSession()` do client de cookie), e o /perfil é `'use client'` usando o MESMO `useSession()` (`app/perfil/page.tsx:1,1605`) — se ele mostra o nome, `authUser` NÃO é null no cliente. A guarda (b) de `:2107` não barra. `hasProbableSession` (`:211-214`) também fareja cookie, não localStorage.
+
+CAUSA CONFIRMADA (única): a CORRIDA no effect do claim (`app/jogo/page.tsx:2105-2157`). A trava `reivindicacaoFeitaRef = matchId` é posta em `:2116` ANTES do `await` de `profiles` (`:2125`, 100–500ms de rede); o cleanup do effect (`:2153`, deps `[authUser, gameConfig, rt.remotePlayers]`) dispara `alive = false`; o async aborta em `:2135` — e a trava **só é solta em `:2139` (nome vazio), nunca neste caminho**. O effect re-roda e a guarda (d) `:2112` barra PARA SEMPRE.
+
+DOIS GATILHOS GARANTIDOS do cleanup: (1) a **B2** (`:1026`, declarada ANTES do claim, roda antes no mesmo commit) mescla o estado da sala no `synthetic` — que nasce com "Player 1..4" e sem `playerIds` (`:617-632`) — e chama `setGameConfig` (`:941`); com o dono identificado, os dados SEMPRE diferem, então o re-render é certo. (2) `onAuthStateChange` (`use-session.ts:34`) dispara `INITIAL_SESSION`/`TOKEN_REFRESHED` e faz `setUser` com objeto NOVO → `authUser` muda de identidade → cleanup.
+
+SEM REDE DE SEGURANÇA: o desempate pós-eco (`:2165`) exige `meuNomeRef.current` (`:2174`), setado só em `:2142` — depois do ponto onde o async morre. A rede está desativada pela mesma corrida.
+
+POR QUE O QA NUNCA PEGOU: dono e convidado usam caminhos MUTUAMENTE EXCLUSIVOS (documentado em `:2313-2314`). O DONO entra pelo prefill (`:2301`, guarda `if (searchParams.get("match")) return` em `:2315`) e escreve SÍNCRONO em `:2331`, antes de qualquer await — sem janela. O CONVIDADO entra pelo claim (`:2106` exige `edit`) e só escreve depois da rede. **Só o convidado exercita o claim**; todo teste feito no aparelho do dono passa por cima do bug.
+
+COMO CONFIRMAR EM CAMPO: no navegador do convidado, carimbar `window.fetch` antes de abrir o link. `select=name` puro é assinatura EXCLUSIVA do claim (o prefill pede `select=name,avatar_url` em `:2358` e nem roda no aparelho do convidado). Ver o GET de `profiles` sem o POST de `apply_live_match_action` depois = corrida confirmada.
+
+CORREÇÃO MAPEADA (isolada — NÃO toca `sendRealtimeAction`, `playersRev`, o merge de `players`, o motor, `lib/scoring` nem o placar; `reivindicarSlot` `:2225` fica IDÊNTICO; muda só QUANDO o claim escreve, nunca COMO): (1) **escrever cedo, refinar depois** — reivindicar SÍNCRONO com `user_metadata.full_name` e deixar `profiles.name` só corrigir depois; é o padrão que já faz o dono funcionar, e ELIMINA a janela em vez de administrá-la; (2) `meuNomeRef` setado ANTES do await, para a rede pós-eco voltar a existir; (3) soltar a trava no caminho `!alive` OU tirar `gameConfig` das deps (usar `gameConfig?.matchId`), para o effect não ser destruído a cada merge da B2; (4) falha VISÍVEL reusando o toast de `:3360-3369` (`.side-change-banner`); (5) cinto de segurança (não é a causa): cascata de nome testando VAZIO (`trim()`), não nullish — `:2122` usa `full_name ?? name`, que NÃO cai de `""` para `name`.
+
+DECISÃO (Eric, fim do dia): **NÃO corrigir hoje.** Dia longo; race condition em effect é traiçoeira com a cabeça cansada; e já houve uma regressão + revert hoje mexendo em zona sensível nesse estado (o Caminho C, `158e95a` → `b201dcb`). O diagnóstico está 100% fechado (código + campo), então nada se perde dormindo. Correção = PRIMEIRO item de amanhã, ~30min com a cabeça fresca, QA pesado e revert no gatilho.
+
 ## Fluxo de trabalho
 - **Claude Chat**: estratégia, decisões, prompts. **Claude Code**: executa código, commits, push. **IA do Supabase**: verifica e roda o SQL.
 - **Método por peça**: investigação read-only → decisão no chat → prompt com intocáveis explícitos → migração verificada antes de rodar → QA de produção no celular.
