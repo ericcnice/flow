@@ -49,6 +49,42 @@ const SHORT_NAME: Record<SportId, string> = {
 }
 
 
+/**
+ * TOGGLE SIMPLES/DUPLAS — o MESMO controle nas duas abas.
+ *
+ * Aparece no "Formato" da aba Jogo/Quadra (onde vive junto das outras regras) e
+ * acima dos times na aba Players (onde a pessoa está justamente organizando
+ * quem joga). Não são duas fontes: os dois chamam o mesmo `onSelect` e leem o
+ * mesmo `gameType` do SportSetup — mudar num aparece no outro porque É o mesmo
+ * estado, não uma cópia sincronizada.
+ */
+function ToggleFormato({
+  gameType,
+  onSelect,
+}: {
+  gameType: string
+  onSelect: (v: string) => void
+}) {
+  return (
+    <div className="rule-group">
+      {[
+        { label: "Simples", value: "simples" },
+        { label: "Duplas", value: "duplas" },
+      ].map((opt) => (
+        <button
+          key={opt.value}
+          type="button"
+          onClick={() => onSelect(opt.value)}
+          className={`rule-option ${gameType === opt.value ? "on" : ""}`}
+          aria-pressed={gameType === opt.value}
+        >
+          {opt.label}
+        </button>
+      ))}
+    </div>
+  )
+}
+
 /** Separador discreto entre os dois lados. */
 function Vs() {
   return (
@@ -121,6 +157,8 @@ function CardTime({
  */
 function AbaPlayers({
   duplas,
+  gameType,
+  onFormato,
   nomes,
   setNomes,
   previews,
@@ -128,6 +166,9 @@ function AbaPlayers({
   onSalvar,
 }: {
   duplas: boolean
+  /** Estado do formato — o MESMO do SportSetup, não uma cópia. */
+  gameType: string
+  onFormato: (v: string) => void
   nomes: SetupPlayers
   setNomes: (fn: (p: SetupPlayers) => SetupPlayers) => void
   previews?: Partial<Record<SetupSlotKey, SlotPreview | null>>
@@ -150,6 +191,19 @@ function AbaPlayers({
 
   return (
     <div className="space-y-3">
+      {/* FORMATO também aqui: é organizando os jogadores que se percebe que a
+          partida virou simples (ou que falta gente para duplas). Mesmo controle,
+          mesmo estado da aba Jogo/Quadra — trocar aqui reflete lá e vice-versa. */}
+      <div>
+        <div
+          className="mb-1.5 text-xs font-bold uppercase tracking-wide"
+          style={{ color: "var(--setup-card-cinza)" }}
+        >
+          Formato
+        </div>
+        <ToggleFormato gameType={gameType} onSelect={onFormato} />
+      </div>
+
       {duplas ? (
         <>
           <CardTime rotulo="Doubles 1" acento="var(--lado-a-bg)">
@@ -277,6 +331,14 @@ export function SportSetup({
     const atual = window.location.pathname + window.location.search
     return `/perfil?voltar=${encodeURIComponent(atual)}`
   })
+
+  // FONTE ÚNICA do formato: as duas abas chamam ISTO. Ingame aplica e propaga
+  // na hora (a prop existe); no /setup a prop é ausente e a escolha fica para o
+  // CTA — o comportamento da fatia (f), agora com duas entradas.
+  const escolherFormato = (v: string) => {
+    setGameType(v)
+    onGameTypeChange?.(v)
+  }
 
   const salvarNomes = () => {
     if (!nomesSujos) return
@@ -410,6 +472,8 @@ export function SportSetup({
           {abaAtual === "players" ? (
             <AbaPlayers
               duplas={gameType === "duplas"}
+              gameType={gameType}
+              onFormato={escolherFormato}
               nomes={nomes}
               setNomes={setNomes}
               previews={playerPreviews}
@@ -428,26 +492,7 @@ export function SportSetup({
               pílulas de nome). Antes das regras de propósito. Molde rule-group. */}
           <div>
             <div className="text-xs font-bold uppercase tracking-wide mb-1.5">Formato</div>
-            <div className="rule-group">
-              {[
-                { label: "Simples", value: "simples" },
-                { label: "Duplas", value: "duplas" },
-              ].map((opt) => (
-                <button
-                  key={opt.value}
-                  type="button"
-                  onClick={() => {
-                    setGameType(opt.value)
-                    // Ingame: aplica e propaga já. New: só marca — o JOGAR leva.
-                    onGameTypeChange?.(opt.value)
-                  }}
-                  className={`rule-option ${gameType === opt.value ? "on" : ""}`}
-                  aria-pressed={gameType === opt.value}
-                >
-                  {opt.label}
-                </button>
-              ))}
-            </div>
+            <ToggleFormato gameType={gameType} onSelect={escolherFormato} />
           </div>
 
           {controls.map((c) => {
