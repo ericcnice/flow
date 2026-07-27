@@ -14,8 +14,13 @@
  *  • INPUT — nome livre, digitável. É o caminho do anônimo/offline, que a 1c
  *    NÃO remove.
  *
- * Refactor PURO: a marcação, as classes e o comportamento são os que já estavam
- * no modal. Nada de novo aqui — a tela tem de ficar idêntica.
+ * DUAS VARIANTES DE TEMA (fatia b), porque o mesmo slot vive em dois fundos:
+ *  • 'dark'  — o popup atual (NameEditModal), fundo neutral-900. É o DEFAULT,
+ *              então nada muda para quem já usa o componente.
+ *  • 'card'  — o card CLARO da tela de configuração (--setup-card-bg #f4f1ea),
+ *              onde a aba Players vai morar (fatia c).
+ * Só a APARÊNCIA muda entre elas: avatar, tick, link do dono, selectAll,
+ * autoFocus, Enter e preview se comportam igual nas duas.
  */
 
 import type { RefObject } from "react"
@@ -24,6 +29,49 @@ import { BadgeCheck } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { PlayerAvatar } from "@/components/player-avatar"
 import type { SlotPreview } from "@/components/name-edit-modal"
+
+export type SlotRowVariant = "dark" | "card"
+
+/**
+ * As classes de cada variante, lado a lado — assim a diferença fica legível num
+ * lugar só, em vez de espalhada por ternários no meio da marcação.
+ *
+ * O VERDE do verificado muda de tom de propósito: `emerald-400` sobre off-white
+ * quase não se lê (e o fundo `emerald-400/5` some), então a variante clara usa
+ * `emerald-700`/`emerald-600` — mesma leitura de "verificado", contraste que
+ * funciona no papel claro.
+ */
+const ESTILOS: Record<
+  SlotRowVariant,
+  {
+    label: string
+    caixa: string
+    nome: string
+    tick: string
+    link: string
+    input: string
+  }
+> = {
+  dark: {
+    label: "text-xs font-semibold uppercase tracking-wide text-white/60",
+    caixa:
+      "flex h-14 items-center gap-2.5 rounded-md border border-emerald-400/30 bg-emerald-400/5 px-3",
+    nome: "min-w-0 flex-1 truncate text-base font-semibold text-white",
+    tick: "h-4 w-4 shrink-0 text-emerald-400",
+    link: "text-xs text-white/60 underline underline-offset-2 hover:text-white",
+    input:
+      "h-12 flex-1 border-white/20 bg-white/10 text-base text-white placeholder:text-white/40",
+  },
+  card: {
+    label: "text-xs font-bold uppercase tracking-wide",
+    caixa:
+      "flex h-14 items-center gap-2.5 rounded-xl border-2 border-emerald-600/30 bg-emerald-600/10 px-3",
+    nome: "min-w-0 flex-1 truncate text-base font-bold",
+    tick: "h-4 w-4 shrink-0 text-emerald-700",
+    link: "text-xs underline underline-offset-2",
+    input: "h-12 flex-1 rounded-xl border-2 text-base",
+  },
+}
 
 export function SlotRow({
   label,
@@ -35,6 +83,7 @@ export function SlotRow({
   autoFocus = false,
   inputRef,
   linkPerfil = false,
+  variant = "dark",
 }: {
   /** Rótulo do campo ("Player 1" / "Nome" / "Player 2"). */
   label: string
@@ -59,8 +108,23 @@ export function SlotRow({
    * souEu mostra o atalho) e esta prop some.
    */
   linkPerfil?: boolean
+  /** Tema do fundo em que o slot está. Default 'dark' = comportamento atual. */
+  variant?: SlotRowVariant
 }) {
   const travado = Boolean(preview?.verified)
+  const st = ESTILOS[variant]
+  const claro = variant === "card"
+
+  // Cores por token no claro (não há classe utilitária para as vars do card).
+  const corTexto = claro ? { color: "var(--setup-card-texto)" } : undefined
+  const corRotulo = claro ? { color: "var(--setup-card-cinza)" } : undefined
+  const estiloInput = claro
+    ? {
+        backgroundColor: "#ffffff",
+        borderColor: "var(--setup-card-borda)",
+        color: "var(--setup-card-texto)",
+      }
+    : undefined
 
   // Seleciona o texto ao focar: um toque substitui tudo, editar 1 letra ainda é
   // possível. Vale p/ autoFocus, Tab e toque.
@@ -69,22 +133,21 @@ export function SlotRow({
   if (travado) {
     return (
       <div className="flex flex-col gap-1.5">
-        <span className="text-xs font-semibold uppercase tracking-wide text-white/60">{label}</span>
-        <div className="flex h-14 items-center gap-2.5 rounded-md border border-emerald-400/30 bg-emerald-400/5 px-3">
+        <span className={st.label} style={corRotulo}>
+          {label}
+        </span>
+        <div className={st.caixa}>
           <PlayerAvatar url={preview?.avatarUrl} nome={preview?.nome ?? ""} size={40} />
-          <span className="min-w-0 flex-1 truncate text-base font-semibold text-white">
+          <span className={st.nome} style={corTexto}>
             {preview?.nome}
           </span>
-          <BadgeCheck className="h-4 w-4 shrink-0 text-emerald-400" aria-hidden />
+          <BadgeCheck className={st.tick} aria-hidden />
         </div>
         {/* SÓ O DONO, no aparelho dele. Terceiro/anônimo não vê NADA aqui — o
             tick já comunica "verificado", e oferecer um atalho para editar
             identidade alheia seria promessa falsa. */}
         {linkPerfil && preview?.souEu && (
-          <Link
-            href={perfilHref}
-            className="text-xs text-white/60 underline underline-offset-2 hover:text-white"
-          >
+          <Link href={perfilHref} className={st.link} style={corRotulo}>
             Identidade verificada — edite seu nome no perfil
           </Link>
         )}
@@ -94,7 +157,9 @@ export function SlotRow({
 
   return (
     <label className="flex flex-col gap-1.5">
-      <span className="text-xs font-semibold uppercase tracking-wide text-white/60">{label}</span>
+      <span className={st.label} style={corRotulo}>
+        {label}
+      </span>
       {/* Avatar FORA do <Input> (o preview não interfere na digitação). */}
       <div className="flex items-center gap-2.5">
         <PlayerAvatar url={preview?.avatarUrl} nome={valor} size={40} />
@@ -108,7 +173,8 @@ export function SlotRow({
           }}
           autoFocus={autoFocus}
           placeholder="Nome"
-          className="h-12 flex-1 border-white/20 bg-white/10 text-base text-white placeholder:text-white/40"
+          className={st.input}
+          style={estiloInput}
         />
       </div>
     </label>
