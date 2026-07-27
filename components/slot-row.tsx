@@ -3,9 +3,9 @@
 /**
  * UM SLOT DE JOGADOR — a linha de um lugar na partida.
  *
- * Extraído do NameEditModal (1c.3, fatia i), onde este mesmo bloco estava
- * INLINE quatro vezes (dois slots × dois estados). O popup ÚNICO da fatia (ii)
- * mostra os quatro jogadores juntos; sem esta extração, seriam OITO cópias.
+ * Nasceu extraído do popup de nomes (1c.3, fatia i), onde este mesmo bloco
+ * estava INLINE quatro vezes. Hoje o consumidor é a ABA PLAYERS da tela de
+ * configuração, que mostra os quatro jogadores juntos.
  *
  * DOIS ESTADOS, decididos pelo `preview`:
  *  • TRAVADO (preview.verified) — o slot tem CARTEIRINHA: nome em texto, tick
@@ -14,11 +14,12 @@
  *  • INPUT — nome livre, digitável. É o caminho do anônimo/offline, que a 1c
  *    NÃO remove.
  *
- * DUAS VARIANTES DE TEMA (fatia b), porque o mesmo slot vive em dois fundos:
- *  • 'dark'  — o popup atual (NameEditModal), fundo neutral-900. É o DEFAULT,
- *              então nada muda para quem já usa o componente.
- *  • 'card'  — o card CLARO da tela de configuração (--setup-card-bg #f4f1ea),
- *              onde a aba Players vai morar (fatia c).
+ * DUAS VARIANTES DE TEMA (fatia b), porque o slot precisa servir dois fundos:
+ *  • 'card'  — o card CLARO da configuração (--setup-card-bg #f4f1ea). É onde a
+ *              aba Players vive HOJE, e o único consumidor no momento.
+ *  • 'dark'  — fundo escuro (neutral-900). Era o do popup de nomes, aposentado
+ *              na fatia (e); segue como DEFAULT e pronto para qualquer
+ *              superfície escura futura (uma celebração, um overlay do palco).
  * Só a APARÊNCIA muda entre elas: avatar, tick, link do dono, selectAll,
  * autoFocus, Enter e preview se comportam igual nas duas.
  */

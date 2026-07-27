@@ -3,7 +3,7 @@
 import { Fragment, useState, useEffect, useRef, type CSSProperties, type ReactNode } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import Image from "next/image"
-import { NameEditModal, type SlotPreview } from "@/components/name-edit-modal"
+import type { SlotPreview } from "@/components/slot-row"
 import { ConfirmModal } from "@/components/confirm-modal"
 import { Settings, Volume2, VolumeX, Undo2, BarChart2, RotateCcw, LogOut, ArrowLeftRight, Share2, Users, UserMinus, X, BadgeCheck } from "lucide-react"
 import { ThirdSetModal } from "@/components/third-set-modal"
@@ -329,7 +329,6 @@ export default function JogoPage() {
   const [startTime, setStartTime] = useState<Date | null>(null)
   // Lado cujo popup de edição de nomes está aberto (B1a). null = fechado. A
   // edição inline antiga (Input no canto/faixa) morreu — agora é o popup grande.
-  const [editingSide, setEditingSide] = useState<null | "blue" | "red">(null)
   // CARTÕES (1b.2a): nome+foto de quem tem carteirinha, resolvidos SÓ quando o
   // popup abre. Mapa profile_id → cartão; vazio é o caso normal (anônimo).
   const [playerCards, setPlayerCards] = useState<Map<string, PlayerCard>>(new Map())
@@ -1612,7 +1611,7 @@ export default function JogoPage() {
     // Usa o REF (config atual), não o `gameConfig` do closure: este handler pode
     // ter fechado sobre um gameConfig anterior ao pré-preenchimento (blue1
     // fallback) e um {...gameConfig} reverteria o nome do dono. Os demais
-    // handlers (chooseServer/saveNames/setMatchGameType) já usam o ref.
+    // handlers (chooseServer/saveAllNames/...) já usam o ref.
     const cfg = gameConfigRef.current
     if (!cfg) return
 
@@ -1632,38 +1631,6 @@ export default function JogoPage() {
     // Fase 0: a escolha de tiebreak/super tiebreak do set decisivo ainda não é
     // exposta ao motor (refinamento futuro). Apenas fecha o modal.
     setShowThirdSetModal(false)
-  }
-
-  // Grava os nomes de um lado a partir do popup (B1a): estruturado (p1/p2), SEM
-  // a antiga convenção de split por "/". Em simples só p1 conta. Persiste, mantém
-  // os nomes COMBINADOS em sincronia (tela de fim/broadcast) e propaga players
-  // pelo mesmo set_config de sempre.
-  const saveNames = (team: "blue" | "red", p1: string, p2: string) => {
-    const cfg = gameConfigRef.current
-    if (!cfg) return
-    const duplas = cfg.gameType === "duplas"
-    const players = { ...cfg.players }
-    if (team === "blue") {
-      players.blue1 = p1
-      if (duplas) players.blue2 = p2
-    } else {
-      players.red1 = p1
-      if (duplas) players.red2 = p2
-    }
-
-    const newConfig: GameConfig = { ...cfg, players }
-    setGameConfig(newConfig)
-    gameConfigRef.current = newConfig
-    try {
-      localStorage.setItem(`tennis_match_${quadra}`, JSON.stringify(newConfig))
-    } catch {
-      // aba privada / cota: segue só em memória
-    }
-
-    setBluePlayerName(duplas ? `${players.blue1}/${players.blue2}` : players.blue1)
-    setRedPlayerName(duplas ? `${players.red1}/${players.red2}` : players.red1)
-
-    sendRealtimeAction({ kind: "set_config", patch: { players } })
   }
 
   // PREVIEW de um slot qualquer (a aba Players precisa dos quatro). Mesma regra
@@ -1705,26 +1672,6 @@ export default function JogoPage() {
     setBluePlayerName(duplas ? `${players.blue1}/${players.blue2}` : players.blue1)
     setRedPlayerName(duplas ? `${players.red1}/${players.red2}` : players.red1)
     sendRealtimeAction({ kind: "set_config", patch: { players } })
-  }
-
-  // Troca o FORMATO da partida (simples↔duplas) do popup de nomes — mesmo campo
-  // que o toggle do settings grava. Persiste, re-deriva os nomes combinados e
-  // propaga via set_config (como o settings). As pílulas passam a mostrar 1↔2.
-  const setMatchGameType = (newGt: string) => {
-    const cfg = gameConfigRef.current
-    if (!cfg) return
-    const newConfig: GameConfig = { ...cfg, gameType: newGt }
-    setGameConfig(newConfig)
-    gameConfigRef.current = newConfig
-    try {
-      localStorage.setItem(`tennis_match_${quadra}`, JSON.stringify(newConfig))
-    } catch {
-      // aba privada / cota
-    }
-    const p = newConfig.players
-    setBluePlayerName(newGt === "duplas" ? `${p.blue1}/${p.blue2}` : p.blue1)
-    setRedPlayerName(newGt === "duplas" ? `${p.red1}/${p.red2}` : p.red1)
-    sendRealtimeAction({ kind: "set_config", patch: { gameType: newGt } })
   }
 
   // RECOMEÇAR a partida: zera o placar MANTENDO a config (jogadores, gameType,
@@ -1982,20 +1929,14 @@ export default function JogoPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [gameState?.finished, gameState?.winner, authUser])
 
-  // CARTÕES (nome+foto) dos slots que TÊM carteirinha. Resolvidos quando alguma
-  // superfície de jogadores abre — o popup escuro (editingSide) OU a aba Players
-  // do setup (setupOpen).
-  //
-  // ⚠️ Antes isto dependia SÓ do editingSide e buscava apenas os dois slots
-  // daquele lado — por isso a aba Players mostrava a inicial em vez da foto:
-  // ninguém tinha ido buscar cartão nenhum. Agora busca os QUATRO de uma vez
-  // (a RPC é em lote e o módulo cacheia), servindo as duas telas.
+  // CARTÕES (nome+foto) dos slots que TÊM carteirinha. Resolvidos quando a aba
+  // Players abre (setupOpen) — os QUATRO de uma vez, já que ela mostra todos.
   //
   // Slot anônimo não entra na lista → o módulo nem toca a rede. Offline/erro:
   // cache ou vazio, e o avatar cai na inicial — as duas telas abrem e salvam
   // igual.
   useEffect(() => {
-    if (!editingSide && !setupOpen) return
+    if (!setupOpen) return
     const cfgAtual = gameConfigRef.current
     const ids = [
       cfgAtual?.playerIds?.blue1,
@@ -2019,7 +1960,6 @@ export default function JogoPage() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
-    editingSide,
     setupOpen,
     gameConfig?.playerIds?.blue1,
     gameConfig?.playerIds?.blue2,
@@ -3704,61 +3644,6 @@ export default function JogoPage() {
         editToken={gameConfig.editToken}
         editorCount={rt.editorCount}
       />
-
-      {/* Popup grande de edição de nomes (B1a): abre ao tocar numa pílula do lado.
-          NESTA fatia o toque SEMPRE abre o editor (a alternância seletor-de-saque/
-          editor por fase entra no B1b). accentColor = cor do lado no tema. */}
-      {editingSide && (
-        <NameEditModal
-          accentColor={editingSide === "blue" ? "var(--lado-a-bg)" : "var(--lado-b-bg)"}
-          gameType={cfg.gameType}
-          onGameTypeChange={setMatchGameType}
-          // Sempre os DOIS nomes do lado (não filtrado por formato): trocar para
-          // duplas no popup revela o 2º nome já existente.
-          initialNames={
-            editingSide === "blue"
-              ? [cfg.players.blue1, cfg.players.blue2]
-              : [cfg.players.red1, cfg.players.red2]
-          }
-          // PREVIEW POR SLOT (1b.2a). A trava agora vem de `playerIds` — a
-          // verdade que VIAJA (1a) —, não do flag local `ownerVerified`: no 2º
-          // aparelho o nome do dono também fica travado, como manda a regra de
-          // "terceiros não alteram nome verificado". `ownerVerified` continua
-          // valendo como fallback local (partida antiga / offline puro).
-          previews={(() => {
-            const keys =
-              editingSide === "blue" ? (["blue1", "blue2"] as const) : (["red1", "red2"] as const)
-            const nomes = editingSide === "blue"
-              ? [cfg.players.blue1, cfg.players.blue2]
-              : [cfg.players.red1, cfg.players.red2]
-            return keys.map((k, i) => {
-              const pid = cfg.playerIds?.[k]
-              // Sem carteirinha no slot → sem preview (input normal). O ramo
-              // "legado" (ownerVerified sem pid) FOI APOSENTADO: ele afirmava
-              // "verificado" sem identidade resolvível e, por não ter id, nunca
-              // conseguia buscar foto — mostrava tick + inicial para sempre.
-              // Agora o prefill grava playerIds sempre que há sessão, então o
-              // caminho é único.
-              if (!pid) return null
-              const card = playerCards.get(pid)
-              // FOTO DO DONO vem da leitura LOCAL (RLS self) e VENCE: funciona
-              // offline e mesmo que a RPC pública falhe. Terceiros seguem pela
-              // RPC (o card).
-              const ehDono = Boolean(authUser?.id) && pid === authUser?.id
-              return {
-                nome: card?.displayName || nomes[i],
-                avatarUrl: (ehDono ? ownerAvatarUrl : null) ?? card?.avatarUrl ?? null,
-                verified: true,
-                // "ver viaja, editar é local": só o dono, no aparelho dele,
-                // ganha o atalho para o /perfil.
-                souEu: ehDono,
-              }
-            }) as [SlotPreview | null, SlotPreview | null]
-          })()}
-          onSave={(p1, p2) => saveNames(editingSide, p1, p2)}
-          onClose={() => setEditingSide(null)}
-        />
-      )}
 
       {/* Confirmação de RECOMEÇAR (modal do app, sem "flow.pwer.com.br diz"). */}
       {confirmRestartOpen && (
