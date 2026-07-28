@@ -393,6 +393,9 @@ export default function JogoPage() {
   // Confirmação de RECOMEÇAR (modal do app, não window.confirm): aberta pelo
   // botão "Recomeçar" do bottom sheet.
   const [confirmRestartOpen, setConfirmRestartOpen] = useState(false)
+  // Encerrar: MESMO modal do Recomeçar. Os dois são destrutivos e viviam com
+  // linguagens diferentes — um com o modal do app, outro com o popup do sistema.
+  const [confirmEndOpen, setConfirmEndOpen] = useState(false)
   // Nomes COMBINADOS para exibição em superfícies que não são as pílulas
   // (tela de fim, broadcast): simples = "Nome"; duplas = "Nome1/Nome2".
   const [bluePlayerName, setBluePlayerName] = useState("")
@@ -1787,16 +1790,8 @@ export default function JogoPage() {
     sendRealtimeAction({ kind: "reset" }) // zera a sala também (best-effort)
   }
 
-  // Legado (overlay de setup): mantém o confirm nativo por ora — fora do escopo
-  // do menu de ações. Reaproveita restartMatch para não duplicar a reconstrução.
-  const resetGame = () => {
-    if (confirm("Tem certeza que deseja reiniciar o jogo? Todos os dados serão perdidos.")) {
-      restartMatch()
-    }
-  }
-
   // "Jogar de novo" da TELA DE FIM: zera o placar mantendo o MESMO config e os
-  // mesmos jogadores. Reaproveita a reconstrução do resetGame, sem o confirm —
+  // mesmos jogadores. Reaproveita a reconstrução do restartMatch, sem confirmar —
   // a partida já acabou, não há o que perder. finished volta a false → a tela de
   // fim some e o placar normal reaparece zerado.
   const playAgain = () => {
@@ -1856,21 +1851,27 @@ export default function JogoPage() {
 
   // Encerrar a partida: descarta o jogo desta quadra e volta pra home.
   // (Ação herdada do antigo GameMenu — ver rodapé do overlay de config.)
+  // A AÇÃO em si (a pergunta é do ConfirmModal, como no Recomeçar). Antes usava
+  // `confirm()` nativo — que estampa "flow.pwer.com.br diz" e quebra a imersão
+  // no meio de um jogo, ao lado de um Recomeçar que já usava o modal do app.
   const endMatch = () => {
-    if (confirm("Tem certeza que deseja encerrar o jogo? Você será redirecionado para a tela inicial.")) {
-      localStorage.removeItem(`tennis_match_${quadra}`)
-      localStorage.removeItem(`tennis_engine_${quadra}`)
-      localStorage.removeItem(`tennis_score_${quadra}`)
-      // DESTINO COM CONTEXTO (fatia N2). Antes era sempre a landing — sair do
-      // jogo despejava na página de marketing, que não tinha um único link de
-      // volta para o app. Agora o destino depende de quem acabou de jogar:
-      //  • LOGADO   → /perfil, onde estão "Meus jogos": a partida que acabou de
-      //    ser salva está bem ali. É a continuação natural.
-      //  • ANÔNIMO  → /setup, para jogar de novo. Mandá-lo ao /perfil abriria um
-      //    painel de login logo depois de encerrar — empurrão, não convite, e o
-      //    anônimo é cidadão de primeira classe.
-      router.push(authUser ? "/perfil" : "/setup")
-    }
+    localStorage.removeItem(`tennis_match_${quadra}`)
+    localStorage.removeItem(`tennis_engine_${quadra}`)
+    localStorage.removeItem(`tennis_score_${quadra}`)
+    // DESTINO COM CONTEXTO (fatia N2). Antes era sempre a landing — sair do
+    // jogo despejava na página de marketing, que não tinha um único link de
+    // volta para o app. Agora o destino depende de quem acabou de jogar:
+    //  • LOGADO   → /perfil, onde estão "Meus jogos": a partida que acabou de
+    //    ser salva está bem ali. É a continuação natural.
+    //  • ANÔNIMO  → /setup, para jogar de novo. Mandá-lo ao /perfil abriria um
+    //    painel de login logo depois de encerrar — empurrão, não convite, e o
+    //    anônimo é cidadão de primeira classe.
+    //
+    // O TEXTO DO MODAL não promete destino nenhum, de propósito: ele diz "você
+    // sairá do jogo", que é o que a pessoa precisa decidir. Prometer "vai para a
+    // tela inicial" (como o confirm antigo dizia) virou mentira no instante em
+    // que este destino passou a depender da sessão.
+    router.push(authUser ? "/perfil" : "/setup")
   }
 
   // Inicia uma NOVA partida NESTA quadra com outro esporte/regras (troca de
@@ -3640,7 +3641,11 @@ export default function JogoPage() {
              */
             footer={
               <div className="pt-3 mt-1 border-t" style={{ borderColor: "var(--setup-card-borda)" }}>
-                <button type="button" className="setup-action setup-action-danger" onClick={endMatch}>
+                <button
+                  type="button"
+                  className="setup-action setup-action-danger"
+                  onClick={() => setConfirmEndOpen(true)}
+                >
                   <LogOut className="h-3.5 w-3.5" />
                   Encerrar partida
                 </button>
@@ -3814,7 +3819,7 @@ export default function JogoPage() {
           {/* Encerrar (voltar à home) — discreto, para não ficar preso na tela. */}
           <button
             type="button"
-            onClick={endMatch}
+            onClick={() => setConfirmEndOpen(true)}
             className="mt-1 text-[11px] uppercase tracking-widest underline text-white/60"
           >
             Encerrar partida
@@ -3845,6 +3850,21 @@ export default function JogoPage() {
       />
 
       {/* Confirmação de RECOMEÇAR (modal do app, sem "flow.pwer.com.br diz"). */}
+      {/* ENCERRAR × RECOMEÇAR — a distinção mora no texto, porque as duas ações
+          vivem lado a lado no jogo e a confusão custaria uma partida:
+            • Recomeçar → "os pontos serão perdidos" (zera e VOCÊ FICA aqui);
+            • Encerrar  → "você sairá do jogo"      (SAI da partida).
+          O texto antigo do Encerrar prometia "redirecionado para a tela
+          inicial", o que deixou de ser verdade quando o destino passou a
+          depender da sessão (/perfil ou /setup). Agora não promete destino. */}
+      {confirmEndOpen && (
+        <ConfirmModal
+          message="Encerrar esta partida? Você sairá do jogo."
+          confirmLabel="Encerrar"
+          onConfirm={endMatch}
+          onClose={() => setConfirmEndOpen(false)}
+        />
+      )}
       {confirmRestartOpen && (
         <ConfirmModal
           message="Recomeçar a partida? Os pontos serão perdidos."
