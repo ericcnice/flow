@@ -405,7 +405,7 @@ CORREÇÃO DESENHADA (ordem): (1) `saveAllNames` remove `playerIds[slot]` quando
 
 INTOCÁVEIS na correção: Lamport/`playersRev`/merge de `players` (aaaa57a), sync de nomes, motor, `lib/scoring`, placar.
 
-## PENDÊNCIA — a CORRIDA DO CLAIM (1c.1): diagnóstico FECHADO, correção é o 1º item do dia seguinte
+## DIAGNÓSTICO (histórico) — a CORRIDA DO CLAIM (1c.1) → RESOLVIDO em 28/07, ver a seção seguinte
 SINTOMA: convidado LOGADO escaneia o QR de um jogo com slots livres e editáveis e não entra em slot nenhum. Nada na tela, nada no console. Distinto da carteirinha imortal (lá o slot está travado com tick; aqui está editável, realmente livre).
 
 HIPÓTESES REFUTADAS POR EVIDÊNCIA (não repetir a investigação):
@@ -428,6 +428,23 @@ COMO CONFIRMAR EM CAMPO: no navegador do convidado, carimbar `window.fetch` ante
 CORREÇÃO MAPEADA (isolada — NÃO toca `sendRealtimeAction`, `playersRev`, o merge de `players`, o motor, `lib/scoring` nem o placar; `reivindicarSlot` `:2225` fica IDÊNTICO; muda só QUANDO o claim escreve, nunca COMO): (1) **escrever cedo, refinar depois** — reivindicar SÍNCRONO com `user_metadata.full_name` e deixar `profiles.name` só corrigir depois; é o padrão que já faz o dono funcionar, e ELIMINA a janela em vez de administrá-la; (2) `meuNomeRef` setado ANTES do await, para a rede pós-eco voltar a existir; (3) soltar a trava no caminho `!alive` OU tirar `gameConfig` das deps (usar `gameConfig?.matchId`), para o effect não ser destruído a cada merge da B2; (4) falha VISÍVEL reusando o toast de `:3360-3369` (`.side-change-banner`); (5) cinto de segurança (não é a causa): cascata de nome testando VAZIO (`trim()`), não nullish — `:2122` usa `full_name ?? name`, que NÃO cai de `""` para `name`.
 
 DECISÃO (Eric, fim do dia): **NÃO corrigir hoje.** Dia longo; race condition em effect é traiçoeira com a cabeça cansada; e já houve uma regressão + revert hoje mexendo em zona sensível nesse estado (o Caminho C, `158e95a` → `b201dcb`). O diagnóstico está 100% fechado (código + campo), então nada se perde dormindo. Correção = PRIMEIRO item de amanhã, ~30min com a cabeça fresca, QA pesado e revert no gatilho.
+
+## BUG do convidado não entrar no slot — RESOLVIDO (28/07, manhã)
+Três fatias, todas com QA, ZERO regressão do Lamport.
+
+**FATIA 1 (`2d48869`) — escrever cedo, refinar depois.** O claim reivindica o slot **SÍNCRONO**, com `nomeDaSessao(authUser)` (cascata `full_name → name → email → "Convidado"`, resolvida por `trim()` e NÃO por nullish — `full_name ?? name` não cai de `""` para `name`), ANTES de qualquer `await`. O `profiles.name` só REFINA depois: não-bloqueante, e com guarda de propriedade (só reescreve se o slot ainda for do próprio usuário, nunca nome de terceiro). `meuNomeRef` setado antes do await — o que, sem querer, ARMOU a rede pós-eco pela primeira vez. Trava solta no `!alive` (cinto). Eliminou a corrida na raiz: a entrada no slot deixou de depender do await. **RESULTADO: o convidado ENTRA.**
+
+**FATIA 1.1 (`301fa95`) — a duplicação que a Fatia 1 revelou.** O convidado passou a entrar em DOIS slots (blue2 + red1, ambos com tick). Não era o claim (`reivindicarSlot` atualiza `gameConfigRef` de forma síncrona, então a guarda (c) sempre viu a 1ª reivindicação) nem o cinto do `!alive`. Era o **desempate pós-eco**, que NUNCA havia funcionado (`meuNomeRef` nascia vazio e o matava em silêncio): a Fatia 1 o armou e ele disparou com o defeito de origem — inferia "perdi a corrida" da ausência do meu id no estado REMOTO, sem distinguir "minha escrita ainda está no ar" (100–300ms de rede). Reivindicava um 2º slot no MESMO commit em que o claim entrava. **CORREÇÃO (1 linha, aditiva):** dar ao desempate a MESMA guarda local do claim — `if (Object.values(cur.playerIds ?? {}).includes(authUser.id)) return`. Ela distingue os dois casos graças à regra do merge de `playerIds` (o remoto sobrescreve a mesma chave, a ausência nunca apaga): escrita em voo → meu id local permanece → não duplica; derrota real → o eco traz o slot com o id do outro e sobrescreve o meu → não apareço localmente → re-reivindico. Mais `retentativasRef` zerado por reivindicação (o orçamento é por reivindicação; um contador gasto chegaria à sala seguinte já no limite). **RESULTADO: entra UMA vez, no slot certo.**
+
+INTOCADO em todas as fatias: Lamport/`playersRev`/merge de `players` (`aaaa57a`), `reivindicarSlot`, o prefill do dono, o motor, `lib/scoring`, o placar.
+
+QA: convidado entra 1× · Lamport sob carga (T3) intacto · dono continua síncrono · multi-device geral (formato, saque, tema, undo).
+
+**POR QUE ESCAPOU DO QA POR TANTO TEMPO:** só aparecia com o dono IDENTIFICADO. Com dono anônimo a sala não tem `playerIds`, o remoto é null e o desempate morre antes — o teste passava por cima. Vale como regra: **testar a jornada do convidado com o dono LOGADO**, não só anônimo.
+
+**LIÇÃO (registrar, vale além deste bug):** a decisão de PARAR na noite anterior — cansado, depois de uma regressão + revert no mesmo dia (`158e95a` → `b201dcb`) — e retomar de manhã com o diagnóstico já fechado foi certa. A correção correu limpa, em duas fatias pequenas, sem revert. Race condition em effect é traiçoeira com a cabeça cansada; diagnóstico fechado não estraga dormindo.
+
+PENDENTE: **Fatia 2** — falha VISÍVEL reusando o toast de `:3360-3369` (`.side-change-banner`): quando o claim não completa, mostrar feedback em vez do silêncio. Não urgente (o caso principal funciona); é polimento que barateia o diagnóstico futuro.
 
 ## Fluxo de trabalho
 - **Claude Chat**: estratégia, decisões, prompts. **Claude Code**: executa código, commits, push. **IA do Supabase**: verifica e roda o SQL.
