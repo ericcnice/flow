@@ -393,6 +393,19 @@ IMPLICAÇÃO DE PRODUTO (registrar, não urgente): se o Flow vira white-label (m
 
 FILOSOFIA: um produto, três+ modelos de receita (professor paga / clube paga / marca patrocina distribuição), servidos pela mesma base de sponsors. Tração primeiro (SPAC), parcerias depois.
 
+## Landing — refinamentos L1.1 (ideias Eric, pós-L1 / commit `ecbe038`)
+Dois refinamentos sobre a landing já no ar. NÃO urgentes: a L1 já destrava a distribuição (os CTAs levam ao app); estes ELEVAM.
+
+**1. "Funciona offline, sem baixar app" precisa SUBIR de destaque.** Hoje é uma faixa fina no fim dos benefícios, tratada como um COMO. É DIFERENCIAL COMPETITIVO: a maioria dos concorrentes obriga a baixar um app que ocupa espaço; o Flow roda no navegador e funciona **sem internet**.
+- **NUNCA escrever "PWA"** na landing nem em material de marketing. É jargão de desenvolvedor e não significa nada para o jogador — atrapalha em vez de vender. Traduzir SEMPRE para o benefício: *"sem baixar nada, sem ocupar espaço no celular"*, *"funciona até sem internet — marque o placar em qualquer quadra"*.
+- O ângulo **"sem internet"** é o mais forte no contexto real: quadra com sinal ruim, praia, subsolo. É dor concreta, não recurso técnico — e é a tradução direta do inviolável nº 1 (o jogo tem que rolar sem rede).
+
+**2. QR ao SELECIONAR O ESPORTE — a ponte desktop→mobile.** Hoje tocar numa quadra vai direto para `/setup`, o que está certo no celular e errado no desktop: o jogo acontece NA QUADRA, no celular. **A landing no desktop não pode terminar no desktop.** O comportamento passa a depender do contexto:
+- **DESKTOP** → mostra um QR *"leve o jogo para o seu celular"* (apontar a câmera) + a opção de link (para quem não escaneia — a mesma lição do WhatsApp no popup de slot: nem todo celular lê QR).
+- **MOBILE** → "começar agora", direto, sem QR (a pessoa já está no aparelho certo).
+
+É o "Scan. Play." materializado no gesto principal da página. A L1 já intuiu metade disso (o QR de marca no hero só aparece no desktop, `components/landing/brand-qr.tsx`) — falta levar a ideia para o CTA que importa. O QR do seletor deve carregar o esporte escolhido (`/setup?sport=<id>`), senão a ponte perde a escolha que a pessoa acabou de fazer.
+
 ## Analytics leve do app (v2 — já esquecido 2x, REGISTRAR)
 Analytics PRÓPRIO e LEVE para o Flow. Duas prioridades, nesta ordem:
 
