@@ -1,49 +1,45 @@
-import { buttonVariants } from '@/components/ui/button'
-import { FlowWordmark } from '@/components/brand/flow-wordmark'
+/**
+ * HEADER — mínimo de propósito, porque o hero é a tela inteira.
+ *
+ * Transparente sobre o hero (sem barra sólida cortando a foto do atleta) e sem
+ * o menu de âncoras antigo (Jogadores/Professores/Clubes/Como funciona): numa
+ * página que agora cabe num scroll, um menu de quatro âncoras era navegação
+ * inventada. Ficam só as duas ações reais.
+ *
+ * ⚠️ "Entrar" leva ao /perfil, que já mostra o painel de login quando não há
+ * sessão. É a porta de conta mais alcançável do produto hoje — e por isso ela
+ * precisa existir aqui: sem ela, quem já tem carteirinha não tinha como voltar
+ * para a própria conta a partir da home.
+ */
 
-const NAV = [
-  { label: 'Jogadores', href: '#jogadores' },
-  { label: 'Professores', href: '#professores' },
-  { label: 'Clubes', href: '#clubes' },
-  { label: 'Como funciona', href: '#como-funciona' },
-]
+import Link from 'next/link'
+import { FlowWordmark } from '@/components/brand/flow-wordmark'
 
 export function SiteHeader() {
   return (
-    <header className="sticky top-0 z-50 border-b border-border/60 bg-background/80 backdrop-blur-md">
-      <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-5">
-        {/* MARCA OFICIAL: "flow" em Audiowide com o degradê #0078FF → #00FF6F.
-            Substitui o placeholder (quadrado "F" em font-mono + texto em Inter),
-            que contradizia a marca em fonte, caixa e cor. O "/ PWER" fica como
-            texto discreto — identifica a empresa, não faz parte do wordmark. */}
-        <a href="#top" className="flex items-baseline gap-2">
-          <FlowWordmark size={24} />
-          <span className="text-sm font-medium tracking-tight text-muted-foreground">
-            / PWER
-          </span>
-        </a>
+    <header className="absolute inset-x-0 top-0 z-50">
+      <div className="mx-auto flex h-20 max-w-5xl items-center justify-between px-5">
+        <Link href="#top" className="flex items-baseline gap-2" aria-label="Flow — início">
+          <FlowWordmark size={22} />
+          <span className="text-xs font-medium tracking-tight text-white/40">/ PWER</span>
+        </Link>
 
-        <nav className="hidden items-center gap-8 md:flex" aria-label="Principal">
-          {NAV.map((item) => (
-            <a
-              key={item.href}
-              href={item.href}
-              className="text-sm text-muted-foreground transition-colors hover:text-foreground"
-            >
-              {item.label}
-            </a>
-          ))}
-        </nav>
-
-        <a
-          href="#experimentar"
-          className={buttonVariants({
-            size: 'sm',
-            className: 'bg-primary font-medium text-primary-foreground hover:bg-primary/90',
-          })}
-        >
-          Experimentar
-        </a>
+        <div className="flex items-center gap-2">
+          <Link
+            href="/perfil"
+            data-flow-cta="header-entrar"
+            className="inline-flex h-9 items-center rounded-full px-4 text-xs font-bold uppercase tracking-wide text-white/70 transition-colors hover:text-white"
+          >
+            Entrar
+          </Link>
+          <Link
+            href="/setup"
+            data-flow-cta="header-jogar"
+            className="l-grad-fill inline-flex h-9 items-center rounded-full px-5 text-xs font-black uppercase tracking-wide transition-transform active:scale-95"
+          >
+            Jogar
+          </Link>
+        </div>
       </div>
     </header>
   )

@@ -1,72 +1,83 @@
-import { Mic, RefreshCw, WifiOff } from 'lucide-react'
-import { buttonVariants } from '@/components/ui/button'
-import { Scoreboard } from '@/components/landing/scoreboard'
+/**
+ * O HERO — o atleta, a voz e a porta.
+ *
+ * A TESE da página: o jogador é o herói, não o produto. Por isso o hero não é
+ * "texto à esquerda, mockup do app à direita" (o que estava aqui, e o que toda
+ * landing de SaaS faz): é uma FOTO DE ATLETA em tela cheia com a frase por
+ * cima. O placar aparece depois, quando a pessoa já se reconheceu.
+ *
+ * 📸 A IMAGEM: `/public/hero-player.jpg`. O arquivo AINDA NÃO EXISTE — é aqui
+ * que o Eric troca pela versão final. Enquanto não existir, a página não quebra
+ * e nem mostra ícone de imagem quebrada: a foto entra como `background-image`
+ * sobre um degradê escuro, então a ausência do arquivo simplesmente deixa o
+ * degradê aparecendo. Trocar = soltar o arquivo com esse nome em /public.
+ * Recomendação: retrato/vertical no celular, atleta à direita ou centro, com
+ * área escura à esquerda/base para o texto respirar.
+ *
+ * O véu por cima da foto não é decoração: é o que garante contraste do texto
+ * branco sobre QUALQUER foto que o Eric coloque depois.
+ */
 
-const BADGES = [
-  { Icon: WifiOff, label: 'Funciona offline' },
-  { Icon: Mic, label: 'Voz de árbitro Grand Slam' },
-  { Icon: RefreshCw, label: 'Sincronização em tempo real' },
-]
+import Link from 'next/link'
+import { ArrowRight } from 'lucide-react'
+import { FlowWordmark } from '@/components/brand/flow-wordmark'
+import { RotatingPhrase } from '@/components/landing/rotating-phrase'
+import { BrandQr } from '@/components/landing/brand-qr'
 
 export function Hero() {
   return (
-    <section id="top" className="relative overflow-hidden">
-      <div className="mx-auto grid max-w-6xl items-center gap-12 px-5 pb-20 pt-16 lg:grid-cols-2 lg:gap-10 lg:pb-28 lg:pt-24">
-        <div className="flex flex-col items-start">
-          <span className="mb-6 inline-flex items-center gap-2 rounded-full border border-border bg-card px-3 py-1 font-mono text-xs uppercase tracking-[0.15em] text-muted-foreground">
-            <span className="h-1.5 w-1.5 rounded-full bg-primary" aria-hidden />
-            Placar inteligente
-          </span>
+    <section id="top" className="relative isolate overflow-hidden">
+      {/* CAMADA 1 — a foto. Ausente hoje: o fundo escuro sustenta a tela. */}
+      <div
+        aria-hidden
+        className="absolute inset-0 -z-20 bg-[#06070a] bg-cover bg-[center_top]"
+        style={{ backgroundImage: "url('/hero-player.jpg')" }}
+      />
+      {/* CAMADA 2 — o véu que garante o contraste do texto sobre a foto. */}
+      <div
+        aria-hidden
+        className="absolute inset-0 -z-10 bg-gradient-to-t from-[#06070a] via-[#06070a]/85 to-[#06070a]/40"
+      />
+      {/* CAMADA 3 — o sopro da marca (azul→verde) vindo da base. Sutil: é
+          assinatura de cor, não um holofote. */}
+      <div
+        aria-hidden
+        className="absolute inset-x-0 bottom-0 -z-10 h-64 opacity-25 blur-3xl"
+        style={{ backgroundImage: 'var(--l-grad)' }}
+      />
 
-          <h1 className="text-balance text-4xl font-semibold leading-[1.05] tracking-tight sm:text-5xl lg:text-6xl">
-            O placar inteligente para{' '}
-            <span className="text-primary">esportes de raquete</span>
-          </h1>
+      <div className="mx-auto flex min-h-[88svh] max-w-5xl flex-col justify-end px-5 pb-14 pt-24 sm:min-h-[92svh] sm:pb-20">
+        <div className="flex items-end justify-between gap-6">
+          <div className="min-w-0 flex-1">
+            <FlowWordmark size={44} className="sm:hidden" />
+            <FlowWordmark size={64} className="hidden sm:inline-block" />
 
-          <p className="mt-6 max-w-md text-pretty text-lg leading-relaxed text-muted-foreground">
-            Tênis, beach tennis, padel, squash, ping pong e pickleball. Um placar
-            de verdade no seu celular — sem hardware, com a emoção de uma quadra
-            profissional.
-          </p>
+            <div className="l-grad-rule mt-5 w-24" aria-hidden />
 
-          <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-            <a
-              href="#experimentar"
-              className={buttonVariants({
-                size: 'lg',
-                className: 'bg-primary font-medium text-primary-foreground hover:bg-primary/90',
-              })}
-            >
-              Quero experimentar
-            </a>
-            <a
-              href="#clubes"
-              className={buttonVariants({
-                size: 'lg',
-                variant: 'outline',
-                className: 'border-border bg-transparent text-foreground hover:bg-card',
-              })}
-            >
-              Sou professor ou clube
-            </a>
+            <div className="mt-6">
+              <RotatingPhrase />
+            </div>
+
+            <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:items-center">
+              <Link
+                href="#quadras"
+                data-flow-cta="hero-jogar"
+                className="l-grad-fill inline-flex h-12 items-center justify-center gap-2 rounded-full px-7 text-sm font-black uppercase tracking-wide transition-transform active:scale-[0.97]"
+              >
+                Jogar agora
+                <ArrowRight className="h-4 w-4" />
+              </Link>
+              <span className="text-sm text-white/50">
+                Grátis, sem cadastro, sem baixar app.
+              </span>
+            </div>
           </div>
 
-          <div className="mt-10 flex flex-wrap gap-x-6 gap-y-3">
-            {BADGES.map(({ Icon, label }) => (
-              <div key={label} className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Icon className="h-4 w-4 text-primary" />
-                {label}
-              </div>
-            ))}
+          {/* O QR só no desktop: no celular ninguém escaneia a própria tela, e
+              o espaço vale mais para a frase. */}
+          <div className="hidden shrink-0 lg:block">
+            <BrandQr />
           </div>
-        </div>
-
-        <div className="relative">
-          <div
-            className="pointer-events-none absolute -inset-x-8 -top-8 bottom-0 -z-10 rounded-full bg-primary/10 blur-3xl"
-            aria-hidden
-          />
-          <Scoreboard />
         </div>
       </div>
     </section>

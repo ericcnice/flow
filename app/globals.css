@@ -314,9 +314,6 @@
   --popover: 220 16% 7%;
   --popover-foreground: 220 16% 96%;
 
-  --primary: 53 100% 50%; /* #fee100 amarelo vibrante */
-  --primary-foreground: 220 16% 4%;
-
   --secondary: 225 54% 19%; /* #16234a azul-marinho */
   --secondary-foreground: 220 16% 96%;
 
@@ -333,9 +330,109 @@
   --border: 220 5% 12%;
   --input: 221 3% 17%;
 
-  --ring: 53 100% 50%;
+  /* MARCA (L1): o primário deixou de ser o amarelo #fee100 e passou a ser o
+     AZUL do logo (#0078FF = hsl(212 100% 50%)). O amarelo contradizia o
+     branding — a marca é o degradê azul→verde, definido uma única vez em
+     components/brand/flow-gradient.ts. O verde (#00FF6F = hsl(146 100% 50%))
+     não vira token de cor sólida de propósito: ele só existe como FIM do
+     degradê, nunca como preenchimento chapado. */
+  --primary: 212 100% 50%;
+  --primary-foreground: 0 0% 100%;
+
+  --ring: 212 100% 50%;
 
   --radius: 0.75rem;
+
+  /* O degradê da marca, disponível como token para as classes .l-* abaixo.
+     Os hex são os mesmos de flow-gradient.ts — se a marca mudar, muda lá e
+     aqui (é a única duplicação, e existe porque CSS não importa TS). */
+  --l-blue: #0078ff;
+  --l-green: #00ff6f;
+  --l-grad: linear-gradient(100deg, #0078ff 0%, #00ff6f 100%);
+  --l-void: #06070a;
+}
+
+/* --- LANDING (L1): utilitários da marca -------------------------------- */
+/* Prefixo `l-` e seletores de classe ÚNICA de propósito: sem aninhamento e
+   sem seletor de elemento, para não haver disputa de especificidade com as
+   utilitárias do Tailwind (o risco clássico de padding/margin entre seções). */
+
+.l-grad-text {
+  background-image: var(--l-grad);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+}
+
+.l-grad-fill {
+  background-image: var(--l-grad);
+  color: #05070a;
+}
+
+.l-grad-rule {
+  height: 2px;
+  border-radius: 2px;
+  background-image: var(--l-grad);
+}
+
+/* Pílula "Em breve": contorno em degradê sem borda dupla — o degradê pinta o
+   fundo e o miolo volta ao escuro por cima (padding-box/border-box). */
+.l-soon {
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background-image: linear-gradient(var(--l-void), var(--l-void)), var(--l-grad);
+  background-origin: border-box;
+  background-clip: padding-box, border-box;
+}
+
+/* A QUADRA como botão: o SVG preenche o azulejo e a legenda flutua por cima. */
+.l-court {
+  position: relative;
+  display: block;
+  overflow: hidden;
+  border-radius: 14px;
+  aspect-ratio: 3 / 4;
+  background: #000;
+  border: 1px solid hsl(220 5% 16%);
+  transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+}
+.l-court:hover,
+.l-court:focus-visible {
+  transform: translateY(-3px);
+  border-color: var(--l-green);
+  box-shadow: 0 10px 30px -12px rgba(0, 255, 111, 0.45);
+}
+/* A quadra em DESTAQUE (tênis) já nasce anelada — emphasis por anel, não por
+   tamanho: seis azulejos iguais preenchem a grade sem célula vazia. */
+.l-court-destaque {
+  border-color: var(--l-blue);
+  box-shadow: 0 0 0 1px var(--l-blue);
+}
+
+/* A frase que rotaciona: entra subindo. Uma animação só na página inteira —
+   o resto é estático de propósito. */
+.l-frase {
+  animation: l-frase-in 0.55s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+@keyframes l-frase-in {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .l-frase {
+    animation: none;
+  }
+  .l-court:hover,
+  .l-court:focus-visible {
+    transform: none;
+  }
 }
 
 /* --- Tela de jogo "palco" (ScoreBot) ---------------------------------- */

@@ -16,7 +16,7 @@
 import { Suspense } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { SportSetup } from "@/components/sport-setup"
-import { defaultRulesFor, type SportId } from "@/lib/sports-catalog"
+import { SPORTS, defaultRulesFor, type SportId } from "@/lib/sports-catalog"
 import { DEFAULT_THEME, type ThemeId } from "@/lib/themes"
 
 // useSearchParams() exige uma fronteira de Suspense na geração estática do Next
@@ -75,11 +75,24 @@ function SetupScreen() {
     router.push(`/jogo?quadra=${quadra}&sport=${sport}`)
   }
 
+  // ESPORTE PELA URL (`?sport=`) — a porta que a landing usa: tocar numa quadra
+  // abre esta tela COM o esporte já escolhido ("clicou, jogou"). Sem isto o
+  // seletor da landing cairia sempre em tênis e o gesto perderia o sentido.
+  //
+  // Validado contra o catálogo: `?sport=qualquercoisa` volta a tênis em vez de
+  // instanciar o motor com um id inexistente. É o ID CANÔNICO que viaja aqui
+  // (`tabletennis`), nunca o slug de URL (`pingpong`) — a armadilha registrada
+  // no CLAUDE.md, em que só "squash" casaria, por coincidência.
+  const sportParam = searchParams.get("sport")
+  const initialSport: SportId = SPORTS.some((s) => s.id === sportParam)
+    ? (sportParam as SportId)
+    : "tennis"
+
   return (
     <div className="h-[100dvh]">
       <SportSetup
-        initialSport="tennis"
-        initialRules={defaultRulesFor("tennis")}
+        initialSport={initialSport}
+        initialRules={defaultRulesFor(initialSport)}
         initialTheme={DEFAULT_THEME}
         context="new"
         onConfirm={(sport, rules, _sportChanged, theme, sideChangeAlert, gameType) =>

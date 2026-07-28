@@ -1,29 +1,37 @@
 /**
- * LANDING de PLATAFORMA (raiz do produto). Landing completa gerada no v0,
- * montada a partir de components/landing/. Substitui a landing provisória
- * de seção única que vivia aqui. O grid de quadras de admin segue em /admin,
- * e o contexto de clube segue acessível só via URL direta /[clube]/...
+ * LANDING (raiz do produto) — repaginada na fatia L1.
  *
- * O tema é escopado em .tema-landing (paleta preto + amarelo, definida em
- * globals.css): a landing tem cores próprias sem tocar nas variáveis do
- * palco (--lado-a-*, --palco-*) usadas em /jogo e /placar.
+ * O QUE MUDOU, e por quê:
+ *  1. O JOGADOR VIRA O HERÓI. A ordem antiga dava seções inteiras a professor e
+ *     clube no meio do caminho; agora o jogador é encantado primeiro e os dois
+ *     viram um convite curto no fim. É a tese comercial: o jogador é o gancho
+ *     que depois vende para professor e clube.
+ *  2. A MARCA VESTE A MARCA. O primário era amarelo (#fee100), contradizendo o
+ *     logo. Agora é o degradê azul→verde de components/brand/flow-gradient.ts.
+ *  3. OS CTAs LEVAM AO APP. Os antigos eram um LOOP fechado de âncoras — o
+ *     "sou jogador, quero experimentar" voltava para o topo, e não havia um
+ *     único link para uma rota do app. Era isso que travava a distribuição.
  *
- * Server Component estático — nenhum componente da landing usa 'use client'.
+ * ORDEM DA PÁGINA = a jornada: quem sou eu (hero) → onde jogo (quadras) → por
+ * que vale (amigos, benefícios) → e se eu organizo o jogo? (professor/clube).
+ *
+ * Continua Server Component estático; só o QR e a frase rotativa são client.
+ * O tema segue escopado em .tema-landing, sem tocar nas variáveis do palco
+ * (--lado-a-*, --palco-*) usadas em /jogo e /placar.
  */
 
-import { SiteHeader } from "@/components/landing/site-header"
-import { Hero } from "@/components/landing/hero"
-import { SectionPlayer } from "@/components/landing/section-player"
-import { SectionCoach } from "@/components/landing/section-coach"
-import { SectionClubs } from "@/components/landing/section-clubs"
-import { HowItWorks } from "@/components/landing/how-it-works"
-import { FinalCta } from "@/components/landing/final-cta"
-import { SiteFooter } from "@/components/landing/site-footer"
+import { SiteHeader } from '@/components/landing/site-header'
+import { Hero } from '@/components/landing/hero'
+import { CourtPicker } from '@/components/landing/court-picker'
+import { SectionInvite } from '@/components/landing/section-invite'
+import { SectionBenefits } from '@/components/landing/section-benefits'
+import { SectionPro } from '@/components/landing/section-pro'
+import { SiteFooter } from '@/components/landing/site-footer'
 
 export const metadata = {
-  title: "PWER Flow — O placar inteligente para esportes de raquete",
+  title: 'Flow — seu jogo, levado a sério',
   description:
-    "Placar para tênis, beach tennis, padel, squash, ping pong e pickleball. Funciona offline, com voz de árbitro no estilo Grand Slam.",
+    'Placar ao vivo para tênis, beach tennis, padel, squash, ping pong e pickleball. Escaneou, jogou: sem baixar app, sem cadastro, funciona offline.',
 }
 
 export default function Home() {
@@ -32,11 +40,10 @@ export default function Home() {
       <SiteHeader />
       <main>
         <Hero />
-        <SectionPlayer />
-        <SectionCoach />
-        <SectionClubs />
-        <HowItWorks />
-        <FinalCta />
+        <CourtPicker />
+        <SectionInvite />
+        <SectionBenefits />
+        <SectionPro />
       </main>
       <SiteFooter />
     </div>
