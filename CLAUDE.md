@@ -78,6 +78,20 @@ REGRA DE OURO: a conversão vem do DESEJO, não da coerção. PULL, não push. A
 
 CONSEQUÊNCIA DE DESIGN: a assimetria tem que ser VISÍVEL e DESEJÁVEL (a foto/tick do cadastrado deve puxar o olho, ser bonita), não escondida. Cada jogo com um cadastrado ao lado de um anônimo é um mini-comercial da carteirinha rodando na própria quadra. O tick verde e a foto (já usados como prova social no convite do professor) ganham uma segunda função: anunciar a identidade para quem ainda não tem.
 
+## O LOGIN NO CARD DO SLOT = motor de aquisição viral (percepção Eric)
+O "Entrar para jogar como você" no card do slot do deslogado NÃO é uma conveniência para o organizador. Vale para CADA participante que escaneia o QR de compartilhamento e cai no jogo DESLOGADO — e é aí que ele vira canal de aquisição.
+
+O FLUXO: compartilha o jogo → os amigos escaneiam → quem está deslogado vê "Entrar com Google" no próprio card → converte NO MOMENTO PERFEITO (acabou de escanear, quer jogar, e logar tem valor imediato e visível: foto, nome de verdade, o jogo no histórico).
+
+TRÊS IMPLICAÇÕES:
+1. **CRESCIMENTO VIRAL**: cada partida compartilhada = N oportunidades de cadastro, uma por participante deslogado. E cada novo cadastrado depois compartilha OS JOGOS DELE → mais escaneamentos → mais cadastros. **O QR de compartilhamento deixa de ser só sincronização de placar e vira CANAL DE AQUISIÇÃO.**
+2. **É PRÉ-REQUISITO DO BENEFÍCIO-ÂNCORA**: "convide seus amigos para fazerem parte da sua história" exige TODOS identificados. Sem o login no card, só quem já estava logado entra com carteirinha, e o histórico compartilhado (`participant_ids`) nasce com metade das pessoas como string solta. Com ele, todos convertem DENTRO do jogo e cada participante tem `profile_id` — que é exatamente a matéria-prima que a fatia do histórico compartilhado precisa. **Um habilita o outro.**
+3. **TIMING**: o slot anônimo é o CTA de cadastro mais natural que o produto tem. A pessoa quer estar no jogo; logar resolve um desejo dela naquele segundo. Bate qualquer banner genérico — e é a materialização do funil silencioso (ver a seção acima): a assimetria cria o desejo, o card oferece a porta.
+
+INVIOLÁVEL PRESERVADO: "digitar nome" continua ao lado, no mesmo peso. O login é ADITIVO e opcional — vitrine, nunca parede. O anônimo joga a partida inteira sem se cadastrar.
+
+ARMADILHA MAPEADA na investigação (tratar na implementação): as duas reivindicações (prefill do dono e 1c.1 do convidado) exigem o slot em FALLBACK. Se a pessoa DIGITAR um nome e só então logar, o slot deixa de ser fallback: o dono só assume a carteirinha se o texto bater EXATO com o nome do Google ("Eric" ≠ "Eric Nice"), e o convidado é mandado para outro slot (ou nenhum). O gesto "este slot sou eu" precisa de um vínculo explícito — o botão carimba QUAL slot pediu o login, e na volta essa intenção vence o fallback, só para aquele slot.
+
 ## Flow Club como comunidade-lar (visão — Eric)
 Todo jogador pertence a PELO MENOS uma comunidade. Um jogador que entra organicamente, SEM clube associado, teria o FLOW CLUB como comunidade padrão — para não ficar "órfão"/sem pertencimento. Modelo real: uma pessoa joga em VÁRIOS clubes (sócia do SPAC, beach na praia, aula em outro lugar) — o Flow Club é o denominador comum, o lar quando não há outro.
 DISTINÇÃO: clubes reais têm QUADRAS FÍSICAS (QR na parede); o Flow Club é comunidade SEM lugar físico — QUADRAS VIRTUAIS, para o jogo em qualquer lugar (praia, quadra pública). Coerente com a âncora móvel (celular = quadra temporária).
