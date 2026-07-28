@@ -213,6 +213,33 @@ function hasProbableSession(): boolean {
   return document.cookie.includes("-auth-token")
 }
 
+/**
+ * O NOME que a sessão já tem EM MÃOS, sem tocar a rede.
+ *
+ * Existe para o claim poder reivindicar o slot de forma SÍNCRONA (ver 1c.1): o
+ * `profiles.name` é o canônico, mas buscá-lo antes de entrar no slot foi
+ * exatamente o que criava a janela onde a reivindicação morria.
+ *
+ * CASCATA POR VAZIO, não por nullish — a distinção importa: `full_name ?? name`
+ * NÃO cai de `""` para `name` (o `??` só desvia em null/undefined), então um
+ * metadata com `full_name: ""` devolvia string vazia e o claim abortava com o
+ * nome logo ali, no campo seguinte. Aqui cada candidato passa por `trim()`.
+ *
+ * "Convidado" é o último recurso e praticamente nunca acontece (Google sempre
+ * traz full_name; e-mail/OTP cai no login do e-mail). Ainda assim ele existe por
+ * princípio: entrar no jogo com um nome genérico é melhor que não entrar — o
+ * refino pelo `profiles.name` corrige logo depois, e o /perfil sempre pode.
+ */
+function nomeDaSessao(user: { user_metadata?: Record<string, unknown> | null; email?: string | null }): string {
+  const meta = (user.user_metadata ?? {}) as Record<string, unknown>
+  const candidatos: unknown[] = [meta.full_name, meta.name, (user.email ?? "").split("@")[0]]
+  for (const c of candidatos) {
+    const t = typeof c === "string" ? c.trim() : ""
+    if (t) return t
+  }
+  return "Convidado"
+}
+
 // Quanto tempo o aviso "TROCA DE LADO" fica na tela antes de sumir sozinho.
 // Curto de propósito: é um lembrete discreto, não um banner que domina a tela.
 const SIDE_CHANGE_MS = 3000
@@ -2112,14 +2139,40 @@ export default function JogoPage() {
     if (reivindicacaoFeitaRef.current === cur.matchId) return // (d)
     if (!rt.remotePlayers) return // ainda sem o estado da sala
 
-    if (!proximoSlotLivre(cur)) return // jogo completo → 1c.2 avisa
-    reivindicacaoFeitaRef.current = cur.matchId // trava ANTES do await
+    const slot = proximoSlotLivre(cur)
+    if (!slot) return // jogo completo → 1c.2 avisa
 
+    // ESCREVER CEDO, REFINAR DEPOIS — o padrão que já faz o DONO funcionar.
+    //
+    // ⚠️ A ORDEM AQUI É A CORREÇÃO, e é a coisa frágil deste bloco. Antes, o
+    // claim travava o ref e só então ia buscar `profiles.name` (100–500ms de
+    // rede) para escrever depois. Nesse intervalo o effect era recriado — a B2
+    // mescla o estado da sala e chama setGameConfig no MESMO commit, e o
+    // onAuthStateChange troca o objeto de `authUser` — o cleanup marcava
+    // `alive = false`, o async abortava sem escrever, e a trava NUNCA era
+    // solta: a guarda (d) barrava a partir dali para sempre. O convidado
+    // simplesmente não entrava, sem erro nenhum.
+    //
+    // O DONO nunca sofreu disso porque escreve SÍNCRONO (aplicarNomeDono, no
+    // prefill) antes de qualquer await — e é por isso que todo QA feito no
+    // aparelho do dono passava por cima do bug.
+    //
+    // Agora o convidado faz igual: entra no slot AGORA, com o nome que a sessão
+    // já tem em mãos. Nada de rede no caminho crítico da entrada.
+    const nomeSync = nomeDaSessao(authUser)
+    reivindicacaoFeitaRef.current = cur.matchId
+    // ANTES do await, de propósito: o desempate pós-eco exige `meuNomeRef`, e
+    // enquanto ele só era setado depois da rede a rede de segurança ficava
+    // desarmada exatamente no cenário em que precisaria agir.
+    meuNomeRef.current = nomeSync
+    reivindicarSlot(slot, authUser.id, nomeSync)
+
+    // REFINO (não-bloqueante): `profiles.name` é o canônico, editado no /perfil,
+    // e pode ser melhor que o do metadata. Se morrer na corrida, não custa nada
+    // — o slot JÁ está reivindicado com um nome válido, que é o que importa.
     let alive = true
     void (async () => {
-      // Nome: metadata (instantâneo) e refino pelo profile — o dono faz igual.
-      const meta = (authUser.user_metadata ?? {}) as Record<string, unknown>
-      let nome = (((meta.full_name as string) ?? (meta.name as string)) ?? "").trim()
+      let doBanco = ""
       try {
         const supabase = createBrowserSupabaseClient()
         const { data } = await supabase
@@ -2127,28 +2180,23 @@ export default function JogoPage() {
           .select("name")
           .eq("id", authUser.id)
           .maybeSingle()
-        const doBanco = (data?.name ?? "").trim()
-        if (doBanco) nome = doBanco
+        doBanco = (data?.name ?? "").trim()
       } catch {
-        // offline: fica com o do metadata
+        // offline: fica com o nome da sessão, que já está no slot
       }
-      if (!alive) return
-      if (!nome) {
-        // Sem nome em lugar nenhum: não ocupa o slot com string vazia. Solta a
-        // trava para tentar de novo numa próxima passada.
+      if (!alive) {
+        // CINTO: com a escrita síncrona acima esta janela não decide mais nada,
+        // mas soltar a trava mantém a porta aberta em vez de fechá-la para
+        // sempre. Re-entrar é inofensivo: a guarda (c) vê o id já no slot e sai.
         reivindicacaoFeitaRef.current = null
         return
       }
-      meuNomeRef.current = nome
-
-      // RELÊ o slot livre agora (o estado pode ter mudado durante o await) —
-      // reduz a janela da corrida antes mesmo do desempate pós-eco.
+      if (!doBanco || doBanco === nomeSync) return
       const agora = gameConfigRef.current
-      if (!agora) return
-      if (Object.values(agora.playerIds ?? {}).includes(authUser.id)) return
-      const slot = proximoSlotLivre(agora)
-      if (!slot) return
-      reivindicarSlot(slot, authUser.id, nome)
+      // Só refina se o slot AINDA é meu — nunca reescreve nome de terceiro.
+      if (agora?.playerIds?.[slot] !== authUser.id) return
+      meuNomeRef.current = doBanco
+      reivindicarSlot(slot, authUser.id, doBanco)
     })()
     return () => {
       alive = false
