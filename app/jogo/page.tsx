@@ -419,6 +419,24 @@ export default function JogoPage() {
     setSetupTab(tab)
     setSetupOpen(true)
   }
+  /**
+   * FECHAR A CONFIGURAÇÃO — o par de `abrirSetup`, e o ÚNICO jeito de sair dela.
+   *
+   * Zera as DUAS coisas: a configuração e o menu. Sair da config é voltar a
+   * jogar, e a tela de jogo tem que nascer limpa — sem painel flutuando sobre o
+   * placar.
+   *
+   * ⚠️ POR QUE UMA FUNÇÃO, e não `setSetupOpen(false)` em cada saída: o menu
+   * agora PERMANECE aberto durante os Ajustes (é o painel ancorado na base), e
+   * quem abre não passa mais pelo `runMenu` — que era quem fechava o menu antes.
+   * Então cada saída precisa lembrar de fechar os dois. Havia duas saídas
+   * (JOGAR e o X) e as duas esqueceram; a terceira que alguém escrever também
+   * esqueceria. Com uma função só, sair é sempre a mesma coisa.
+   */
+  const fecharSetup = () => {
+    setSetupOpen(false)
+    setMenuOpen(false)
+  }
   const [showOverview, setShowOverview] = useState(false)
   const overviewTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -1963,12 +1981,12 @@ export default function JogoPage() {
       // sideChangeAlert e gameType NÃO entram: preferência/estado local (gameType
       // viaja por URL no join; o hook não expõe remoteGameType).
       sendRealtimeAction({ kind: "set_config", patch: { rules: nextRules, theme: nextTheme } })
-      setSetupOpen(false)
+      fecharSetup()
       return
     }
     if (confirm("Trocar de esporte vai iniciar uma nova partida. Continuar?")) {
       startNewMatch(nextSport, nextRules, nextTheme, nextSideChangeAlert, nextGameType)
-      setSetupOpen(false)
+      fecharSetup()
     }
   }
 
@@ -3616,7 +3634,7 @@ export default function JogoPage() {
               red2: previewDoSlot("red2"),
             }}
             onPlayersSave={saveAllNames}
-            onClose={() => setSetupOpen(false)}
+            onClose={fecharSetup}
             onConfirm={onSetupConfirm}
             /* O RODAPÉ DE AÇÕES, agora com UM botão só.
              *
