@@ -2161,6 +2161,11 @@ export default function JogoPage() {
     // já tem em mãos. Nada de rede no caminho crítico da entrada.
     const nomeSync = nomeDaSessao(authUser)
     reivindicacaoFeitaRef.current = cur.matchId
+    // O orçamento de retentativas do desempate é POR REIVINDICAÇÃO, e este é o
+    // único ponto onde uma começa. Sem zerar aqui, um contador gasto numa sala
+    // anterior chegaria à próxima já no limite, desarmando a rede de segurança
+    // justamente onde ela precisaria agir.
+    retentativasRef.current = 0
     // ANTES do await, de propósito: o desempate pós-eco exige `meuNomeRef`, e
     // enquanto ele só era setado depois da rede a rede de segurança ficava
     // desarmada exatamente no cenário em que precisaria agir.
@@ -2210,6 +2215,23 @@ export default function JogoPage() {
   // volta SEM o meu id em slot nenhum, pego o próximo livre e tento de novo.
   // Máx. 2 retentativas (a mesa tem 4 lugares; mais que isso é sinal de outra
   // coisa, e loop é pior que não entrar).
+  //
+  // ⚠️ O ESTADO REMOTO SOZINHO NÃO BASTA — foi o que duplicou o slot. A ausência
+  // do meu id em `rt.remotePlayerIds` tem DOIS significados que este effect não
+  // consegue separar olhando só para lá: "outro aparelho tomou meu lugar" e
+  // "minha escrita ainda está no ar" (uma viagem de rede inteira, 100–300ms).
+  // Lendo só o remoto, ele tratava a própria escrita em voo como derrota e
+  // reivindicava um SEGUNDO slot — determinístico, no mesmo commit em que o
+  // claim entrava. (Ficou latente enquanto `meuNomeRef` nascia vazio e matava
+  // este effect em silêncio; a Fatia 1 o armou pela primeira vez.)
+  //
+  // A guarda LOCAL abaixo é o que distingue os dois casos, e ela funciona por
+  // causa da regra do merge de `playerIds` (ver applyLocalConfig): um valor
+  // remoto SOBRESCREVE a mesma chave, mas a AUSÊNCIA nunca apaga.
+  //   • escrita em voo → o patch não traz meu slot → meu id LOCAL continua lá
+  //     → saio aqui, sem duplicar;
+  //   • derrota real   → o eco traz meu slot com o id do OUTRO → sobrescreve o
+  //     meu → não apareço mais localmente → passo daqui e re-reivindico.
   useEffect(() => {
     if (!authUser || !reivindicacaoFeitaRef.current) return
     const remotos = rt.remotePlayerIds
@@ -2218,6 +2240,8 @@ export default function JogoPage() {
     if (retentativasRef.current >= 2) return
     const cur = gameConfigRef.current
     if (!cur) return
+    // A MESMA pergunta que a guarda (c) do claim faz, na MESMA fonte (o local).
+    if (Object.values(cur.playerIds ?? {}).includes(authUser.id)) return
     const slot = proximoSlotLivre(cur)
     if (!slot || !meuNomeRef.current) return
     retentativasRef.current += 1
