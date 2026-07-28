@@ -89,7 +89,10 @@ function SetupScreen() {
     : "tennis"
 
   return (
-    <div className="h-[100dvh]">
+    // `h-full`, não `h-[100dvh]`: a altura agora vem da casca (app/(app)/layout),
+    // que já descontou o header. Com 100dvh fixo aqui, o card ficaria mais alto
+    // que o espaço disponível e o botão "JOGO!" cairia para fora da tela.
+    <div className="h-full">
       <SportSetup
         initialSport={initialSport}
         initialRules={defaultRulesFor(initialSport)}

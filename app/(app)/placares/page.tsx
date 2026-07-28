@@ -221,14 +221,14 @@ export default function PlacaresPage() {
   // If we're not on the client yet, show a loading state
   if (!isClient) {
     return (
-      <div className="min-h-screen bg-[#383838] flex items-center justify-center">
+      <div className="min-h-full bg-[#383838] flex items-center justify-center">
         <h1 className="text-2xl font-bold text-white">Carregando placares...</h1>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-[#383838] p-4">
+    <div className="min-h-full bg-[#383838] p-4">
       <div className="flex justify-between items-center mb-6">
         <Button variant="ghost" onClick={() => router.push("/")} className="text-[#FEE100]">
           <ArrowLeft className="mr-2 h-4 w-4" /> Voltar

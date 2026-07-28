@@ -1466,7 +1466,7 @@ function PerfilLogado({ user }: { user: User }) {
   const [nome, sobrenome] = splitName(perfil?.nome ?? undefined)
 
   return (
-    <main className="mx-auto min-h-[100dvh] max-w-lg bg-neutral-950 px-5 py-8 text-white">
+    <main className="mx-auto min-h-full max-w-lg bg-neutral-950 px-5 py-8 text-white">
       <Link href={voltar ?? '/'} className="inline-flex items-center gap-1.5 text-sm text-white/60 transition hover:text-white">
         <ArrowLeft className="h-4 w-4" />
         {voltar ? 'Voltar ao jogo' : 'Início'}
@@ -1606,7 +1606,7 @@ export default function PerfilPage() {
 
   if (loading) {
     return (
-      <div className="flex min-h-[100dvh] items-center justify-center bg-neutral-950 text-white">
+      <div className="flex min-h-full items-center justify-center bg-neutral-950 text-white">
         <Loader2 className="h-6 w-6 animate-spin text-white/60" />
       </div>
     )
@@ -1614,7 +1614,7 @@ export default function PerfilPage() {
 
   if (!user) {
     return (
-      <main className="tema-landing flex min-h-[100dvh] flex-col items-center justify-center bg-background px-5 py-12 text-foreground">
+      <main className="tema-landing flex min-h-full flex-col items-center justify-center bg-background px-5 py-12 text-foreground">
         <div className="w-full max-w-sm">
           <h1 className="mb-2 text-center text-2xl font-semibold tracking-tight">Seu perfil</h1>
           <p className="mb-8 text-center text-sm text-muted-foreground">Entre para ver seus jogos e seus dados.</p>

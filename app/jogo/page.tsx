@@ -1867,7 +1867,15 @@ export default function JogoPage() {
       localStorage.removeItem(`tennis_match_${quadra}`)
       localStorage.removeItem(`tennis_engine_${quadra}`)
       localStorage.removeItem(`tennis_score_${quadra}`)
-      router.push("/")
+      // DESTINO COM CONTEXTO (fatia N2). Antes era sempre a landing — sair do
+      // jogo despejava na página de marketing, que não tinha um único link de
+      // volta para o app. Agora o destino depende de quem acabou de jogar:
+      //  • LOGADO   → /perfil, onde estão "Meus jogos": a partida que acabou de
+      //    ser salva está bem ali. É a continuação natural.
+      //  • ANÔNIMO  → /setup, para jogar de novo. Mandá-lo ao /perfil abriria um
+      //    painel de login logo depois de encerrar — empurrão, não convite, e o
+      //    anônimo é cidadão de primeira classe.
+      router.push(authUser ? "/perfil" : "/setup")
     }
   }
 

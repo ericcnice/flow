@@ -342,17 +342,24 @@
   --ring: 212 100% 50%;
 
   --radius: 0.75rem;
+}
 
-  /* O degradê da marca, disponível como token para as classes .l-* abaixo.
-     Os hex são os mesmos de flow-gradient.ts — se a marca mudar, muda lá e
-     aqui (é a única duplicação, e existe porque CSS não importa TS). */
+/* --- MARCA: os tokens do degradê -------------------------------------- */
+/* GLOBAIS (`:root`), e não dentro de .tema-landing: o botão "Jogar" da casca
+   de navegação (fatia N2) vive FORA da landing e usa o mesmo degradê. Escopar
+   os tokens ao tema da landing deixaria esse botão sem fundo nenhum — a classe
+   aplicaria `var(--l-grad)` indefinido, em silêncio. A marca é do produto
+   inteiro, não de uma página.
+   Os hex são os mesmos de components/brand/flow-gradient.ts — se a marca
+   mudar, muda lá e aqui (a única duplicação, e existe porque CSS não importa TS). */
+:root {
   --l-blue: #0078ff;
   --l-green: #00ff6f;
   --l-grad: linear-gradient(100deg, #0078ff 0%, #00ff6f 100%);
   --l-void: #06070a;
 }
 
-/* --- LANDING (L1): utilitários da marca -------------------------------- */
+/* --- MARCA (L1/N2): utilitários do degradê ----------------------------- */
 /* Prefixo `l-` e seletores de classe ÚNICA de propósito: sem aninhamento e
    sem seletor de elemento, para não haver disputa de especificidade com as
    utilitárias do Tailwind (o risco clássico de padding/margin entre seções). */
