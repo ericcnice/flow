@@ -393,6 +393,18 @@ IMPLICAÇÃO DE PRODUTO (registrar, não urgente): se o Flow vira white-label (m
 
 FILOSOFIA: um produto, três+ modelos de receita (professor paga / clube paga / marca patrocina distribuição), servidos pela mesma base de sponsors. Tração primeiro (SPAC), parcerias depois.
 
+## Analytics leve do app (v2 — já esquecido 2x, REGISTRAR)
+Analytics PRÓPRIO e LEVE para o Flow. Duas prioridades, nesta ordem:
+
+1. **NA LANDING — em QUAL esporte as pessoas clicam.** É a pergunta de DESCOBERTA, não de vaidade: serve para achar o público REAL. Eric mira tênis, mas pode descobrir que ping pong (ou beach) adere mais — e a resposta muda para onde o produto vai. É o dado mais barato de coletar e o de maior consequência estratégica.
+2. **NO APP — cadastros, frequência de uso, jogos criados, quem loga.** A saúde do funil que a distribuição vai alimentar.
+
+REGRA DE CONSTRUÇÃO (o que fazer AGORA, de graça): construir landing e app de modo que medir DEPOIS seja fácil — ícones, CTAs e cards de esporte com IDENTIFICADORES claros e estáveis (`data-*` / ids semânticos), em vez de nomes gerados ou índices. Não custa nada na hora e evita ter que refatorar a UI só para conseguir instrumentar.
+
+NÃO É V1 — a distribuição vem primeiro (sem porta de entrada não há o que medir). É v2. Registrado aqui porque **já foi esquecido DUAS vezes**; a terceira não pode acontecer.
+
+A UI disso é o dashboard super admin (ver cadastros/uso). Por ora, os números saem de QUERIES no Supabase — o que basta enquanto o volume for pequeno, e é coerente com a telemetria que já existe em `court_visits` (mesmo espírito: dado próprio, sem terceiros).
+
 ## PWA — pendência a arrumar (Eric sinalizou)
 O PWA instalado está BAGUNÇANDO o app e precisa ser arrumado depois. Dois problemas observados:
 
