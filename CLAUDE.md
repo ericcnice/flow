@@ -215,6 +215,20 @@ PERGUNTA BLOQUEANTE ao Supabase (antes de implementar): o prosrc de apply_live_m
 FATIAMENTO (se implementar): (1) trocarSlots(a,b) no pai — permuta + set_config + reset + sorteio, SEM UI, testável por console [o marco]; (2) confirm; (3) modo troca na UI; (4) o pulso.
 PRODUTO: sempre JOGO NOVO (Rei da Quadra = próximo confronto; manter placar com jogadores trocados = resultado sem significado). Só entre times ADVERSÁRIOS (dentro do time não faz sentido — novo sorteio de saque resolve a ordem).
 DECISÃO (Eric + terminal): NICE-TO-HAVE, FINAL DA FILA, pós-SPAC. Razões: caminho principal já funciona (1c.1 monta certo; editar nome corrige); depende da fila (validar se Rei da Quadra é comum); reset destrutivo em teste com usuários reais = risco de "sumiu meu jogo" (o SPAC é hora de parecer sólido, não estrear ação destrutiva). Revisitar pós-SPAC junto da decisão da fila. Se o Rei da Quadra aparecer espontaneamente nos testes, sobe de prioridade sozinho.
+⚠️ ATUALIZAÇÃO DE PRIORIDADE: a premissa "caminho principal já funciona (1c.1 monta certo)" caiu — ver a seção seguinte (ordem de chegada ≠ time). A troca deixou de ser só "Rei da Quadra" e virou o conserto de um time montado errado. Continua pós-v1, mas sobe na fila.
+
+## BUG de UX PREVISTO (Eric): ordem de chegada ≠ time correto (duplas)
+Em DUPLAS os slots são time A (`blue1`+`blue2`) contra time B (`red1`+`red2`). Se o preenchimento é só "o próximo slot livre, por ordem de chegada" — que é o que a 1c.1 e o carimbo fazem — então **quem escaneia primeiro decide o time**, sem nenhuma relação com quem joga com quem.
+
+CENÁRIO REAL: o ADVERSÁRIO escaneia antes do seu parceiro → cai em `blue2` → o placar afirma que ele é seu PARCEIRO. É uma afirmação FALSA sobre o jogo, na tela que todo mundo olha — e ela viaja para a transmissão e para o histórico. Previsto por Eric ANTES de acontecer em campo.
+
+A DISTINÇÃO QUE ISSO REVELA: **entrar no slot (a mecânica) está resolvido; escolher o LADO não.** A 1c.1 responde "onde há lugar?", que é uma pergunta de ocupação — nunca foi uma pergunta sobre times. Chamar isso de "monta certo" era otimismo: ela monta *completo*, não *correto*.
+
+TRÊS CAMINHOS (não excludentes): (a) quem entra ESCOLHE o lado ao chegar; (b) o organizador MOVE jogadores entre slots depois (a troca ⇄, já mapeada); (c) uma CONFIRMAÇÃO de times antes do primeiro ponto ("é assim que estão os times?").
+
+CONEXÃO COM A TROCA DE JOGADORES: reforça e reprioriza. A troca deixa de ser "Rei da Quadra, nice-to-have" e passa a ser **o conserto de um jogo montado errado** — que é uma necessidade, não um luxo. MAS a decisão anterior continua valendo: a troca é DESTRUTIVA (reset + novo sorteio de saque), então ícone ⇄ + ConfirmModal, NUNCA gesto casual. Pós-v1, com prioridade maior.
+
+NOTA para quem for implementar (a): o caminho (a) é o mais barato dos três e não é destrutivo — escolher o lado ANTES de ocupar não zera nada, porque ainda não há placar. Pode chegar antes da troca, e reduz a frequência com que a troca é necessária.
 
 ## Modelo de identidade e negócio (Login Fase A)
 - **Hierarquia**: **Player** (todos; role padrão criado pela trigger `handle_new_user` no signup) → **Coach** (o super_admin promove via `members.role='coach'` no dashboard) → **Coach com marca+patrocinador no QR** (fatia futura; reusa `sponsors.member_id` apontando pro coach).
