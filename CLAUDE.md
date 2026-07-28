@@ -363,6 +363,21 @@ O TELEVISOR = PAINEL DE CONTROLE DA FILA (não só telão de placar): o telão d
 
 CHECK-IN FRICTIONLESS (o alvo de UX): cheguei ao clube → escaneio o televisor → se beach, aparece meu lugar na fila (ou "entre, divirta-se" se vazio); se tênis, o sistema sabe que meu grupo foi pré-marcado e me diz "seu parceiro Fulano já fez check-in / ainda não chegou, você ainda não está na fila". Simples, sem humano no balcão.
 
+## Benefício-âncora (marketing): CONVIDE SEUS AMIGOS PARA FAZEREM PARTE DA SUA HISTÓRIA
+> "Convide seus amigos para fazerem parte da sua história. Cadastro rápido e fácil, e todos os jogos são compartilhados com eles."
+
+É o benefício EMOCIONAL mais forte que o produto tem — conecta o histórico (memória de jogo) com rede social e PERTENCIMENTO.
+
+A DISTINÇÃO QUE FAZ A FRASE FUNCIONAR: não é "guarde seus dados" (utilitário, frio, o que todo app promete), é "construa uma história COM seus amigos" (emocional, coletivo). O sujeito da frase não é o dado — é a relação.
+
+MATERIALIZA O QUE FOI VALIDADO EM CAMPO: é a resposta direta ao "quem jogou com a Kika, e quanto foi?" da mesa do SPAC. O jogo não é um registro individual, é uma MEMÓRIA COMPARTILHADA — e é por isso que o convite é desejável em vez de ser mais um cadastro.
+
+DEPENDÊNCIA TÉCNICA: o histórico compartilhado (`participant_ids` em `matches` + policy `auth.uid() = any(participant_ids)` + gravar do `playerIds`) — fatia B já mapeada na seção da quadra virtual. **A frase só é verdade quando essa fatia existir**: hoje `matches` tem UM `owner_id` e RLS self, então "todos os jogos são compartilhados com eles" ainda não se cumpre. Não usar a promessa em marketing antes de a fatia estar no ar — promessa que não se cumpre queima a mensagem mais forte que temos.
+
+ONDE USAR: mensagem CENTRAL do marketing e da landing (hoje a landing fala de placar/offline/voz — recursos, não a história). Contextos concretos: a Ana (professora) convidando os alunos; jogadores convidando para a partida em andamento.
+
+Conecta com A CARTEIRINHA FLOW (a identidade que torna o convite desejável), com o funil de conversão silencioso (a assimetria visual) e com o convite do oponente (a porta que espalha fora do clube).
+
 ## Distribuição, parcerias e white-label (visão estratégica)
 O Flow foi construído com "superfícies de marca" que já existem (QR contextual, card de patrocinador na abertura, "Powered by Flow" clicável/rastreável, placar compartilhado, telão futuro). A mesma infraestrutura de sponsors que serve professor/clube serve parceiros comerciais — o Flow é WHITE-LABEL-READY sem reconstrução.
 
