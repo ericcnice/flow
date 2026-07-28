@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation"
 import Image from "next/image"
 import type { SlotPreview } from "@/components/slot-row"
 import { ConfirmModal } from "@/components/confirm-modal"
-import { Settings, Volume2, VolumeX, Undo2, BarChart2, RotateCcw, LogOut, ArrowLeftRight, Share2, Users, UserMinus, X, BadgeCheck } from "lucide-react"
+import { Settings, Volume2, VolumeX, Undo2, RotateCcw, LogOut, ArrowLeftRight, Share2, Users, UserMinus, X, BadgeCheck } from "lucide-react"
 import { ThirdSetModal } from "@/components/third-set-modal"
 import { ShareModal } from "@/components/share-modal"
 // Superfície de configuração ÚNICA: a MESMA tela de setup (esporte + regras),
@@ -484,12 +484,6 @@ export default function JogoPage() {
   // DISCONNECT_GRACE_MS após conectar são churn de abertura (fantasma expirando),
   // não saída real → suprimidas.
   const connectedAtRef = useRef<number | null>(null)
-
-  const openScoreboard = () => {
-    // Garantir que a URL tenha o parâmetro quadra corretamente
-    const placarUrl = `/placar?quadra=${quadra}`
-    window.open(placarUrl, "_blank")
-  }
 
   // Deriva regras padrão a partir da config quando não há semente do motor
   // salva (ex.: partidas antigas). Para a família tênis, respeita o maxSets do
@@ -3090,15 +3084,25 @@ export default function JogoPage() {
       <span className="text-[10px] font-medium text-white/70">{label}</span>
     </button>
   )
-  const renderBottomSheet = () => (
-    <>
-      {/* Toque fora (área do jogo acima) fecha. */}
-      <div className="fixed inset-0 z-40" onClick={() => setMenuOpen(false)} aria-hidden />
-      <div
-        className="animate-in slide-in-from-bottom fixed inset-x-0 bottom-0 z-50 flex flex-col gap-4 rounded-t-3xl px-5 pb-7 pt-6 shadow-2xl duration-200"
-        style={{ backgroundColor: INFO_BG }}
-        onClick={(e) => e.stopPropagation()}
-      >
+  // O PAINEL do menu, em DOIS MODOS. `docked=true` é o modo novo: o menu deixa
+  // de flutuar e passa a ser a FAIXA DE BAIXO da tela de Ajustes, empilhada no
+  // mesmo flex column — os controles continuam à mão enquanto se mexe na
+  // configuração, em vez de sumirem no instante em que a tela abre.
+  //
+  // Empilhar (e não sobrepor) é o que evita magia: nada de z-index disputado
+  // nem de altura chutada para "reservar espaço" — o flex mede o painel e o
+  // miolo fica com o resto. Muda só o posicionamento; o conteúdo é o mesmo nos
+  // dois modos, então nenhum controle pode divergir entre eles.
+  const menuPanelPortrait = (docked = false) => (
+    <div
+      className={
+        docked
+          ? "relative z-10 flex shrink-0 flex-col gap-4 rounded-t-3xl px-5 pb-7 pt-6 shadow-2xl"
+          : "animate-in slide-in-from-bottom fixed inset-x-0 bottom-0 z-50 flex flex-col gap-4 rounded-t-3xl px-5 pb-7 pt-6 shadow-2xl duration-200"
+      }
+      style={{ backgroundColor: INFO_BG }}
+      onClick={(e) => e.stopPropagation()}
+    >
         <button
           type="button"
           onClick={() => setMenuOpen(false)}
@@ -3134,7 +3138,10 @@ export default function JogoPage() {
           {menuBtn(<RotateCcw className="h-6 w-6" />, "Recomeçar", () =>
             runMenu(() => setConfirmRestartOpen(true)),
           )}
-          {menuBtn(<Settings className="h-6 w-6" />, "Ajustes", () => runMenu(() => abrirSetup("jogo")))}
+          {/* AJUSTES é a ÚNICA ação que não passa pelo runMenu: ele fecharia o
+            menu, e a partir desta fatia o menu PERMANECE — ancorado na base da
+            tela de Ajustes, com a configuração crescendo por cima. */}
+          {menuBtn(<Settings className="h-6 w-6" />, "Ajustes", () => abrirSetup("jogo"))}
         </div>
 
         {/* LINHA 2: segmentado PONTOS|GAMES sozinho, largo e centrado. */}
@@ -3164,7 +3171,15 @@ export default function JogoPage() {
             )
           })}
         </div>
-      </div>
+    </div>
+  )
+
+  /** O menu FLUTUANTE do retrato: o painel + o véu que fecha ao tocar fora. */
+  const renderBottomSheet = () => (
+    <>
+      {/* Toque fora (área do jogo acima) fecha. */}
+      <div className="fixed inset-0 z-40" onClick={() => setMenuOpen(false)} aria-hidden />
+      {menuPanelPortrait()}
     </>
   )
 
@@ -3247,14 +3262,16 @@ export default function JogoPage() {
 
   // BOTTOM SHEET landscape: UMA LINHA (a horizontal tem largura). Reusa runMenu +
   // menuBtn + o segmentado. Mesmo #0a1024 sólido, X + toque fora + auto-close.
-  const renderBottomSheetLandscape = () => (
-    <>
-      <div className="fixed inset-0 z-40" onClick={() => setMenuOpen(false)} aria-hidden />
-      <div
-        className="animate-in slide-in-from-bottom fixed inset-x-0 bottom-0 z-50 flex flex-wrap items-end justify-center gap-4 rounded-t-3xl px-6 pb-6 pt-6 shadow-2xl duration-200"
-        style={{ backgroundColor: INFO_BG }}
-        onClick={(e) => e.stopPropagation()}
-      >
+  const menuPanelLandscape = (docked = false) => (
+    <div
+      className={
+        docked
+          ? "relative z-10 flex shrink-0 flex-wrap items-end justify-center gap-4 rounded-t-3xl px-6 pb-6 pt-6 shadow-2xl"
+          : "animate-in slide-in-from-bottom fixed inset-x-0 bottom-0 z-50 flex flex-wrap items-end justify-center gap-4 rounded-t-3xl px-6 pb-6 pt-6 shadow-2xl duration-200"
+      }
+      style={{ backgroundColor: INFO_BG }}
+      onClick={(e) => e.stopPropagation()}
+    >
         <button
           type="button"
           onClick={() => setMenuOpen(false)}
@@ -3286,7 +3303,10 @@ export default function JogoPage() {
         {menuBtn(<RotateCcw className="h-6 w-6" />, "Recomeçar", () =>
           runMenu(() => setConfirmRestartOpen(true)),
         )}
-        {menuBtn(<Settings className="h-6 w-6" />, "Ajustes", () => runMenu(() => abrirSetup("jogo")))}
+        {/* AJUSTES é a ÚNICA ação que não passa pelo runMenu: ele fecharia o
+            menu, e a partir desta fatia o menu PERMANECE — ancorado na base da
+            tela de Ajustes, com a configuração crescendo por cima. */}
+          {menuBtn(<Settings className="h-6 w-6" />, "Ajustes", () => abrirSetup("jogo"))}
         {/* Segmentado na MESMA linha (flex-wrap cai abaixo se não couber). */}
         <div className="flex items-center gap-1 self-center rounded-full bg-white/10 p-1">
           {(
@@ -3314,7 +3334,14 @@ export default function JogoPage() {
             )
           })}
         </div>
-      </div>
+    </div>
+  )
+
+  /** O menu FLUTUANTE da paisagem: o painel + o véu que fecha ao tocar fora. */
+  const renderBottomSheetLandscape = () => (
+    <>
+      <div className="fixed inset-0 z-40" onClick={() => setMenuOpen(false)} aria-hidden />
+      {menuPanelLandscape()}
     </>
   )
 
@@ -3525,7 +3552,21 @@ export default function JogoPage() {
           placar / reiniciar / encerrar), compactas e discretas — no miolo
           rolável, sem competir com o CTA JOGAR fixo. */}
       {setupOpen && (
-        <div className="fixed inset-0 z-50">
+        // COLUNA FLEX: a configuração ocupa o que sobra e o MENU fica ancorado
+        // na base, visível o tempo todo. Antes o menu era fechado no caminho
+        // (o Ajustes passava pelo runMenu) e os controles sumiam justo quando a
+        // pessoa estava mexendo na partida.
+        //
+        // Empilhado, não sobreposto: o flex mede o painel e o miolo fica com o
+        // resto — sem z-index disputado e sem altura chutada para reservar
+        // espaço, que quebraria assim que o painel mudasse de tamanho (o da
+        // paisagem tem flex-wrap e muda de altura sozinho).
+        //
+        // Sem o header da casca (N2) aqui, de propósito: /jogo é fullscreen e
+        // está FORA do route group. Navegação global ao lado do placar seria um
+        // toque errado com a partida em andamento.
+        <div className="fixed inset-0 z-50 flex flex-col">
+          <div className="min-h-0 flex-1">
           <SportSetup
             initialSport={sport}
             // Defesa contra o 2º crash: se as regras atuais estiverem
@@ -3576,52 +3617,29 @@ export default function JogoPage() {
             onPlayersSave={saveAllNames}
             onClose={() => setSetupOpen(false)}
             onConfirm={onSetupConfirm}
+            /* O RODAPÉ DE AÇÕES, agora com UM botão só.
+             *
+             * Tinha cinco, e QUATRO eram duplicatas do menu — que a partir desta
+             * fatia fica visível logo abaixo, lado a lado com eles. Duplicata em
+             * duas superfícies não é só ruído: as versões já divergiam. O
+             * "Desfazer" daqui não tinha a guarda `!started` do menu (ficava
+             * clicável sem nada para desfazer) e o "Reiniciar" usava `confirm()`
+             * nativo enquanto o menu usa o ConfirmModal do app. É assim que um
+             * bug nasce — alguém corrige um caminho e não sabe do outro.
+             * Removidos: Desfazer ponto, Contar por games, Abrir placar
+             * (que só produzia erro) e Reiniciar. As funções continuam vivas,
+             * chamadas pelo menu.
+             *
+             * ENCERRAR PARTIDA fica, e não por hábito: é a ÚNICA saída do /jogo.
+             * A tela é fullscreen e está fora da casca de navegação (N2), então
+             * não há header para levar embora — e no PWA instalado não há nem
+             * barra de URL. Sem este botão, a pessoa fica presa na partida.
+             * (Ele NÃO salva histórico: o save é do fim natural do jogo,
+             * disparado por `finished + winner + sessão`. Aqui só apaga o estado
+             * local e navega. E NÃO desloga ninguém — logout vive no /perfil.)
+             */
             footer={
-              <div className="pt-3 mt-1 border-t flex flex-wrap gap-2" style={{ borderColor: "var(--setup-card-borda)" }}>
-                <button
-                  type="button"
-                  className="setup-action"
-                  onClick={() => {
-                    undoLastPoint()
-                    setSetupOpen(false)
-                  }}
-                >
-                  <Undo2 className="h-3.5 w-3.5" />
-                  Desfazer ponto
-                </button>
-                <button
-                  type="button"
-                  className="setup-action"
-                  onClick={() => {
-                    toggleScoreType()
-                    setSetupOpen(false)
-                  }}
-                >
-                  <BarChart2 className="h-3.5 w-3.5" />
-                  {gameConfig.scoreType === "pontos" ? "Contar por games" : "Contar por pontos"}
-                </button>
-                <button
-                  type="button"
-                  className="setup-action"
-                  onClick={() => {
-                    openScoreboard()
-                    setSetupOpen(false)
-                  }}
-                >
-                  <BarChart2 className="h-3.5 w-3.5" />
-                  Abrir placar
-                </button>
-                <button
-                  type="button"
-                  className="setup-action"
-                  onClick={() => {
-                    resetGame()
-                    setSetupOpen(false)
-                  }}
-                >
-                  <RotateCcw className="h-3.5 w-3.5" />
-                  Reiniciar
-                </button>
+              <div className="pt-3 mt-1 border-t" style={{ borderColor: "var(--setup-card-borda)" }}>
                 <button type="button" className="setup-action setup-action-danger" onClick={endMatch}>
                   <LogOut className="h-3.5 w-3.5" />
                   Encerrar partida
@@ -3629,6 +3647,12 @@ export default function JogoPage() {
               </div>
             }
           />
+          </div>
+
+          {/* O MENU, ancorado na base. Mesmo painel do modo flutuante (mesma
+              função, `docked`), então nenhum controle pode divergir entre as
+              duas formas. Some junto quando a pessoa fecha o menu no X. */}
+          {menuOpen && (isPortrait ? menuPanelPortrait(true) : menuPanelLandscape(true))}
         </div>
       )}
 
