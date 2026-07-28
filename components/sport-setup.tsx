@@ -165,6 +165,7 @@ function AbaPlayers({
   previews,
   perfilHref,
   onSalvar,
+  onLogin,
   entrarUrl,
 }: {
   duplas: boolean
@@ -176,6 +177,8 @@ function AbaPlayers({
   previews?: Partial<Record<SetupSlotKey, SlotPreview | null>>
   perfilHref: string
   onSalvar: () => void
+  /** Deslogado: "este slot sou eu". Ausente = logado (ou sem auth) → sem convite. */
+  onLogin?: (slot: SetupSlotKey) => void
   entrarUrl?: string
 }) {
   const linha = (slot: SetupSlotKey, label: string) => (
@@ -189,6 +192,7 @@ function AbaPlayers({
       preview={previews?.[slot] ?? null}
       perfilHref={perfilHref}
       linkPerfil
+      onLogin={onLogin ? () => onLogin(slot) : undefined}
     />
   )
 
@@ -272,6 +276,7 @@ export function SportSetup({
   onPlayersSave,
   onGameTypeChange,
   entrarUrl,
+  onSlotLogin,
   initialTab = "jogo",
   onConfirm,
   onClose,
@@ -318,6 +323,13 @@ export function SportSetup({
    * aparece, e a aba segue servindo para editar nomes.
    */
   entrarUrl?: string
+  /**
+   * DESLOGADO pede login a partir de um slot ("este slot sou eu"). Ausente =
+   * nenhum convite aparece — é o caso de quem já está logado e do /setup.
+   * O SLOT viaja no argumento: é ele que o pai carimba para, na volta, a
+   * identidade cair NESTE lugar e não em "o próximo livre".
+   */
+  onSlotLogin?: (slot: SetupSlotKey) => void
   /**
    * Aba em que a tela ABRE. O botão Ajustes entra por "jogo"; tocar uma pílula
    * de jogador entrará por "players" (fatia d). Default "jogo" — por isso o
@@ -520,6 +532,17 @@ export function SportSetup({
               previews={playerPreviews}
               perfilHref={perfilHref}
               onSalvar={salvarNomes}
+              onLogin={
+                onSlotLogin
+                  ? (slot) => {
+                      // SALVA ANTES DE SAIR. O login com Google descarrega a
+                      // página, e o que estivesse digitado e ainda não salvo se
+                      // perderia — o mesmo cuidado que o CTA JOGAR já toma.
+                      salvarNomes()
+                      onSlotLogin(slot)
+                    }
+                  : undefined
+              }
             />
           ) : (
             <>

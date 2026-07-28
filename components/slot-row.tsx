@@ -103,6 +103,7 @@ export function SlotRow({
   inputRef,
   linkPerfil = false,
   variant = "dark",
+  onLogin,
 }: {
   /** Rótulo do campo ("Player 1" / "Nome" / "Player 2"). */
   label: string
@@ -132,6 +133,18 @@ export function SlotRow({
   linkPerfil?: boolean
   /** Tema do fundo em que o slot está. Default 'dark' = comportamento atual. */
   variant?: SlotRowVariant
+  /**
+   * "Este slot sou eu" — o convite de LOGIN para quem está DESLOGADO.
+   *
+   * OPCIONAL de propósito: sem callback, o slot renderiza exatamente como antes
+   * (é o caso de quem já está logado, e de qualquer consumidor futuro). Quem
+   * decide se há sessão é o pai, não este componente — o SlotRow é
+   * presentacional e não deve conhecer auth.
+   *
+   * ⚠️ NUNCA substitui o campo de nome: o anônimo digita e joga, e é inviolável.
+   * O login fica ABAIXO, discreto — vitrine, não parede.
+   */
+  onLogin?: () => void
 }) {
   const travado = Boolean(preview?.verified)
   const st = ESTILOS[variant]
@@ -178,28 +191,47 @@ export function SlotRow({
   }
 
   return (
-    <label className="flex flex-col gap-1.5">
-      <span className={st.label} style={corRotulo}>
-        {label}
-      </span>
-      {/* Avatar FORA do <Input> (o preview não interfere na digitação). */}
-      <div className="flex items-center gap-2.5">
-        <PlayerAvatar url={preview?.avatarUrl} nome={valor} size={40} />
-        <Input
-          ref={inputRef}
-          value={valor}
-          onChange={(e) => onChange(e.target.value)}
-          onFocus={selectAll}
-          onBlur={onBlur}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") onEnter()
-          }}
-          autoFocus={autoFocus}
-          placeholder="Nome"
-          className={st.input}
-          style={estiloInput}
-        />
-      </div>
-    </label>
+    <div className="flex flex-col gap-1.5">
+      <label className="flex flex-col gap-1.5">
+        <span className={st.label} style={corRotulo}>
+          {label}
+        </span>
+        {/* Avatar FORA do <Input> (o preview não interfere na digitação). */}
+        <div className="flex items-center gap-2.5">
+          <PlayerAvatar url={preview?.avatarUrl} nome={valor} size={40} />
+          <Input
+            ref={inputRef}
+            value={valor}
+            onChange={(e) => onChange(e.target.value)}
+            onFocus={selectAll}
+            onBlur={onBlur}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") onEnter()
+            }}
+            autoFocus={autoFocus}
+            placeholder="Nome"
+            className={st.input}
+            style={estiloInput}
+          />
+        </div>
+      </label>
+
+      {/* O CONVITE, embaixo e discreto. Fora do <label> de propósito: dentro
+          dele, tocar o botão daria foco ao input e o teclado subiria por cima
+          do painel de login. */}
+      {onLogin && (
+        <button
+          type="button"
+          onClick={onLogin}
+          data-flow-cta="slot-login"
+          className={`self-start pl-[50px] text-left text-xs font-semibold underline underline-offset-2 ${
+            claro ? "" : "text-emerald-400/90 hover:text-emerald-300"
+          }`}
+          style={claro ? { color: "var(--setup-card-cinza)" } : undefined}
+        >
+          Entrar para jogar como você
+        </button>
+      )}
+    </div>
   )
 }

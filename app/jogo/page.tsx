@@ -32,6 +32,7 @@ import { sportById, familyOf, formatPoint, defaultRulesFor, buildScoreCols, conc
 import { themeClassName, type ThemeId } from "@/lib/themes"
 import { clubFromCacheOrBundle } from "@/lib/supabase/club-catalog"
 import { AppAuthCta } from "@/components/auth/app-auth"
+import { LoginPanel } from "@/components/auth/login-panel"
 import { FlowMark } from "@/components/brand/flow-mark"
 import { useSession } from "@/lib/hooks/use-session"
 import { createBrowserSupabaseClient } from "@/lib/supabase/browser-client"
@@ -240,6 +241,63 @@ function nomeDaSessao(user: { user_metadata?: Record<string, unknown> | null; em
   return "Convidado"
 }
 
+/**
+ * O CARIMBO slot↔login — "quando eu voltar logado, o slot é ESTE".
+ *
+ * POR QUE EXISTE: as duas reivindicações automáticas (o prefill do dono e a
+ * 1c.1 do convidado) só agem em slot que ainda está em FALLBACK ("Player N").
+ * É a regra certa para TERCEIROS — ninguém sobrescreve o nome de outra pessoa.
+ * Mas ela erra no gesto mais provável: quem DIGITA o próprio nome e só então
+ * decide logar. O slot deixou de ser fallback, então o dono só assumiria se o
+ * texto batesse EXATO com o nome do Google ("Eric" ≠ "Eric Nice") e o convidado
+ * seria mandado para outro slot — ou para nenhum. A pessoa volta logada e
+ * continua anônima, no lugar errado.
+ *
+ * O carimbo é a INTENÇÃO EXPLÍCITA que resolve isso: quem tocou "Entrar" naquele
+ * slot disse "sou eu". Na volta, essa intenção vence o fallback — SÓ naquele
+ * slot, SÓ para quem pediu, SÓ neste aparelho.
+ *
+ * PRECISA DO localStorage porque o Google DESCARREGA a página: um estado em
+ * memória não sobreviveria ao redirect. O login por e-mail (código em tela) não
+ * descarrega e nem precisaria, mas usa o mesmo caminho — um mecanismo só.
+ *
+ * É consumido UMA vez (apagado ao usar) e tem VALIDADE curta: um carimbo velho
+ * esquecido no aparelho não pode sequestrar um slot numa partida de outro dia.
+ */
+const CLAIM_SLOT_TTL_MS = 15 * 60 * 1000
+const claimSlotKey = (quadra: string) => `flow_claim_slot_${quadra}`
+
+function carimbarSlot(quadra: string, slot: SlotKey) {
+  try {
+    localStorage.setItem(claimSlotKey(quadra), JSON.stringify({ slot, ts: Date.now() }))
+  } catch {
+    // Aba privada/cota: o login segue funcionando; só o vínculo com ESTE slot
+    // se perde, e a reivindicação automática assume (o comportamento de antes).
+  }
+}
+
+/** Lê e APAGA o carimbo. Devolve null se ausente, inválido ou vencido. */
+function consumirCarimbo(quadra: string): SlotKey | null {
+  try {
+    const cru = localStorage.getItem(claimSlotKey(quadra))
+    if (!cru) return null
+    localStorage.removeItem(claimSlotKey(quadra))
+    const { slot, ts } = JSON.parse(cru) as { slot?: string; ts?: number }
+    if (typeof ts !== "number" || Date.now() - ts > CLAIM_SLOT_TTL_MS) return null
+    return slot === "blue1" || slot === "blue2" || slot === "red1" || slot === "red2" ? slot : null
+  } catch {
+    return null
+  }
+}
+
+function limparCarimbo(quadra: string) {
+  try {
+    localStorage.removeItem(claimSlotKey(quadra))
+  } catch {
+    // ignora
+  }
+}
+
 // Quanto tempo o aviso "TROCA DE LADO" fica na tela antes de sumir sozinho.
 // Curto de propósito: é um lembrete discreto, não um banner que domina a tela.
 const SIDE_CHANGE_MS = 3000
@@ -396,6 +454,10 @@ export default function JogoPage() {
   // Encerrar: MESMO modal do Recomeçar. Os dois são destrutivos e viviam com
   // linguagens diferentes — um com o modal do app, outro com o popup do sistema.
   const [confirmEndOpen, setConfirmEndOpen] = useState(false)
+  // LOGIN A PARTIR DO SLOT (deslogado). O painel abre POR CIMA da configuração,
+  // sem tirar ninguém do jogo — a tela não tem header justamente para não
+  // convidar a sair, e o login não pode ser a exceção.
+  const [loginSlotOpen, setLoginSlotOpen] = useState(false)
   // Nomes COMBINADOS para exibição em superfícies que não são as pílulas
   // (tela de fim, broadcast): simples = "Nome"; duplas = "Nome1/Nome2".
   const [bluePlayerName, setBluePlayerName] = useState("")
@@ -2135,6 +2197,78 @@ export default function JogoPage() {
     rt.remotePlayerIds,
   ])
 
+  // --------------------------------- LOGIN NO SLOT: a reivindicação CARIMBADA
+  // A camada que honra o "este slot sou eu". Fica ANTES da 1c.1 de propósito:
+  // os effects rodam na ordem de declaração, então quando o carimbo escreve a
+  // carteirinha, a guarda (c) da 1c.1 já vê o id em slot e sai sozinha — sem
+  // precisar de nenhuma condição nova lá dentro. A 1c.1 e o prefill do dono
+  // seguem INTOCADOS; esta é uma porta a mais, não um desvio na deles.
+  //
+  // O QUE ELA PODE, e a 1c.1 não: escrever num slot que TEM nome digitado. É
+  // exatamente a diferença entre "achar um lugar livre" (automático, conservador)
+  // e "eu disse que este lugar é meu" (explícito, e por isso pode vencer).
+  //
+  // O QUE ELA NÃO PODE: encostar em slot de TERCEIRO. Se já há carteirinha de
+  // outra pessoa ali, o carimbo é descartado sem escrever nada — identidade
+  // alheia não se sobrescreve, com ou sem intenção.
+  const carimboRef = useRef<SlotKey | null | undefined>(undefined)
+  useEffect(() => {
+    if (!authUser) return
+    const cur = gameConfigRef.current
+    if (!cur) return // config ainda não carregou: o carimbo espera (não é lido)
+    if (carimboRef.current === null) return // já resolvido nesta sessão de tela
+
+    if (carimboRef.current === undefined) {
+      // Lê e APAGA numa tacada só: o carimbo vale por uma vez.
+      carimboRef.current = consumirCarimbo(quadra)
+      if (!carimboRef.current) {
+        carimboRef.current = null
+        return
+      }
+    }
+    const slot = carimboRef.current
+    carimboRef.current = null // consumido: não repete a cada re-render
+
+    const jaEhDe = cur.playerIds?.[slot]
+    if (jaEhDe) return // ocupado por carteirinha (minha ou de terceiro): não mexe
+
+    // O DONO ESCOLHENDO OUTRO LUGAR QUE NÃO O BLUE1. O prefill põe o dono no
+    // blue1 automaticamente sempre que ele está em fallback — e ele roda DEPOIS
+    // deste effect. Sem esta linha, quem criou o jogo e disse "sou o red1"
+    // apareceria nos DOIS slots: aqui por escolha, lá por automatismo.
+    // A escolha explícita desliga o automatismo; o prefill não muda por dentro.
+    if (slot !== "blue1") prefillDoneRef.current = true
+
+    const nome = nomeDaSessao(authUser)
+    reivindicarSlot(slot, authUser.id, nome)
+
+    // REFINO pelo profiles.name, sem bloquear (mesmo espírito da 1c.1: a
+    // entrada no slot não espera rede). Só reescreve se o slot AINDA é meu.
+    let alive = true
+    void (async () => {
+      let doBanco = ""
+      try {
+        const supabase = createBrowserSupabaseClient()
+        const { data } = await supabase
+          .from("profiles")
+          .select("name")
+          .eq("id", authUser.id)
+          .maybeSingle()
+        doBanco = (data?.name ?? "").trim()
+      } catch {
+        // offline: fica com o nome da sessão, que já está no slot
+      }
+      if (!alive || !doBanco || doBanco === nome) return
+      const agora = gameConfigRef.current
+      if (agora?.playerIds?.[slot] !== authUser.id) return
+      reivindicarSlot(slot, authUser.id, doBanco)
+    })()
+    return () => {
+      alive = false
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authUser, gameConfig])
+
   // ---------------------------------------------- 1c.1: o convidado reivindica
   // QUATRO GUARDAS, nesta ordem:
   //  (a) tem `edit` na URL  → é PARTICIPANTE (quem entrou pelo QR de compartilhar).
@@ -3634,6 +3768,22 @@ export default function JogoPage() {
               red2: previewDoSlot("red2"),
             }}
             onPlayersSave={saveAllNames}
+            /* O CONVITE só existe para quem está DESLOGADO. Logado, a prop nem
+               vai: os slots renderizam exatamente como antes. E o inviolável
+               fica de pé — o campo de nome continua ali, do mesmo tamanho, para
+               quem não quer conta nenhuma. */
+            onSlotLogin={
+              authUser
+                ? undefined
+                : (slot) => {
+                    // CARIMBA antes de abrir o painel: com o Google a página
+                    // descarrega, e depois do redirect não haveria mais nada em
+                    // memória para dizer QUAL slot pediu.
+                    carimbarSlot(quadra, slot as SlotKey)
+                    carimboRef.current = undefined // relê após autenticar
+                    setLoginSlotOpen(true)
+                  }
+            }
             onClose={fecharSetup}
             onConfirm={onSetupConfirm}
             /* O RODAPÉ DE AÇÕES, agora com UM botão só.
@@ -3875,6 +4025,56 @@ export default function JogoPage() {
           O texto antigo do Encerrar prometia "redirecionado para a tela
           inicial", o que deixou de ser verdade quando o destino passou a
           depender da sessão (/perfil ou /setup). Agora não promete destino. */}
+      {/* LOGIN A PARTIR DO SLOT — o painel abre POR CIMA da configuração
+          (z acima do overlay de setup), sem tirar ninguém do jogo. Os dois
+          caminhos do LoginPanel se comportam bem aqui, por motivos diferentes:
+
+          • E-MAIL (código de 6 dígitos): resolve EM TELA — a página não
+            descarrega, a sessão cai no cookie e o `authUser` popula pelo
+            onAuthStateChange. Zero risco de perder a partida. É o caminho
+            ideal dentro de um jogo em andamento.
+          • GOOGLE: sai e volta. O `next` leva a URL INTEIRA desta tela (com
+            quadra/match/edit/v), então o retorno cai na MESMA partida — é o
+            mesmo mecanismo que a tela de fim já usa. O carimbo do slot viaja
+            pelo localStorage, porque a memória não sobrevive ao redirect.
+
+          Fechar SEM autenticar limpa o carimbo: intenção abandonada não pode
+          reivindicar um slot num login futuro por outro caminho. */}
+      {loginSlotOpen && !authUser && (
+        <div
+          className="fixed inset-0 z-[80] flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm"
+          onClick={() => {
+            limparCarimbo(quadra)
+            carimboRef.current = null
+            setLoginSlotOpen(false)
+          }}
+          role="dialog"
+          aria-modal="true"
+          aria-label="Entrar para jogar como você"
+        >
+          <div
+            className="w-full max-w-sm rounded-2xl bg-neutral-900 p-6 text-white shadow-2xl ring-1 ring-white/10"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 className="mb-1 text-center text-lg font-bold">Entre para jogar como você</h2>
+            <p className="mb-6 text-center text-sm text-white/60">
+              Sua foto e seu nome no placar — e o jogo guardado no seu histórico.
+            </p>
+            <LoginPanel
+              next={
+                typeof window !== "undefined"
+                  ? window.location.pathname + window.location.search
+                  : "/"
+              }
+              /* Só o e-mail chega aqui (o Google redireciona). A sessão já
+                 está no cookie; fechar basta — o effect do carimbo reivindica
+                 o slot assim que o authUser popular. */
+              onAuthenticated={() => setLoginSlotOpen(false)}
+            />
+          </div>
+        </div>
+      )}
+
       {confirmEndOpen && (
         <ConfirmModal
           message="Encerrar esta partida? Você sairá do jogo."
