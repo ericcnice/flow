@@ -19,7 +19,7 @@
  */
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react"
-import { X, ChevronDown } from "lucide-react"
+import { X, ChevronDown, ArrowLeftRight } from "lucide-react"
 import { SlotRow, type SlotPreview } from "@/components/slot-row"
 import { QRCodeGenerator } from "@/components/qr-code"
 import { SportCourtGlyph } from "@/components/sport-court"
@@ -168,6 +168,8 @@ function AbaPlayers({
   onSalvar,
   onLogin,
   loginSlots,
+  trocaveis,
+  onTrocar,
   entrarUrl,
 }: {
   duplas: boolean
@@ -185,10 +187,48 @@ function AbaPlayers({
   onLogin?: (slot: SetupSlotKey) => void
   /** Slots que podem oferecer o login. Ausente = todos (o convidado escolhe). */
   loginSlots?: SetupSlotKey[]
+  /**
+   * Slots que podem TROCAR de lugar, rotulados pelo TIPO de ocupação.
+   * O tipo é a regra de compatibilidade: só se troca "id" com "id" e "nome" com
+   * "nome" — um par misto exigiria APAGAR uma carteirinha, que o merge dos
+   * outros aparelhos não sabe propagar. Ausente/vazio = sem modo troca.
+   */
+  trocaveis?: Partial<Record<SetupSlotKey, "id" | "nome">>
+  onTrocar?: (a: SetupSlotKey, b: SetupSlotKey) => void
   entrarUrl?: string
 }) {
-  const linha = (slot: SetupSlotKey, label: string) => (
-    <SlotRow
+  /**
+   * TOCA-TROCA: toca num slot → ele fica AGUARDANDO; toca noutro compatível →
+   * os dois trocam. Tocar no mesmo cancela. Sem drag-and-drop de propósito: em
+   * quadra (sol, mão suada, celular apoiado) arrastar é frágil, e para quatro
+   * itens o toque é mais confiável e custa 0 KB.
+   */
+  const [aguardando, setAguardando] = useState<SetupSlotKey | null>(null)
+  const linha = (slot: SetupSlotKey, label: string) => {
+    const tipo = trocaveis?.[slot]
+    const podeTrocarEste = Boolean(onTrocar && tipo)
+    const estaAguardando = aguardando === slot
+    // Compatível = mesmo tipo de ocupação. Com nada selecionado, todo slot
+    // trocável é um ponto de partida válido.
+    const compativel = !aguardando || trocaveis?.[aguardando] === tipo
+
+    const tocarTroca = () => {
+      if (estaAguardando) return setAguardando(null) // cancela
+      if (aguardando && compativel) {
+        onTrocar?.(aguardando, slot)
+        return setAguardando(null)
+      }
+      setAguardando(slot)
+    }
+
+    return (
+      <div
+        className={`flex items-end gap-2 rounded-xl transition ${
+          estaAguardando ? "-m-1 p-1 ring-2 ring-emerald-600" : ""
+        }`}
+      >
+        <div className="min-w-0 flex-1">
+          <SlotRow
       variant="card"
       label={label}
       valor={nomes[slot]}
@@ -204,11 +244,43 @@ function AbaPlayers({
       preview={previews?.[slot] ?? null}
       perfilHref={perfilHref}
       linkPerfil
-      onLogin={
-        onLogin && (!loginSlots || loginSlots.includes(slot)) ? () => onLogin(slot) : undefined
-      }
-    />
-  )
+            onLogin={
+              onLogin && (!loginSlots || loginSlots.includes(slot))
+                ? () => onLogin(slot)
+                : undefined
+            }
+          />
+        </div>
+
+        {podeTrocarEste && (
+          <button
+            type="button"
+            onClick={tocarTroca}
+            disabled={!compativel && !estaAguardando}
+            data-flow-cta="slot-trocar"
+            aria-label={
+              estaAguardando
+                ? `Cancelar troca de ${label}`
+                : aguardando
+                  ? `Trocar com ${label}`
+                  : `Trocar ${label} de lugar`
+            }
+            aria-pressed={estaAguardando}
+            className={`mb-1 flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border-2 transition disabled:opacity-30 ${
+              estaAguardando ? "border-emerald-600 bg-emerald-600/10" : ""
+            }`}
+            style={
+              estaAguardando
+                ? undefined
+                : { borderColor: "var(--setup-card-borda)", color: "var(--setup-card-cinza)" }
+            }
+          >
+            <ArrowLeftRight className="h-4 w-4" />
+          </button>
+        )}
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-3">
@@ -292,6 +364,8 @@ export function SportSetup({
   entrarUrl,
   onSlotLogin,
   loginSlots,
+  trocaveis,
+  onTrocar,
   initialTab = "jogo",
   onConfirm,
   onClose,
@@ -354,6 +428,14 @@ export function SportSetup({
    * caminhos que produziram a mesma pessoa em dois slots.
    */
   loginSlots?: SetupSlotKey[]
+  /**
+   * TROCA DE JOGADORES (toca-troca). O pai decide QUEM pode trocar e de que
+   * tipo é a ocupação — ele é quem sabe o placar (só com 0×0), quem tem
+   * carteirinha e que o blue1 não se move. Ausente = sem modo troca, tela
+   * idêntica à de antes.
+   */
+  trocaveis?: Partial<Record<SetupSlotKey, "id" | "nome">>
+  onTrocar?: (a: SetupSlotKey, b: SetupSlotKey) => void
   /**
    * Aba em que a tela ABRE. O botão Ajustes entra por "jogo"; tocar uma pílula
    * de jogador entrará por "players" (fatia d). Default "jogo" — por isso o
@@ -610,6 +692,8 @@ export function SportSetup({
               perfilHref={perfilHref}
               onSalvar={salvarNomes}
               loginSlots={loginSlots}
+              trocaveis={trocaveis}
+              onTrocar={onTrocar}
               onLogin={
                 onSlotLogin
                   ? (slot) => {

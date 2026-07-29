@@ -2516,6 +2516,79 @@ export default function JogoPage() {
     sendRealtimeAction({ kind: "set_config", patch: { players, playerIds } })
   }
 
+  /**
+   * TROCA DOIS SLOTS DE LUGAR (toca-troca) — só com o placar ZERADO.
+   *
+   * POR QUE SÓ ANTES DE COMEÇAR: os pontos são do LADO, não da pessoa (o motor
+   * só conhece A e B). Mover alguém de time no meio do jogo faria o placar
+   * afirmar algo falso — "o time que fez 4 games" deixaria de ser o mesmo
+   * conjunto de pessoas — e isso iria para o histórico. Com 0×0 não há o que
+   * herdar, então a troca é inofensiva e NÃO precisa zerar nada.
+   *
+   * TRÊS CAMPOS viajam juntos, e o terceiro é o esquecível:
+   *  • players    — o nome;
+   *  • playerIds  — a carteirinha;
+   *  • initialServer — o SAQUE. Ele guarda 0|1, a POSIÇÃO dentro do lado, não a
+   *    pessoa. Trocar dois jogadores do MESMO time sem permutar este índice faz
+   *    a bola de saque passar a apontar para a pessoa errada, em silêncio.
+   *    Entre times o índice fica: ele é por lado, e mover alguém para o outro
+   *    lado não deveria arrastar a escolha do lado de origem — é pré-jogo, e um
+   *    toque na pílula re-escolhe.
+   *
+   * DUAS RESTRIÇÕES, e as duas têm motivo técnico:
+   *  • BLUE1 NUNCA SE MOVE. É o slot do dono, e `ownerVerified` é uma flag LOCAL
+   *    presa a ele — mover o dono a transformaria em ruído. Coerente com o "dono
+   *    rígido no A1" já decidido.
+   *  • OU OS DOIS TÊM CARTEIRINHA, OU NENHUM TEM. Um par misto (um com id, outro
+   *    só com nome digitado) exigiria APAGAR uma chave de `playerIds` — e o
+   *    merge dos outros aparelhos é aditivo: a ausência nunca apaga. O id
+   *    ficaria nos dois lugares, ressuscitando a duplicação. Trocar PERMUTA
+   *    (as duas chaves seguem presentes, com valores trocados), e por isso
+   *    propaga certo no merge de hoje, sem tocar nele.
+   */
+  const trocarSlots = (a: SlotKey, b: SlotKey) => {
+    const cur = gameConfigRef.current
+    if (!cur || a === b) return
+    if (actionsRef.current.length !== 0) return // trava dura: só com placar zerado
+    if (a === "blue1" || b === "blue1") return // o dono não sai do A1
+
+    const idA = cur.playerIds?.[a]
+    const idB = cur.playerIds?.[b]
+    if (Boolean(idA) !== Boolean(idB)) return // par misto: viraria remoção
+
+    const players = { ...cur.players, [a]: cur.players[b], [b]: cur.players[a] }
+    const playerIds = { ...(cur.playerIds ?? {}) }
+    if (idA && idB) {
+      playerIds[a] = idB
+      playerIds[b] = idA
+    }
+
+    const initialServer: { A: 0 | 1; B: 0 | 1 } = {
+      A: cur.initialServer?.A ?? 0,
+      B: cur.initialServer?.B ?? 0,
+    }
+    const ladoDe = (s: SlotKey): "A" | "B" => (s.startsWith("blue") ? "A" : "B")
+    if (ladoDe(a) === ladoDe(b)) {
+      const lado = ladoDe(a)
+      initialServer[lado] = (1 - initialServer[lado]) as 0 | 1
+    }
+
+    const newConfig: GameConfig = { ...cur, players, playerIds, initialServer }
+    setGameConfig(newConfig)
+    gameConfigRef.current = newConfig
+    try {
+      localStorage.setItem(`tennis_match_${quadra}`, JSON.stringify(newConfig))
+    } catch {
+      // aba privada / cota: segue só em memória
+    }
+    const duplas = cur.gameType === "duplas"
+    setBluePlayerName(duplas ? `${players.blue1}/${players.blue2}` : players.blue1)
+    setRedPlayerName(duplas ? `${players.red1}/${players.red2}` : players.red1)
+    // UM patch só: `players` (versionado pelo Lamport no sendRealtimeAction),
+    // `playerIds` e o saque viajam juntos e chegam juntos.
+    sendRealtimeAction({ kind: "set_config", patch: { players, playerIds, initialServer } })
+  }
+
   // Aplica o nome do dono no slot blue1 + marca IDENTIDADE VERIFICADA (local).
   // Persiste, deriva o nome combinado, propaga SÓ `players` (nome) via set_config
   // (ownerVerified fica local, sync intocado) e SOLTA o placeholder. Idempotente:
@@ -3830,6 +3903,25 @@ export default function JogoPage() {
                "parceiro ou oponente?", que é a fatia seguinte.
                O INPUT DE NOME não muda em slot nenhum: só o LOGIN é restrito. */
             loginSlots={searchParams.get("match") ? undefined : ["blue1"]}
+            /* TROCA — só com o placar ZERADO (`!started`), só slots OCUPADOS e
+               nunca o blue1 (o slot do dono, com a flag local ownerVerified
+               presa a ele). O rótulo "id"/"nome" é a regra de compatibilidade:
+               trocar um slot com carteirinha por um só com nome digitado
+               exigiria APAGAR uma chave de playerIds, e o merge dos outros
+               aparelhos não sabe apagar por ausência. */
+            trocaveis={
+              started
+                ? undefined
+                : (["blue2", "red1", "red2"] as SlotKey[]).reduce(
+                    (acc, s) => {
+                      if (cfg.playerIds?.[s]) acc[s] = "id"
+                      else if (!isFallbackName(cfg.players[s])) acc[s] = "nome"
+                      return acc
+                    },
+                    {} as Partial<Record<SlotKey, "id" | "nome">>,
+                  )
+            }
+            onTrocar={started ? undefined : trocarSlots}
             onSlotLogin={
               authUser
                 ? undefined
