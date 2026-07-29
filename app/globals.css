@@ -450,11 +450,42 @@
    A paleta é a MESMA do palco (--lado-a-*, --lado-b-*, --palco-*): a
    transmissão é a tela de jogo vista de fora, não um segundo dialeto visual. */
 
+/* AS DUAS FAIXAS (topo e rodapé) — o azul-marinho profundo do app (#0a1024,
+   o mesmo do menu do /jogo). Cor FIXA e não do tema, de propósito: as faixas
+   são a moldura da transmissão e precisam ficar estáveis enquanto os dois
+   lados trocam de cor com o tema. */
+.tv-faixa {
+  background-color: #0a1024;
+  color: #f5f5f5;
+  flex: 0 0 auto;
+}
+
+/* A PÍLULA de jogadores — mesmo vocabulário da pílula do /jogo (glass +
+   rounded-full), para a transmissão ler como a mesma família. */
+.tv-pilula {
+  display: inline-flex;
+  align-items: center;
+  gap: clamp(6px, 1.2vw, 12px);
+  max-width: 100%;
+  padding: clamp(4px, 0.8vw, 8px) clamp(10px, 1.6vw, 18px);
+  border-radius: 999px;
+  background: rgba(10, 16, 36, 0.55);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.14);
+}
+/* O traço que separa os parceiros. NÃO é o escudo do clube: o escudo diz
+   "onde", e no meio de dois nomes ele diria "de quem" — que é outra coisa. */
+.tv-dash {
+  opacity: 0.35;
+  font-weight: 300;
+  flex: 0 0 auto;
+}
+
 .tv-lado {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  justify-content: space-between;
-  gap: clamp(10px, 3vw, 32px);
+  justify-content: center;
+  gap: clamp(6px, 1.5vh, 20px);
   flex: 1 1 0;
   min-width: 0;
   min-height: 0;
@@ -472,7 +503,7 @@
 /* O NÚMERO GIGANTE — a mesma presença do placar do /jogo. `clamp` em vw+vh
    para caber tanto no celular em pé quanto na tela larga sem media query. */
 .tv-ponto {
-  font-size: clamp(3.5rem, 18vh, 11rem);
+  font-size: clamp(4.5rem, 26vh, 16rem);
   font-weight: 900;
   line-height: 0.85;
   letter-spacing: -0.03em;

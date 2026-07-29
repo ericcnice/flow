@@ -31,6 +31,7 @@ import { resolveSponsor, type Sponsor } from "@/lib/supabase/sponsors"
 import type { GameState, Side } from "@/lib/scoring/types"
 import { getLiveMatchState } from "@/lib/supabase/live-match"
 import { resolvePlayerCards, type PlayerCard } from "@/lib/supabase/player-cards"
+import Link from "next/link"
 import { PlayerAvatar } from "@/components/player-avatar"
 import { FlowWordmark } from "@/components/brand/flow-wordmark"
 import { useRealtimeMatch } from "@/lib/hooks/use-realtime-match"
@@ -588,43 +589,47 @@ export function BroadcastView() {
       className={`relative flex h-[100dvh] flex-col overflow-hidden mono-tabular ${themeClassName(theme)}`}
       style={{ backgroundColor: "var(--palco-fundo)", color: "var(--palco-texto)" } as CSSProperties}
     >
-      {/* FAIXA DE CONTEXTO — o LOCAL, e só ele. O escudo do clube fica no TOPO
-          CENTRAL porque ali ele diz "o jogo é aqui"; colado nos jogadores diria
-          "estes jogadores são daqui", que é outra coisa e só se separa no
-          interclubes. A filiação por lado é camada futura. */}
-      <header className="relative z-10 flex shrink-0 items-center justify-between px-4 py-2 md:px-8 md:py-3">
-        <span className="text-[10px] uppercase tracking-[0.2em] opacity-55 md:text-xs">
+      {/* ================= FAIXA SUPERIOR: onde · quem hospeda · agora ========
+          O escudo do clube fica no CENTRO porque ali ele diz "o jogo é aqui".
+          Colado nos jogadores diria "estes jogadores são daqui" — outra coisa,
+          que só se separa no interclubes (a filiação por lado é camada futura). */}
+      <header className="tv-faixa flex items-center justify-between gap-3 px-3 py-2 md:px-6 md:py-3">
+        <span className="min-w-0 flex-1 truncate text-[10px] font-bold uppercase tracking-[0.2em] opacity-60 md:text-xs">
           Quadra {quadra}
         </span>
 
         {viewClub?.logo ? (
-          <div className="relative aspect-square h-10 shrink-0 overflow-hidden rounded-full ring-1 ring-white/15 md:h-16">
-            <Image src={viewClub.logo} alt={viewClub.nome} fill sizes="64px" className="object-cover" />
+          <div className="relative aspect-square h-9 shrink-0 overflow-hidden rounded-full ring-1 ring-white/20 md:h-14">
+            <Image src={viewClub.logo} alt={viewClub.nome} fill sizes="56px" className="object-cover" />
           </div>
         ) : (
-          <span aria-hidden />
+          <span aria-hidden className="shrink-0" />
         )}
 
-        <span className="inline-flex items-center gap-1.5 text-[10px] uppercase tracking-[0.2em] opacity-55 md:text-xs">
-          {finished ? (
-            "Encerrado"
-          ) : (
-            <>
-              <span className="h-2 w-2 animate-pulse rounded-full bg-red-500" aria-hidden />
-              Ao vivo
-            </>
+        {/* AO VIVO com DESTAQUE: o pulso e o relógio correndo são o que dizem
+            "isto está acontecendo agora" — é o que separa uma transmissão de
+            uma captura de tela. Por isso ganham peso, e não opacidade baixa. */}
+        <span className="flex min-w-0 flex-1 items-center justify-end gap-2">
+          {!finished && (
+            <span className="flex items-center gap-1.5">
+              <span className="h-2 w-2 animate-pulse rounded-full bg-red-500 md:h-2.5 md:w-2.5" aria-hidden />
+              <span className="text-[10px] font-black uppercase tracking-[0.18em] text-red-400 md:text-xs">
+                Live
+              </span>
+            </span>
           )}
-          <span className="ml-2 tabular-nums opacity-80">
+          <span className="text-sm font-bold tabular-nums md:text-xl">
             {elapsedTime}
             {isTiebreak ? " · TB" : ""}
           </span>
         </span>
       </header>
 
-      {/* OS DOIS LADOS, 50/50. Empilhados no celular em pé, lado a lado quando a
-          tela é larga — a mesma regra de orientação do /jogo, para a transmissão
-          ser a tela de jogo vista de fora e não um segundo desenho. */}
-      <main className="flex min-h-0 flex-1 flex-col landscape:flex-row" style={{ gap: "1px", backgroundColor: "var(--palco-divisor)" }}>
+      {/* ================= OS DOIS LADOS: pílula em cima, ponto no centro ===== */}
+      <main
+        className="flex min-h-0 flex-1 flex-col landscape:flex-row"
+        style={{ gap: "1px", backgroundColor: "var(--palco-divisor)" }}
+      >
         {(["A", "B"] as Side[]).map((side) => {
           const venceu = gs.winner === side
           return (
@@ -632,76 +637,107 @@ export function BroadcastView() {
               key={side}
               data-side={side.toLowerCase()}
               className="tv-lado"
-              style={venceu ? undefined : { opacity: finished ? 0.55 : 1 }}
+              style={finished && !venceu ? { opacity: 0.5 } : undefined}
             >
-              {/* JOGADORES — o avatar é a estrela, e está SEMPRE lá. */}
-              <div className="flex min-w-0 flex-col gap-2 md:gap-4">
-                {slotsDoLado(side).map((slot, idx) => {
+              <div className="tv-pilula">
+                {slotsDoLado(side).map((slot, idx, arr) => {
                   const info = infoDoSlot(slot, side, idx)
                   return (
-                    <div key={slot} className="flex min-w-0 items-center gap-2.5 md:gap-4">
-                      {/* O tamanho base vem inline do próprio PlayerAvatar (44);
-                          o desktop cresce por classe com `!`, que é o único jeito
-                          de vencer aquele inline sem alterar o componente
-                          compartilhado — ele é usado por outras cinco telas. */}
+                    <span key={slot} className="flex min-w-0 items-center gap-1.5 md:gap-2">
+                      {/* O AVATAR ocupa o lugar onde antes ficava a bolinha de
+                          saque. A bola encolheu e virou confirmação; a estrela
+                          agora é o rosto. */}
                       <PlayerAvatar
                         url={info.avatarUrl}
                         nome={info.nome}
-                        size={44}
-                        className="md:!h-20 md:!w-20"
+                        size={30}
+                        className="md:!h-12 md:!w-12"
                       />
-                      <span className="flex min-w-0 items-center gap-1.5">
-                        {info.saca && <span className="tv-bola" aria-label="saque" />}
-                        <span className={`tv-nome truncate ${info.saca ? "tv-nome-saque" : ""}`}>
-                          {info.nome}
-                        </span>
-                        {info.verificado && (
-                          <BadgeCheck
-                            className="h-4 w-4 shrink-0 text-emerald-400 md:h-5 md:w-5"
-                            aria-label="Identidade verificada pelo Flow"
-                          />
-                        )}
+                      {info.saca && <span className="tv-bola" aria-label="saque" />}
+                      <span className={`tv-nome truncate ${info.saca ? "tv-nome-saque" : ""}`}>
+                        {info.nome}
                       </span>
-                    </div>
+                      {info.verificado && (
+                        <BadgeCheck
+                          className="h-3.5 w-3.5 shrink-0 text-emerald-400 md:h-5 md:w-5"
+                          aria-label="Identidade verificada pelo Flow"
+                        />
+                      )}
+                      {idx < arr.length - 1 && <span className="tv-dash">|</span>}
+                    </span>
                   )
                 })}
               </div>
 
-              {/* PLACAR — sets à esquerda, o ponto gigante à direita. */}
-              <div className="flex shrink-0 items-center gap-3 md:gap-6">
-                <div className="flex items-center gap-1.5 md:gap-3">
-                  {cols.map((c) => {
-                    const meu = side === "A" ? c.a : c.b
-                    return (
-                      <span
-                        key={c.setNum}
-                        className={`tv-set ${c.current ? "tv-set-atual" : ""} ${!c.played ? "tv-set-futuro" : ""}`}
-                      >
-                        {c.played ? meu : "–"}
-                        {c.tb && !c.current ? <sup className="text-[0.5em] opacity-70">tb</sup> : null}
-                      </span>
-                    )
-                  })}
-                </div>
-                <span className="tv-ponto">{finished ? (venceu ? "★" : "") : pointOf(side)}</span>
-              </div>
+              {/* O HERÓI: o ponto atual, sozinho e gigante. */}
+              <span className="tv-ponto">{finished ? (venceu ? "★" : "") : pointOf(side)}</span>
             </section>
           )
         })}
       </main>
 
-      {/* ASSINATURA — discreta, do tamanho de uma assinatura. */}
-      <footer className="flex shrink-0 items-center justify-center gap-1.5 py-1.5 opacity-40 md:py-2">
-        <span className="text-[9px] uppercase tracking-[0.25em] md:text-[10px]">Powered by</span>
-        <FlowWordmark size={13} variant="mono" />
+      {/* ================= FAIXA INFERIOR: o resumo + a marca ================= */}
+      <footer className="tv-faixa flex items-end justify-between gap-3 px-3 py-2 md:px-6 md:py-3">
+        {/* RESUMO no MESMO vocabulário das pílulas (avatar + nome), para as duas
+            faixas parecerem a mesma tela e não dois componentes empilhados. */}
+        <div className="flex min-w-0 flex-1 flex-col gap-1 md:gap-1.5">
+          {(["A", "B"] as Side[]).map((side) => (
+            <div key={side} className="flex min-w-0 items-center gap-2">
+              <span className="flex min-w-0 flex-1 items-center gap-1.5">
+                {slotsDoLado(side).map((slot, idx) => {
+                  const info = infoDoSlot(slot, side, idx)
+                  return (
+                    <PlayerAvatar
+                      key={slot}
+                      url={info.avatarUrl}
+                      nome={info.nome}
+                      size={18}
+                      className="md:!h-6 md:!w-6"
+                    />
+                  )
+                })}
+                <span className="truncate text-[11px] font-bold uppercase tracking-wide opacity-80 md:text-sm">
+                  {side === "A" ? nameA : nameB}
+                </span>
+              </span>
+              <span className="flex shrink-0 items-center gap-2 md:gap-3">
+                {cols.map((c) => (
+                  <span
+                    key={c.setNum}
+                    className={`w-4 text-center text-xs font-bold tabular-nums md:w-6 md:text-base ${
+                      !c.played ? "opacity-25" : c.current ? "opacity-100" : "opacity-70"
+                    }`}
+                  >
+                    {c.played ? (side === "A" ? c.a : c.b) : "–"}
+                  </span>
+                ))}
+              </span>
+            </div>
+          ))}
+        </div>
+
+        {/* A MARCA, canto inferior direito e CLICÁVEL: quem assiste a
+            transmissão de um amigo é exatamente quem ainda não conhece o Flow.
+            É o único elemento interativo da tela — e por isso não conflita com
+            "transmissão é exibição": ele não controla o jogo, abre a porta. */}
+        <Link
+          href="/"
+          data-flow-cta="placar-marca"
+          aria-label="Conhecer o Flow"
+          className="shrink-0 self-end opacity-70 transition-opacity hover:opacity-100"
+        >
+          <FlowWordmark size={18} />
+        </Link>
       </footer>
 
-      {/* Logo do PATROCINADOR: marca d'água discreta no rodapé-direito, com
-          "Oferecimento" (mesmo padrão da tela de fim de jogo). Cartão CLARO —
-          antes era preto translúcido — pelo mesmo motivo das outras duas telas:
-          o logo vem de fora e pode ter arte escura, que sumiria no preto. */}
+      {/* Logo do PATROCINADOR: marca d'água discreta, com "Oferecimento" (mesmo
+          padrão da tela de fim de jogo). Cartão CLARO — o logo vem de fora e
+          pode ter arte escura, que sumiria no preto.
+          ⚠️ Ancorado ACIMA da faixa inferior (bottom-16/bottom-20), não mais em
+          bottom-3: ali ele passaria por baixo do resumo e do logo Flow, que
+          agora ocupam aquele canto. */}
       {viewAd?.logoUrl && (
-        <div className="pointer-events-none absolute bottom-3 right-3 z-10 flex items-center gap-2">
+        <div className="pointer-events-none absolute bottom-16 right-3 z-10 flex items-center gap-2 md:bottom-20 md:right-6">
           <span className="text-[9px] md:text-[10px] font-bold uppercase tracking-[0.2em] opacity-55">
             Oferecimento
           </span>
