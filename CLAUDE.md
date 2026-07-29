@@ -430,6 +430,19 @@ ONDE USAR: mensagem CENTRAL do marketing e da landing (hoje a landing fala de pl
 
 Conecta com A CARTEIRINHA FLOW (a identidade que torna o convite desejável), com o funil de conversão silencioso (a assimetria visual) e com o convite do oponente (a porta que espalha fora do clube).
 
+## VISÃO Pro / monetização (registrada — NÃO implementar agora)
+**O MODELO**: usuário **Pro** por ~R$/US$ 5 por mês. Tudo que sempre foi grátis **continua grátis** — o Pro é um ADICIONAL de brilho e protagonismo, nunca um pedágio no que já existe.
+
+**O QUE O PRO COMPRA**: enviar uma **imagem de CORPO INTEIRO** (ou da cintura para cima, como os profissionais da ATP) para aparecer na transmissão e no telão. O grátis **também aparece no telão** — isso é inegociável, é o motor de rede —, só que com o avatar de rosto, mais simples.
+
+**POR QUE FUNCIONA**: monetiza **vaidade e protagonismo**, não uma funcionalidade essencial. Ninguém precisa disso para jogar, marcar ponto ou guardar o histórico — e é exatamente por isso que se paga de bom grado. Cobrar por algo aspiracional ("apareço como os pros") não quebra a rede; cobrar por algo necessário quebraria. O grátis segue completo e continua alimentando o crescimento.
+
+**TIMING — o ponto crítico**: a monetização é **DESTINO, não ponto de partida**. Exige, nesta ordem: (1) massa de usuários que já amam o grátis; (2) o valor do Pro **VISÍVEL** — as pessoas precisam VER o corpo inteiro de alguém no telão para querer o seu; (3) infraestrutura de pagamento recorrente. Ou seja: **construir o visual primeiro** (transmissão e telão bonitos, de graça), deixar as pessoas se apaixonarem, e só então o Pro vira um upgrade desejado. Cobrar antes da tração seria prematuro — e pior, tornaria o Pro invisível, porque ninguém teria visto o que está comprando.
+
+**O CUSTO REAL (não é trivial)**: a foto de corpo inteiro é um **SEGUNDO tipo de imagem**, além do avatar de rosto que já existe. Precisa de enquadramento próprio (cintura para cima), upload e gestão separados do avatar, e fundo tratado (recorte ou neutro) para não sujar o telão. É um fluxo "suba sua foto pro" **com curadoria**, não mais um campo de upload. Fica para quando a monetização for ativada.
+
+CONEXÃO: encaixa na estratégia já registrada de três modelos de receita (professor paga / clube paga / marca patrocina) como um QUARTO — o único que vem do **jogador final**, e o único que depende de escala de rede em vez de venda consultiva.
+
 ## Distribuição, parcerias e white-label (visão estratégica)
 O Flow foi construído com "superfícies de marca" que já existem (QR contextual, card de patrocinador na abertura, "Powered by Flow" clicável/rastreável, placar compartilhado, telão futuro). A mesma infraestrutura de sponsors que serve professor/clube serve parceiros comerciais — o Flow é WHITE-LABEL-READY sem reconstrução.
 
