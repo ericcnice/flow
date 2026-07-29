@@ -30,6 +30,7 @@ import { clubFromCacheOrBundle } from "@/lib/supabase/club-catalog"
 import { resolveSponsor, type Sponsor } from "@/lib/supabase/sponsors"
 import type { GameState, Side } from "@/lib/scoring/types"
 import { getLiveMatchState } from "@/lib/supabase/live-match"
+import { resolvePlayerCards, type PlayerCard } from "@/lib/supabase/player-cards"
 import { useRealtimeMatch } from "@/lib/hooks/use-realtime-match"
 
 // Ação de placar reconstruível por replay (idêntico ao /jogo — o motor não expõe
@@ -152,6 +153,32 @@ export function BroadcastScoreboard({
 // Nome exibido de um lado a partir do `players` da raiz do state, respeitando o
 // gameType: SÓ em "duplas" mostra o par "A/B"; em "simples" (ou ausente/default)
 // mostra apenas o jogador principal (blue1/red1) — nada de "/Jogador 2".
+/** Os quatro lugares, na ordem global (blue1=1 … red2=4). Espelha o /jogo. */
+type SlotKey = "blue1" | "blue2" | "red1" | "red2"
+const SLOTS: SlotKey[] = ["blue1", "blue2", "red1", "red2"]
+
+/** Os quatro nomes SOLTOS (o `teamName` junta; a T1b precisa deles separados). */
+function nomesDoState(players: any): Record<SlotKey, string> {
+  const out = { blue1: "", blue2: "", red1: "", red2: "" } as Record<SlotKey, string>
+  for (const k of SLOTS) out[k] = typeof players?.[k] === "string" ? players[k] : ""
+  return out
+}
+
+/** Os uuids por slot, filtrando lixo. Ausente = slot anônimo (o caso normal). */
+function idsDoState(playerIds: any): Partial<Record<SlotKey, string>> {
+  const out: Partial<Record<SlotKey, string>> = {}
+  for (const k of SLOTS) {
+    const v = playerIds?.[k]
+    if (typeof v === "string" && v) out[k] = v
+  }
+  return out
+}
+
+/** `initialServer` do state → {A,B} com 0|1 garantido (salas antigas não têm). */
+function normalizaServer(raw: any): { A: 0 | 1; B: 0 | 1 } {
+  return { A: raw?.A === 1 ? 1 : 0, B: raw?.B === 1 ? 1 : 0 }
+}
+
 function teamName(players: any, side: "blue" | "red", gameType?: string | null): string {
   const one = side === "blue" ? players?.blue1 : players?.red1
   const two = side === "blue" ? players?.blue2 : players?.red2
@@ -189,6 +216,41 @@ export function BroadcastView() {
   // Carteirinha por lado (Fatia 1a): quem tem profile_id no slot principal
   // ganha o tick. AUSENTE é o caso normal — jogo anônimo não muda em nada.
   const [verified, setVerified] = useState<{ A: boolean; B: boolean }>({ A: false, B: false })
+
+  // ===================== T1a: OS DOIS DADOS QUE FALTAVAM =====================
+  // Esta fatia SÓ TRAZ dado — a tela continua idêntica. A repaginação (T1b) usa
+  // o que está aqui. Separado de propósito: misturar "não aparece porque o dado
+  // não chegou" com "não aparece porque o CSS está errado" foi o que fez o
+  // diagnóstico do claim custar uma sessão inteira.
+
+  /**
+   * DADO 1 — as CARTEIRINHAS por slot (uuid → nome/foto).
+   *
+   * Antes, `playerIds` era reduzido a dois booleanos ("tem alguém verificado
+   * deste lado") e o uuid ia para o lixo — sem ele não há como buscar foto.
+   * Agora o mapa inteiro fica guardado, para os QUATRO slots (o `verified`
+   * continua existindo: é o que a tela de hoje consome, e não mudamos a tela).
+   */
+  const [slotIds, setSlotIds] = useState<Partial<Record<SlotKey, string>>>({})
+  const [cards, setCards] = useState<Map<string, PlayerCard>>(new Map())
+
+  /**
+   * DADO 2a — os QUATRO NOMES SEPARADOS.
+   *
+   * `teamName` junta "N1/N2" num string só, e de um string juntado não se
+   * destaca UM parceiro. A T1b precisa pintar o nome de QUEM SACA, então os
+   * nomes precisam existir soltos. Os `nameA`/`nameB` juntados seguem
+   * intactos — são eles que a tela de hoje desenha.
+   */
+  const [nomes, setNomes] = useState<Record<SlotKey, string>>({
+    blue1: "",
+    blue2: "",
+    red1: "",
+    red2: "",
+  })
+
+  /** DADO 2b — o sacador INDIVIDUAL por lado (0|1), que o broadcast ignorava. */
+  const [initialServer, setInitialServer] = useState<{ A: 0 | 1; B: 0 | 1 }>({ A: 0, B: 0 })
 
   const [elapsedTime, setElapsedTime] = useState("00:00:00")
   const [startTime, setStartTime] = useState<Date | null>(null)
@@ -272,12 +334,19 @@ export function BroadcastView() {
         if (rState.players && typeof rState.players === "object") {
           setNameA(teamName(rState.players, "blue", gt))
           setNameB(teamName(rState.players, "red", gt))
+          setNomes(nomesDoState(rState.players))
         }
         if (rState.playerIds && typeof rState.playerIds === "object") {
           setVerified({
             A: Boolean(rState.playerIds.blue1),
             B: Boolean(rState.playerIds.red1),
           })
+          // T1a: os QUATRO uuids, não só os dois booleanos. Em duplas a foto do
+          // parceiro também importa, e sem o id dele não há o que buscar.
+          setSlotIds(idsDoState(rState.playerIds))
+        }
+        if (rState.initialServer && typeof rState.initialServer === "object") {
+          setInitialServer(normalizaServer(rState.initialServer))
         }
 
         rebuildEngine(rRules, rFirst, cleanActions)
@@ -319,6 +388,7 @@ export function BroadcastView() {
     if (rt.remotePlayers && typeof rt.remotePlayers === "object") {
       setNameA(teamName(rt.remotePlayers, "blue", gameType))
       setNameB(teamName(rt.remotePlayers, "red", gameType))
+      setNomes(nomesDoState(rt.remotePlayers))
     }
     // Quem REIVINDICA vence e a ausência nunca apaga: só ligamos o tick, nunca
     // desligamos por um patch que veio sem a chave.
@@ -327,6 +397,10 @@ export function BroadcastView() {
         A: prev.A || Boolean(rt.remotePlayerIds.blue1),
         B: prev.B || Boolean(rt.remotePlayerIds.red1),
       }))
+      setSlotIds(idsDoState(rt.remotePlayerIds))
+    }
+    if (rt.remoteInitialServer && typeof rt.remoteInitialServer === "object") {
+      setInitialServer(normalizaServer(rt.remoteInitialServer))
     }
     if (rt.remoteTheme) setTheme(rt.remoteTheme as ThemeId)
 
@@ -347,7 +421,15 @@ export function BroadcastView() {
     }
     if (needRebuild) rebuildEngine(nextRules, nextFirst, actionsRef.current)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rt.remotePlayers, rt.remotePlayerIds, rt.remoteFirstServer, rt.remoteRules, rt.remoteTheme, gameType])
+  }, [
+    rt.remotePlayers,
+    rt.remotePlayerIds,
+    rt.remoteInitialServer,
+    rt.remoteFirstServer,
+    rt.remoteRules,
+    rt.remoteTheme,
+    gameType,
+  ])
 
   // Cronômetro (mesmo padrão do /jogo).
   useEffect(() => {
@@ -363,6 +445,56 @@ export function BroadcastView() {
     }, 1000)
     return () => clearInterval(timer)
   }, [startTime])
+
+  /**
+   * T1a — resolve as CARTEIRINHAS (nome canônico + foto) dos slots identificados.
+   *
+   * Mesma RPC pública que a tela de jogo usa (`get_public_player_cards`), que já
+   * tem grant a `anon` justamente para a jornada pública — o espectador não tem
+   * sessão, e é por isso que só esta via serve: aqui TODO MUNDO é terceiro, não
+   * existe o atalho de "ler o próprio profile" que o dono tem no /jogo.
+   *
+   * Não-bloqueante e tolerante: sem ids não toca a rede; offline/erro devolve
+   * vazio e a T1b cai na inicial do nome. A chave do effect é a LISTA de ids
+   * (string ordenada), não o objeto — assim um broadcast que não mexeu em
+   * identidade nenhuma não redispara a busca.
+   */
+  const chaveIds = SLOTS.map((k) => slotIds[k] ?? "").join(",")
+  useEffect(() => {
+    const ids = chaveIds.split(",").filter(Boolean)
+    if (ids.length === 0) {
+      setCards(new Map())
+      return
+    }
+    let alive = true
+    void (async () => {
+      // O callback cobre a revalidação de fundo (stale-while-revalidate): se a
+      // foto mudou desde o último jogo, a transmissão atualiza sozinha.
+      const resolvidas = await resolvePlayerCards(ids, (frescas) => {
+        if (alive) setCards(new Map(frescas))
+      })
+      if (alive) setCards(resolvidas)
+    })()
+    return () => {
+      alive = false
+    }
+  }, [chaveIds])
+
+  /**
+   * T1a — QUAL PARCEIRO saca (0|1), por lado. O broadcast já sabia o LADO
+   * (`displayServer`), mas em DUPLAS isso não diz qual dos dois está sacando.
+   *
+   * Mesma derivação da tela de jogo, e ela é derivação porque o motor só alterna
+   * o LADO: dentro do lado, os parceiros se revezam a cada vez que o time volta
+   * a sacar — `floor(games do set / 2)` par → o inicial, ímpar → o parceiro.
+   * Simples e tiebreak ficam no índice inicial.
+   */
+  const serverPlayerIdx = (side: Side): 0 | 1 => {
+    const init = initialServer[side]
+    if (gameType !== "duplas" || !gameState || gameState.isTiebreak) return init
+    const gamesNoSet = gameState.A.games + gameState.B.games
+    return (Math.floor(gamesNoSet / 2) % 2 === 0 ? init : 1 - init) as 0 | 1
+  }
 
   // Resolve o patrocinador quando o `&ad=` da URL chega (o effect de carga o
   // preenche). null enquanto resolve e null quando não há — a guarda de render
@@ -422,6 +554,18 @@ export function BroadcastView() {
     <div
       className={`relative flex flex-col h-[100dvh] overflow-hidden mono-tabular ${themeClassName(theme)}`}
       style={{ backgroundColor: "var(--palco-fundo)", color: "var(--palco-discreto)" } as CSSProperties}
+      /* JANELA DE INSPEÇÃO da T1a — invisível na tela, legível no DevTools.
+         Esta fatia não muda NADA visualmente, então sem isto não haveria como
+         verificar se os dados chegaram sem espalhar console.log. Some na T1b,
+         quando os mesmos dados passarem a ser desenhados de verdade. */
+      data-t1a-cards={SLOTS.map((k) => {
+        const id = slotIds[k]
+        if (!id) return `${k}:-`
+        const c = cards.get(id)
+        return `${k}:${c ? (c.avatarUrl ? "foto" : "sem-foto") : "carregando"}`
+      }).join(" ")}
+      data-t1a-nomes={SLOTS.map((k) => `${k}:${nomes[k] || "-"}`).join(" ")}
+      data-t1a-saque={`A:${serverPlayerIdx("A")} B:${serverPlayerIdx("B")} lado:${displayServer(gs)}`}
     >
       {/* Logo do CLUBE: topo-centro, discreto, estilo Wimbledon/US Open (mesmo
           padrão da abertura e do topo do placar do /jogo). */}
