@@ -352,6 +352,23 @@ CAMINHO: a idade-limite vira CONFIGURAÇÃO. Antes de baixar de 18, VALIDAÇÃO 
 
 Este é um dos pontos mais sensíveis da revisão jurídica (art. 14) — reforçar na lista de revisão dos T&C.
 
+## Menores — o CONVITE DO RESPONSÁVEL: boa base, insuficiente sozinha
+IDEIA (Eric): reaproveitar o mecanismo de convite que já existe (o roster do professor — a Ana convida alunos) para que o **RESPONSÁVEL convide os filhos como DEPENDENTES** (tag "dependente"), materializando o consentimento parental. Somado a um ajuste no T&C dizendo que a responsabilidade é do pai que convidou.
+
+AVALIAÇÃO — a intuição está na DIREÇÃO CERTA e vira a camada 1. Mas duas coisas precisam ficar escritas, porque são fáceis de supor erradas:
+
+1. **O T&C NÃO transfere responsabilidade legal.** A LGPD (art. 14) exige o consentimento parental, mas a responsabilidade recai sobre **quem TRATA os dados** — e quem trata é o Flow, o controlador. Uma cláusula dizendo "a responsabilidade é do pai" não é escudo: o dever de proteger o dado do menor continua sendo nosso, com ou sem aceite dele.
+2. **CONSENTIMENTO ≠ PROTEÇÃO — e este é o ponto maior que o legal.** O consentimento do pai autoriza o CADASTRO; ele **não torna seguro** expor foto e nome de uma criança numa transmissão pública e num histórico. Permissão e proteção são coisas diferentes, e só a primeira o convite resolve. Um produto que confunde as duas fica juridicamente defensável e concretamente perigoso.
+
+CAMINHO CERTO — **três camadas**, não só T&C:
+1. **Consentimento verificável** pelo convite do responsável (a ideia do Eric — boa base, e reaproveita infra que já existe);
+2. **MODO PROTEGIDO para o dependente-menor**: foto e nome NÃO vão para a transmissão pública (ou só apelido/inicial), e o responsável controla a exposição. É esta camada que o convite sozinho não entrega;
+3. **Validação JURÍDICA real** (LGPD + menores) antes de ligar. Consulta barata perto do que protege.
+
+DECISÃO: **NÃO ligar acesso de menores só com convite + T&C.** O risco legal e o de exposição da criança são grandes demais para o esforço que se economiza. Vira **fatia de produto dedicada** (consentimento + modo protegido + jurídico), pós-v1.
+
+TESTE COM O FILHO/AMIGOS AGORA: segue liberado em **contexto controlado** — Eric presente, contas que ele mesmo gerencia, privado. O que não se abre é o acesso de menores em geral.
+
 ## Furo de proteção de menores descoberto no QA da B.1c (tratar na B.2)
 TESTE REAL (William, conta de menor no Google Family Link): revelou dois problemas de ORDEM/proteção que a B.2 deve fechar:
 
