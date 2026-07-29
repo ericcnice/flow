@@ -229,6 +229,30 @@ TRÊS CAMINHOS (não excludentes): (a) quem entra ESCOLHE o lado ao chegar; (b) 
 CONEXÃO COM A TROCA DE JOGADORES: reforça e reprioriza. A troca deixa de ser "Rei da Quadra, nice-to-have" e passa a ser **o conserto de um jogo montado errado** — que é uma necessidade, não um luxo. MAS a decisão anterior continua valendo: a troca é DESTRUTIVA (reset + novo sorteio de saque), então ícone ⇄ + ConfirmModal, NUNCA gesto casual. Pós-v1, com prioridade maior.
 
 NOTA para quem for implementar (a): o caminho (a) é o mais barato dos três e não é destrutivo — escolher o lado ANTES de ocupar não zera nada, porque ainda não há placar. Pode chegar antes da troca, e reduz a frequência com que a troca é necessária.
+→ O caminho (a) TEM DESENHO DEFINITIVO na seção seguinte. Ler antes de implementar.
+
+## RESOLUÇÃO da Nuance 1 — o dono é RÍGIDO, os outros escolhem o RELACIONAMENTO
+Desenho DEFINITIVO (Eric) para "como a pessoa escolhe o lado". Substitui as opções genéricas discutidas antes; é a materialização do caminho (a) da seção acima.
+
+**1. O DONO É RÍGIDO.** Quem organizou e compartilhou o QR entra AUTOMATICAMENTE no **A1** (`blue1`). Ponto — sem escolher slot. ⚠️ Isto REMOVE uma liberdade que existe hoje: o carimbo slot↔login permite ao dono pedir qualquer slot. Essa liberdade sai (para o dono; os outros continuam decidindo).
+
+**2. OS OUTROS TRÊS NÃO ESCOLHEM SLOT — escolhem RELACIONAMENTO.** Ao escanear, veem uma pergunta humana: *"Sou parceiro do [nome do dono]"* ou *"Sou oponente"*. Ninguém pensa em `blue2`/`red1` (abstrato); pensa em **com quem joga**.
+
+**3. O SISTEMA TRADUZ relacionamento → slot:** "parceiro do Eric" → **A2**; "oponente" → **lado B** (B1 ou B2, ordem indiferente entre eles).
+
+**A CHAVE, e é o que faz o desenho fechar:** o RIGOR no dono é o que dá SIGNIFICADO ao "parceiro do Eric" para todos os outros. Sem âncora fixa, "parceiro de quem?" não teria resposta estável e a pergunta humana seria impossível. A rigidez num ponto é o que compra simplicidade em todos os outros — não é uma restrição, é o alicerce.
+
+POR QUE RESOLVE TUDO DE UMA VEZ:
+- **(a) mata a race condition** — "parceiro" tem UM destino (A2) e "oponente" tem um LADO (a ordem entre B1/B2 é irrelevante). Some a disputa por "o próximo livre";
+- **(b) mata o time errado POR CONSTRUÇÃO** — o adversário escolhe "oponente" e nunca pode cair no time do dono. Não é validação nem conserto: o caso deixa de existir;
+- **(c) ataca a duplicação** — dono fixo no A1 não se espalha, e passam a existir regras explícitas de quem-pode-onde (hoje não há nenhuma);
+- **(d) é MELHOR UX** — "parceiro do Eric ou oponente?" se responde num instante; escolher um slot abstrato, não.
+
+A pergunta pode ser personalizada com o nome do dono ("parceiro da Ana?", "parceiro do Caio?") — calorosa e específica, em vez de genérica.
+
+NUANCES já resolvidas: **simples** = A1 vs B1 (a pergunta some ou vira trivial); **duplas** = A1+A2 vs B1+B2. Sobra uma **micro-race** no A2 e dentro do lado B — ordem de chegada SÓ entre pessoas do MESMO lado, onde o resultado é indiferente (são parceiros de qualquer forma).
+
+QUANDO: **primeiro item com a mente fresca.** Mexe no MODELO DE REIVINDICAÇÃO DE SLOTS — vizinho direto da 1c.1, do carimbo e do Lamport, a zona que já custou uma regressão e um revert nesta base. QA pesado e revert no gatilho.
 
 ## Modelo de identidade e negócio (Login Fase A)
 - **Hierarquia**: **Player** (todos; role padrão criado pela trigger `handle_new_user` no signup) → **Coach** (o super_admin promove via `members.role='coach'` no dashboard) → **Coach com marca+patrocinador no QR** (fatia futura; reusa `sponsors.member_id` apontando pro coach).
