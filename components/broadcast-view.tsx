@@ -34,6 +34,7 @@ import { resolvePlayerCards, type PlayerCard } from "@/lib/supabase/player-cards
 import Link from "next/link"
 import { PlayerAvatar } from "@/components/player-avatar"
 import { FlowWordmark } from "@/components/brand/flow-wordmark"
+import { FlowMark } from "@/components/brand/flow-mark"
 import { useRealtimeMatch } from "@/lib/hooks/use-realtime-match"
 
 // Ação de placar reconstruível por replay (idêntico ao /jogo — o motor não expõe
@@ -159,6 +160,18 @@ export function BroadcastScoreboard({
 /** Os quatro lugares, na ordem global (blue1=1 … red2=4). Espelha o /jogo. */
 type SlotKey = "blue1" | "blue2" | "red1" | "red2"
 const SLOTS: SlotKey[] = ["blue1", "blue2", "red1", "red2"]
+
+/**
+ * Nome ABREVIADO para o rodapé: "Eric Nice" → "E. Nice", "Jogador 2" → "J. 2".
+ * O rodapé tem quatro nomes competindo com os sets numa linha; por extenso eles
+ * truncavam no meio ("E. NICE / PLAY…") e a dupla ficava ilegível. Abreviar o
+ * PRIMEIRO nome preserva o que identifica (o sobrenome) e cabe.
+ */
+function abreviar(nome: string): string {
+  const partes = (nome ?? "").trim().split(/\s+/).filter(Boolean)
+  if (partes.length < 2) return partes[0] ?? ""
+  return `${partes[0][0].toUpperCase()}. ${partes.slice(1).join(" ")}`
+}
 
 /** Os quatro nomes SOLTOS (o `teamName` junta; a T1b precisa deles separados). */
 function nomesDoState(players: any): Record<SlotKey, string> {
@@ -713,12 +726,16 @@ export function BroadcastView() {
                   // O 2º parceiro é ESPELHADO: nome primeiro, avatar na ponta
                   // direita. É o que faz os dois rostos emoldurarem a pílula.
                   return (
-                    <span
-                      key={slot}
-                      className={`flex min-w-0 flex-1 items-center gap-1.5 md:gap-2 ${
-                        ultimo ? "flex-row-reverse" : ""
-                      }`}
-                    >
+                    <span key={slot} className="contents">
+                      {/* O TRAÇO entre os dois nomes, e não no canto: ali ele
+                          não separava nada. Renderizado ANTES do 2º parceiro
+                          para cair exatamente no meio da pílula. */}
+                      {idx > 0 && <span className="tv-dash">|</span>}
+                      <span
+                        className={`flex min-w-0 flex-1 items-center gap-1.5 md:gap-2 ${
+                          ultimo ? "flex-row-reverse" : ""
+                        }`}
+                      >
                       <PlayerAvatar
                         url={info.avatarUrl}
                         nome={info.nome}
@@ -741,11 +758,11 @@ export function BroadcastView() {
                           />
                         )}
                         {info.saca && <span className="tv-bola" aria-label="saque" />}
+                        </span>
                       </span>
                     </span>
                   )
                 })}
-                {slots.length > 1 && <span className="tv-dash order-none">|</span>}
               </div>
 
               {/* O HERÓI ocupa TODO o resto do lado, centralizado. */}
@@ -765,25 +782,48 @@ export function BroadcastView() {
             as duas faixas parecerem a mesma tela. */}
         <div className="tv-resumo">
           {(["A", "B"] as Side[]).map((side) => {
-            const primeiro = slotsDoLado(side)[0]
-            const info = infoDoSlot(primeiro, side, 0)
+            const slots = slotsDoLado(side)
             return (
               <div key={side} className="flex items-center gap-2 md:gap-3">
-                <PlayerAvatar
-                  url={info.avatarUrl}
-                  nome={info.nome}
-                  iniciais={info.iniciais}
-                  size={20}
-                  className="md:!h-7 md:!w-7"
-                />
-                <span className="w-28 truncate text-[11px] font-bold uppercase tracking-wide opacity-85 md:w-56 md:text-sm">
-                  {side === "A" ? nameA : nameB}
+                {/* O ESCUDO DO CLUBE como avatar do TIME. Antes era a foto do 1º
+                    jogador — e o 2º ficava sem nada, o que dava a impressão de
+                    que a linha era de uma pessoa, não de uma dupla. O escudo é
+                    institucional e vale para os dois nomes.
+                    Sem clube (jogo avulso/praia) entra o "w" da marca, que é a
+                    regra registrada para o lugar do logo quando não há contexto. */}
+                {viewClub?.logo ? (
+                  <span className="relative aspect-square h-5 shrink-0 overflow-hidden rounded-full ring-1 ring-white/20 md:h-7">
+                    <Image src={viewClub.logo} alt={viewClub.nome} fill sizes="28px" className="object-cover" />
+                  </span>
+                ) : (
+                  <FlowMark size={20} className="shrink-0 opacity-70 md:!h-7 md:!w-7" />
+                )}
+
+                {/* NOMES ABREVIADOS, um <span> por jogador — precisam ser
+                    separados para o sacador poder ficar amarelo aqui também. */}
+                <span className="flex w-32 min-w-0 items-center gap-1 md:w-64">
+                  {slots.map((slot, idx) => {
+                    const info = infoDoSlot(slot, side, idx)
+                    return (
+                      <span key={slot} className="flex min-w-0 items-center gap-1">
+                        {idx > 0 && <span className="shrink-0 opacity-40">/</span>}
+                        <span
+                          className={`truncate text-[11px] font-bold uppercase tracking-wide md:text-sm ${
+                            info.saca ? "tv-nome-saque" : "text-white/85"
+                          }`}
+                        >
+                          {abreviar(info.nome)}
+                        </span>
+                      </span>
+                    )
+                  })}
                 </span>
+
                 {cols.map((c) => (
                   <span
                     key={c.setNum}
                     className={`w-4 shrink-0 text-center text-xs font-bold tabular-nums md:w-7 md:text-lg ${
-                      !c.played ? "opacity-25" : c.current ? "tv-nome-saque" : "opacity-75"
+                      !c.played ? "opacity-25" : c.current ? "tv-nome-saque" : "text-white/75"
                     }`}
                   >
                     {c.played ? (side === "A" ? c.a : c.b) : "–"}
@@ -808,23 +848,26 @@ export function BroadcastView() {
         </Link>
       </footer>
 
-      {/* Logo do PATROCINADOR: marca d'água discreta, com "Oferecimento" (mesmo
-          padrão da tela de fim de jogo). Cartão CLARO — o logo vem de fora e
-          pode ter arte escura, que sumiria no preto.
-          ⚠️ Ancorado ACIMA da faixa inferior (bottom-16/bottom-20), não mais em
-          bottom-3: ali ele passaria por baixo do resumo e do logo Flow, que
-          agora ocupam aquele canto. */}
+      {/* ============ FAIXA DO PATROCINADOR — espaço próprio, na base ========
+          Antes ele FLUTUAVA sobre o canto inferior direito, por cima do lado B
+          — invadia a dupla e o número, e uma marca paga não deve competir com o
+          jogo nem atrapalhá-lo. Agora tem uma faixa SÓ dela, no rodapé de tudo,
+          com o logo CENTRALIZADO: sai de cima do placar e ganha um lugar nobre,
+          que é o que um patrocinador compra.
+
+          Só existe quando HÁ patrocinador — sem ele a faixa nem renderiza, e o
+          placar recupera a altura inteira. */}
       {viewAd?.logoUrl && (
-        <div className="pointer-events-none absolute bottom-16 right-3 z-10 flex items-center gap-2 md:bottom-20 md:right-6">
-          <span className="text-[9px] md:text-[10px] font-bold uppercase tracking-[0.2em] opacity-55">
-            Oferecimento
-          </span>
-          <div className="rounded-lg bg-white p-1.5 shadow-md ring-1 ring-black/5">
-            <div className="relative h-8 md:h-10 w-24 md:w-28">
-              <Image src={viewAd.logoUrl} alt={viewAd.name} fill sizes="120px" className="object-contain" />
+        <section className="tv-faixa flex shrink-0 items-center justify-center px-3 py-2 md:py-3">
+          <div className="flex items-center gap-3 rounded-xl bg-white px-4 py-1.5 shadow-md ring-1 ring-black/5 md:gap-4 md:px-6 md:py-2">
+            <span className="shrink-0 text-[9px] font-bold uppercase tracking-[0.18em] text-neutral-500 md:text-[11px]">
+              Oferecimento
+            </span>
+            <div className="relative h-7 w-24 md:h-10 md:w-36">
+              <Image src={viewAd.logoUrl} alt={viewAd.name} fill sizes="144px" className="object-contain" />
             </div>
           </div>
-        </div>
+        </section>
       )}
     </div>
   )

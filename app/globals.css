@@ -523,17 +523,21 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* NOME: BRANCO, sempre. Antes ele herdava a cor do lado (--lado-*-texto), que
+   em alguns temas já é amarela — resultado: todo mundo dourado, e o amarelo do
+   saque não significava nada. Fixar o branco devolve contraste sobre o azul E
+   devolve PODER ao sinal: amarelo passa a querer dizer uma coisa só. */
 .tv-nome {
   font-weight: 800;
   text-transform: uppercase;
   letter-spacing: 0.02em;
   font-size: clamp(0.95rem, 2.4vw, 1.9rem);
   line-height: 1.1;
-  opacity: 0.55; /* quem NÃO saca recua */
+  color: #ffffff;
+  opacity: 0.92;
 }
-/* QUEM SACA: amarelo de bola de tênis + opacidade cheia. O par (cor + peso de
-   presença) é o que faz o sinal sobreviver aos temas em que o texto do lado já
-   é amarelo — lá quem separa é a opacidade, não o matiz. */
+/* QUEM SACA: o amarelo da bola. Cor + opacidade cheia — o par sobrevive a
+   qualquer tema porque não depende do matiz do fundo. */
 .tv-nome-saque {
   opacity: 1;
   color: #fee100;
