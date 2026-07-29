@@ -146,6 +146,21 @@ CORES OFICIAIS DA MARCA (usar em materiais, no site e no app):
 
 O "w" é o que preenche o lugar do logo quando não há clube/patrocinador no contexto (jogo avulso/praia) — hoje aquele espaço é um espaçador invisível na pílula do placar.
 
+## Marca na transmissão: LOCAL (anfitrião) × FILIAÇÃO (dos jogadores)
+PERCEPÇÃO (Eric): hoje o escudo do clube aparece **no MEIO dos dois jogadores** na tela de jogo — posicionado como se representasse OS JOGADORES, não o LOCAL. O mesmo logo faz **dois papéis ao mesmo tempo**: o lugar onde o jogo acontece E a filiação de quem joga.
+
+POR QUE NINGUÉM NOTOU AINDA: no jogo casual — todos do mesmo clube, jogando naquele clube — os dois papéis **coincidem**, e a ambiguidade é invisível. Ela só se revela no **INTERCLUBES**, quando se separam: dupla do SPAC contra dupla do Flow, numa quadra que pode não ser de nenhum dos dois. Aí "de quem é esse escudo?" vira uma pergunta com resposta errada.
+
+ARQUITETURA CERTA (futura) — **dois papéis, dois lugares**:
+- **LOCAL / anfitrião** → topo, central, UM só. *"Este jogo é no SPAC"* / *"transmitido via Flow"*. É o contexto do evento.
+- **FILIAÇÃO** → por lado/jogador, o escudo do clube de cada dupla junto ao nome. É a identidade dos competidores — e é o que produz o "SPAC vs Flow" no estilo de seleções, que fica lindo no interclubes.
+
+Cada contexto usa o que faz sentido: casual = só o local no topo; interclubes = local no topo **+** filiação por lado.
+
+DECISÃO PARA AGORA (transmissão T1): usar **SÓ a marca do LOCAL/contexto** no topo central (o escudo do clube, como o `/placar` já faz) + "powered by Flow" discreto. **NÃO colar o escudo nos jogadores** — é justamente o que cria a ambiguidade. A filiação por lado é camada FUTURA, do interclubes. Não implementar agora.
+
+NOTA de implementação futura: o schema já tem uma ponta disso — `GameConfig.visitorClubLogo` ("logo do clube VISITANTE, slot interclubes futuro", hoje sem UI). Quando a filiação por lado for construída, é o campo a reaproveitar em vez de inventar outro.
+
 ## Onde a foto do jogador aparece (regra: função, não decoração) — decisão Eric
 A foto/avatar aparece SÓ onde tem função; NUNCA polui a tela de trabalho.
 - SCOREBOARD (marcar pontos): SEM foto. Jogadores e juiz já conhecem os nomes; a foto não ajuda a marcar ponto e polui a tela deliberadamente enxuta (o exercício de tirar ícones p/ o settings). O tick verde da 1a pode ficar (é sutil), mas foto NÃO.
