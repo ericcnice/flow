@@ -166,6 +166,7 @@ function AbaPlayers({
   perfilHref,
   onSalvar,
   onLogin,
+  loginSlots,
   entrarUrl,
 }: {
   duplas: boolean
@@ -179,6 +180,8 @@ function AbaPlayers({
   onSalvar: () => void
   /** Deslogado: "este slot sou eu". Ausente = logado (ou sem auth) → sem convite. */
   onLogin?: (slot: SetupSlotKey) => void
+  /** Slots que podem oferecer o login. Ausente = todos (o convidado escolhe). */
+  loginSlots?: SetupSlotKey[]
   entrarUrl?: string
 }) {
   const linha = (slot: SetupSlotKey, label: string) => (
@@ -192,7 +195,9 @@ function AbaPlayers({
       preview={previews?.[slot] ?? null}
       perfilHref={perfilHref}
       linkPerfil
-      onLogin={onLogin ? () => onLogin(slot) : undefined}
+      onLogin={
+        onLogin && (!loginSlots || loginSlots.includes(slot)) ? () => onLogin(slot) : undefined
+      }
     />
   )
 
@@ -277,6 +282,7 @@ export function SportSetup({
   onGameTypeChange,
   entrarUrl,
   onSlotLogin,
+  loginSlots,
   initialTab = "jogo",
   onConfirm,
   onClose,
@@ -330,6 +336,14 @@ export function SportSetup({
    * identidade cair NESTE lugar e não em "o próximo livre".
    */
   onSlotLogin?: (slot: SetupSlotKey) => void
+  /**
+   * Onde o convite de login PODE aparecer. Ausente = em todos os slots livres.
+   *
+   * Serve ao DONO: quem criou o jogo entra sempre no A1, então oferecer-lhe
+   * "entrar" no Player 3 é convidar a se espalhar pelo placar — foi um dos
+   * caminhos que produziram a mesma pessoa em dois slots.
+   */
+  loginSlots?: SetupSlotKey[]
   /**
    * Aba em que a tela ABRE. O botão Ajustes entra por "jogo"; tocar uma pílula
    * de jogador entrará por "players" (fatia d). Default "jogo" — por isso o
@@ -532,6 +546,7 @@ export function SportSetup({
               previews={playerPreviews}
               perfilHref={perfilHref}
               onSalvar={salvarNomes}
+              loginSlots={loginSlots}
               onLogin={
                 onSlotLogin
                   ? (slot) => {

@@ -2453,7 +2453,39 @@ export default function JogoPage() {
     const cur = gameConfigRef.current
     if (!cur) return
     const players = { ...cur.players, [slot]: nome }
-    const playerIds = { ...(cur.playerIds ?? {}), [slot]: uid }
+
+    // UMA PESSOA = UM SLOT. Antes esta linha era um spread com uma chave a mais
+    // — ela ACRESCENTAVA o id no slot novo e deixava o antigo intacto, então a
+    // mesma pessoa aparecia em DOIS lugares (o print do Eric: Player 1 e Player
+    // 3, os dois com foto e tick). Reivindicar agora MOVE: o id sai de onde
+    // estiver e passa a existir só no slot pedido.
+    //
+    // TERCEIROS PRESERVADOS: só as chaves com ESTE uid são descartadas; a
+    // carteirinha de qualquer outra pessoa é copiada como está.
+    const playerIds: NonNullable<GameConfig["playerIds"]> = {}
+    for (const [k, v] of Object.entries(cur.playerIds ?? {})) {
+      if (v && v !== uid) playerIds[k as SlotKey] = v
+    }
+    playerIds[slot] = uid
+
+    // ⚠️ NÍVEL A, DE PROPÓSITO — escopo consciente, não esquecimento.
+    //
+    // Isto corrige o estado LOCAL e o que ESTE aparelho ENVIA: o set_config sai
+    // com o mapa já correto, e o servidor o adota por inteiro (o `state || patch`
+    // substitui a chave `playerIds`).
+    //
+    // O QUE NÃO CORRIGE: outro aparelho que já tenha o fantasma não vai apagá-lo,
+    // porque o merge de `playerIds` (ver applyLocalConfig) é ADITIVO por desenho
+    // — "a ausência no patch NUNCA apaga o que já existe". Fazer a remoção
+    // propagar exige remoção EXPLÍCITA (null = apagar) e, junto, ordenação para
+    // `playerIds` — sem versão, um payload atrasado ressuscitaria o id. É o
+    // mesmo problema que o Lamport resolveu para `players`, e por isso é fatia
+    // DEDICADA (Nível B), não um puxadinho nesta.
+    //
+    // NÃO QUEBRA NADA DE HOJE: a 1c.1 só chega aqui com a guarda (c) satisfeita
+    // (o id não está em slot nenhum) → o laço não encontra nada e o resultado é
+    // idêntico ao anterior. O prefill do dono nem passa por aqui (usa
+    // aplicarNomeDono). E o Lamport versiona `players`, não `playerIds`.
     const newConfig: GameConfig = { ...cur, players, playerIds }
     setGameConfig(newConfig)
     gameConfigRef.current = newConfig
@@ -3772,6 +3804,16 @@ export default function JogoPage() {
                vai: os slots renderizam exatamente como antes. E o inviolável
                fica de pé — o campo de nome continua ali, do mesmo tamanho, para
                quem não quer conta nenhuma. */
+            /* O DONO SÓ LOGA NO A1. Quem criou o jogo neste aparelho entra
+               sempre no blue1 (é o que o prefill faz), então oferecer-lhe
+               "entrar" no Player 3 seria convidar a se espalhar pelo placar —
+               um dos caminhos que produziram a mesma pessoa em dois slots.
+               A posse é detectada como no prefill: sem `match` na URL = o jogo
+               nasceu aqui. CONVIDADO (com `match`) segue vendo o convite em
+               todos os slots livres — restringi-lo depende da pergunta
+               "parceiro ou oponente?", que é a fatia seguinte.
+               O INPUT DE NOME não muda em slot nenhum: só o LOGIN é restrito. */
+            loginSlots={searchParams.get("match") ? undefined : ["blue1"]}
             onSlotLogin={
               authUser
                 ? undefined
