@@ -31,6 +31,8 @@ import { resolveSponsor, type Sponsor } from "@/lib/supabase/sponsors"
 import type { GameState, Side } from "@/lib/scoring/types"
 import { getLiveMatchState } from "@/lib/supabase/live-match"
 import { resolvePlayerCards, type PlayerCard } from "@/lib/supabase/player-cards"
+import { PlayerAvatar } from "@/components/player-avatar"
+import { FlowWordmark } from "@/components/brand/flow-wordmark"
 import { useRealtimeMatch } from "@/lib/hooks/use-realtime-match"
 
 // Ação de placar reconstruível por replay (idêntico ao /jogo — o motor não expõe
@@ -550,76 +552,149 @@ export function BroadcastView() {
   const viewClub = clube ? clubFromCacheOrBundle(clube) : null
   const winnerName = gs.winner === "B" ? nameB : gs.winner === "A" ? nameA : ""
 
+  // Os slots de cada lado, no formato atual. Em simples só o primeiro joga.
+  const slotsDoLado = (side: Side): SlotKey[] =>
+    side === "A"
+      ? gameType === "duplas"
+        ? ["blue1", "blue2"]
+        : ["blue1"]
+      : gameType === "duplas"
+        ? ["red1", "red2"]
+        : ["red1"]
+
+  /** Tudo que a linha de um jogador precisa, já com os fallbacks resolvidos. */
+  const infoDoSlot = (slot: SlotKey, side: Side, idx: number) => {
+    const id = slotIds[slot]
+    const card = id ? cards.get(id) : undefined
+    // O nome CANÔNICO do perfil ganha do string do state quando existe: é o que
+    // a pessoa editou no /perfil, e o state pode carregar um apelido antigo.
+    const bruto = (card?.displayName || nomes[slot] || "").trim()
+    const rotulo =
+      gameType === "duplas"
+        ? `Jogador ${side === "A" ? idx + 1 : idx + 3}`
+        : `Jogador ${side === "A" ? 1 : 2}`
+    return {
+      nome: bruto || rotulo,
+      avatarUrl: card?.avatarUrl ?? null,
+      verificado: Boolean(id),
+      // SÓ o parceiro que saca fica amarelo — é para isto que a T1a trouxe o
+      // serverPlayerIdx. Em simples o índice é sempre 0.
+      saca: displayServer(gs) === side && serverPlayerIdx(side) === idx,
+    }
+  }
+
   return (
     <div
-      className={`relative flex flex-col h-[100dvh] overflow-hidden mono-tabular ${themeClassName(theme)}`}
-      style={{ backgroundColor: "var(--palco-fundo)", color: "var(--palco-discreto)" } as CSSProperties}
-      /* JANELA DE INSPEÇÃO da T1a — invisível na tela, legível no DevTools.
-         Esta fatia não muda NADA visualmente, então sem isto não haveria como
-         verificar se os dados chegaram sem espalhar console.log. Some na T1b,
-         quando os mesmos dados passarem a ser desenhados de verdade. */
-      data-t1a-cards={SLOTS.map((k) => {
-        const id = slotIds[k]
-        if (!id) return `${k}:-`
-        const c = cards.get(id)
-        return `${k}:${c ? (c.avatarUrl ? "foto" : "sem-foto") : "carregando"}`
-      }).join(" ")}
-      data-t1a-nomes={SLOTS.map((k) => `${k}:${nomes[k] || "-"}`).join(" ")}
-      data-t1a-saque={`A:${serverPlayerIdx("A")} B:${serverPlayerIdx("B")} lado:${displayServer(gs)}`}
+      className={`relative flex h-[100dvh] flex-col overflow-hidden mono-tabular ${themeClassName(theme)}`}
+      style={{ backgroundColor: "var(--palco-fundo)", color: "var(--palco-texto)" } as CSSProperties}
     >
-      {/* Logo do CLUBE: topo-centro, discreto, estilo Wimbledon/US Open (mesmo
-          padrão da abertura e do topo do placar do /jogo). */}
-      {viewClub?.logo && (
-        <div className="pointer-events-none absolute top-3 left-1/2 -translate-x-1/2 z-10">
-          <div className="relative aspect-square h-12 md:h-16 rounded-full overflow-hidden ring-1 ring-white/15 shadow-md">
+      {/* FAIXA DE CONTEXTO — o LOCAL, e só ele. O escudo do clube fica no TOPO
+          CENTRAL porque ali ele diz "o jogo é aqui"; colado nos jogadores diria
+          "estes jogadores são daqui", que é outra coisa e só se separa no
+          interclubes. A filiação por lado é camada futura. */}
+      <header className="relative z-10 flex shrink-0 items-center justify-between px-4 py-2 md:px-8 md:py-3">
+        <span className="text-[10px] uppercase tracking-[0.2em] opacity-55 md:text-xs">
+          Quadra {quadra}
+        </span>
+
+        {viewClub?.logo ? (
+          <div className="relative aspect-square h-10 shrink-0 overflow-hidden rounded-full ring-1 ring-white/15 md:h-16">
             <Image src={viewClub.logo} alt={viewClub.nome} fill sizes="64px" className="object-cover" />
           </div>
-        </div>
-      )}
+        ) : (
+          <span aria-hidden />
+        )}
 
-      {/* Placar de transmissão: SEMPRE visível, tela cheia (não é mais overlay
-          temporário). Nenhum elemento é clicável — é 100% leitura. */}
-      <div className="flex-1 flex items-center justify-center p-4 md:p-8">
-        <div className="glass-panel-anim w-full max-w-5xl flex flex-col gap-3 md:gap-5">
-          {/* Topo discreto: quadra + cronômetro. */}
-          <div className="w-full flex items-center justify-between text-[11px] md:text-sm uppercase tracking-widest opacity-70">
-            <span>Quadra {quadra}</span>
-            <span className="tabular-nums">
-              {elapsedTime}
-              {isTiebreak ? " · TB" : ""}
-            </span>
-          </div>
+        <span className="inline-flex items-center gap-1.5 text-[10px] uppercase tracking-[0.2em] opacity-55 md:text-xs">
+          {finished ? (
+            "Encerrado"
+          ) : (
+            <>
+              <span className="h-2 w-2 animate-pulse rounded-full bg-red-500" aria-hidden />
+              Ao vivo
+            </>
+          )}
+          <span className="ml-2 tabular-nums opacity-80">
+            {elapsedTime}
+            {isTiebreak ? " · TB" : ""}
+          </span>
+        </span>
+      </header>
 
-          <div className="w-full overflow-x-auto">
-            <BroadcastScoreboard
-              cols={cols}
-              isTennisFamily={isTennisFamily}
-              unitLabel={unitLabel}
-              server={displayServer(gs)}
-              winner={gs.winner ?? null}
-              names={{ A: nameA, B: nameB }}
-              verified={verified}
-              points={{ A: pointOf("A"), B: pointOf("B") }}
-              conceded={conceded}
-            />
-          </div>
+      {/* OS DOIS LADOS, 50/50. Empilhados no celular em pé, lado a lado quando a
+          tela é larga — a mesma regra de orientação do /jogo, para a transmissão
+          ser a tela de jogo vista de fora e não um segundo desenho. */}
+      <main className="flex min-h-0 flex-1 flex-col landscape:flex-row" style={{ gap: "1px", backgroundColor: "var(--palco-divisor)" }}>
+        {(["A", "B"] as Side[]).map((side) => {
+          const venceu = gs.winner === side
+          return (
+            <section
+              key={side}
+              data-side={side.toLowerCase()}
+              className="tv-lado"
+              style={venceu ? undefined : { opacity: finished ? 0.55 : 1 }}
+            >
+              {/* JOGADORES — o avatar é a estrela, e está SEMPRE lá. */}
+              <div className="flex min-w-0 flex-col gap-2 md:gap-4">
+                {slotsDoLado(side).map((slot, idx) => {
+                  const info = infoDoSlot(slot, side, idx)
+                  return (
+                    <div key={slot} className="flex min-w-0 items-center gap-2.5 md:gap-4">
+                      {/* O tamanho base vem inline do próprio PlayerAvatar (44);
+                          o desktop cresce por classe com `!`, que é o único jeito
+                          de vencer aquele inline sem alterar o componente
+                          compartilhado — ele é usado por outras cinco telas. */}
+                      <PlayerAvatar
+                        url={info.avatarUrl}
+                        nome={info.nome}
+                        size={44}
+                        className="md:!h-20 md:!w-20"
+                      />
+                      <span className="flex min-w-0 items-center gap-1.5">
+                        {info.saca && <span className="tv-bola" aria-label="saque" />}
+                        <span className={`tv-nome truncate ${info.saca ? "tv-nome-saque" : ""}`}>
+                          {info.nome}
+                        </span>
+                        {info.verificado && (
+                          <BadgeCheck
+                            className="h-4 w-4 shrink-0 text-emerald-400 md:h-5 md:w-5"
+                            aria-label="Identidade verificada pelo Flow"
+                          />
+                        )}
+                      </span>
+                    </div>
+                  )
+                })}
+              </div>
 
-          {/* Rodapé: vencedor (se encerrada) ou selo "ao vivo". */}
-          <div className="w-full flex items-center justify-between gap-3">
-            {finished ? (
-              <span className="text-xs md:text-sm font-bold uppercase tracking-[0.2em] opacity-90">
-                Vencedor: {winnerName}
-              </span>
-            ) : (
-              <span className="inline-flex items-center gap-2 text-[10px] uppercase tracking-widest opacity-60">
-                <span className="h-2 w-2 rounded-full bg-red-500 animate-pulse" aria-hidden />
-                Ao vivo
-              </span>
-            )}
-            <span />
-          </div>
-        </div>
-      </div>
+              {/* PLACAR — sets à esquerda, o ponto gigante à direita. */}
+              <div className="flex shrink-0 items-center gap-3 md:gap-6">
+                <div className="flex items-center gap-1.5 md:gap-3">
+                  {cols.map((c) => {
+                    const meu = side === "A" ? c.a : c.b
+                    return (
+                      <span
+                        key={c.setNum}
+                        className={`tv-set ${c.current ? "tv-set-atual" : ""} ${!c.played ? "tv-set-futuro" : ""}`}
+                      >
+                        {c.played ? meu : "–"}
+                        {c.tb && !c.current ? <sup className="text-[0.5em] opacity-70">tb</sup> : null}
+                      </span>
+                    )
+                  })}
+                </div>
+                <span className="tv-ponto">{finished ? (venceu ? "★" : "") : pointOf(side)}</span>
+              </div>
+            </section>
+          )
+        })}
+      </main>
+
+      {/* ASSINATURA — discreta, do tamanho de uma assinatura. */}
+      <footer className="flex shrink-0 items-center justify-center gap-1.5 py-1.5 opacity-40 md:py-2">
+        <span className="text-[9px] uppercase tracking-[0.25em] md:text-[10px]">Powered by</span>
+        <FlowWordmark size={13} variant="mono" />
+      </footer>
 
       {/* Logo do PATROCINADOR: marca d'água discreta no rodapé-direito, com
           "Oferecimento" (mesmo padrão da tela de fim de jogo). Cartão CLARO —

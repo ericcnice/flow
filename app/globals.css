@@ -442,6 +442,83 @@
   }
 }
 
+/* --- TRANSMISSÃO (/placar) — T1b -------------------------------------- */
+/* Prefixo `tv-` e classes ÚNICAS, sem aninhamento: a tabela broadcast
+   (.scoreboard-broadcast) continua existindo para o overlay do /jogo, e nada
+   aqui pode disputar especificidade com ela.
+
+   A paleta é a MESMA do palco (--lado-a-*, --lado-b-*, --palco-*): a
+   transmissão é a tela de jogo vista de fora, não um segundo dialeto visual. */
+
+.tv-lado {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: clamp(10px, 3vw, 32px);
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 0;
+  padding: clamp(12px, 3vw, 40px);
+}
+.tv-lado[data-side="a"] {
+  background-color: var(--lado-a-bg);
+  color: var(--lado-a-texto);
+}
+.tv-lado[data-side="b"] {
+  background-color: var(--lado-b-bg);
+  color: var(--lado-b-texto);
+}
+
+/* O NÚMERO GIGANTE — a mesma presença do placar do /jogo. `clamp` em vw+vh
+   para caber tanto no celular em pé quanto na tela larga sem media query. */
+.tv-ponto {
+  font-size: clamp(3.5rem, 18vh, 11rem);
+  font-weight: 900;
+  line-height: 0.85;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+}
+
+.tv-nome {
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  font-size: clamp(0.95rem, 2.4vw, 1.9rem);
+  line-height: 1.1;
+  opacity: 0.55; /* quem NÃO saca recua */
+}
+/* QUEM SACA: amarelo de bola de tênis + opacidade cheia. O par (cor + peso de
+   presença) é o que faz o sinal sobreviver aos temas em que o texto do lado já
+   é amarelo — lá quem separa é a opacidade, não o matiz. */
+.tv-nome-saque {
+  opacity: 1;
+  color: #fee100;
+}
+/* A bolinha ENCOLHEU de propósito: o avatar virou a estrela, e a bola passou a
+   ser confirmação, não anúncio. */
+.tv-bola {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 999px;
+  background: #fee100;
+  flex: 0 0 auto;
+}
+
+.tv-set {
+  font-size: clamp(0.9rem, 2.2vw, 1.75rem);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.75;
+  min-width: 1.2em;
+  text-align: center;
+}
+.tv-set-atual {
+  opacity: 1;
+}
+.tv-set-futuro {
+  opacity: 0.28;
+}
+
 /* --- Tela de jogo "palco" (ScoreBot) ---------------------------------- */
 
 /* Fonte monoespaçada para o número não "tremer" ao trocar de valor.
