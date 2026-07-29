@@ -486,6 +486,19 @@ A pílula de tempo da transmissão hoje mostra só a **duração do jogo**. A id
 
 CONEXÃO: é a mesma família do Pro/corpo-inteiro — **superfície de marca que se constrói depois da audiência, nunca antes**. Some com a lista de superfícies já registradas na seção seguinte (QR contextual, card de abertura, "Powered by Flow", telão).
 
+## IDEIA (Eric): a faixa "OFERECIMENTO" expansível — patrocinadores clicáveis e rastreáveis
+Hoje a faixa do patrocinador na transmissão é um **logo estático** (e pequeno no celular). A evolução é transformá-la numa **PÍLULA EXPANSÍVEL** — o mesmo padrão do menu de ajustes, que sobe/cresce ao interagir — e, aberta, mostrar os patrocinadores de forma rica, possivelmente vários logos em vez de um.
+
+**LINKS POR PATROCINADOR** (2–3 URLs que cada sponsor escolhe): WhatsApp com **mensagem específica** (para o sponsor saber que o contato veio do Flow), Instagram, site próprio. Tecnicamente são só campos de URL no registro do sponsor.
+
+**O RACIONAL DE NEGÓCIO, e é o que separa isto de anúncio:** aproveitar a atenção de quem está grudado numa transmissão AO VIVO para dar visibilidade **elegante e RELEVANTE** — o oposto dos links genéricos que apps grátis servem via Google Ads. O patrocinador ali é do clube ou do jogo: ele **faz sentido naquele lugar**, e é por isso que a publicidade não estraga a tela. Publicidade contextual de qualidade, não inventário vendido a peso.
+
+**A ATRIBUIÇÃO É O ARGUMENTO DE VENDA.** A mensagem pré-preenchida do WhatsApp faz o sponsor MEDIR o retorno — e um patrocinador que consegue medir renova. É o que transforma "apoiar o clube" em investimento justificável, e o que dá lastro ao "seu patrocinador paga a anuidade" do programa Professores Fundadores.
+
+CONEXÃO: encaixa na arquitetura de `sponsors`/venue que já existe (a resolução por `resolveSponsor` não muda — os links viram campos do registro), e reusa o padrão de expansão do menu de ajustes, já implementado. Mesma família do Pro e da pílula de relojoaria: **superfície de marca que se constrói depois da audiência**. Pós-v1 — a transmissão boa vem primeiro, porque é ela que cria a atenção que se está vendendo.
+
+⚠️ NOTA: o programa **Professores Fundadores** é citado aqui mas ainda NÃO tem seção própria neste documento. Vale registrá-lo quando estiver fechado.
+
 ## Distribuição, parcerias e white-label (visão estratégica)
 O Flow foi construído com "superfícies de marca" que já existem (QR contextual, card de patrocinador na abertura, "Powered by Flow" clicável/rastreável, placar compartilhado, telão futuro). A mesma infraestrutura de sponsors que serve professor/clube serve parceiros comerciais — o Flow é WHITE-LABEL-READY sem reconstrução.
 
