@@ -458,6 +458,17 @@ Conecta com A CARTEIRINHA FLOW (a identidade que torna o convite desejável), co
 
 CONEXÃO: encaixa na estratégia já registrada de três modelos de receita (professor paga / clube paga / marca patrocina) como um QUARTO — o único que vem do **jogador final**, e o único que depende de escala de rede em vez de venda consultiva.
 
+## IDEIA (Eric): a pílula de tempo que FLIPA — cronômetro ↔ hora, espaço de relojoaria
+A pílula de tempo da transmissão hoje mostra só a **duração do jogo**. A ideia é ela **FLIPAR** de tempos em tempos entre (a) o cronômetro da partida e (b) a **HORA ATUAL** (no fuso do local do jogo). O movimento do flip prende o olho de quem assiste — num placar quase estático, é o único elemento que se move sozinho.
+
+**INSIGHT DE MONETIZAÇÃO**: o relógio é o **espaço nobre** da transmissão esportiva. A Rolex patrocinar todos os Grand Slams não é acaso — é o lugar onde uma marca de relojoaria compra presença sem interromper o jogo. O flip transforma um número funcional num **espaço patrocinável de alto valor**.
+
+**TIMING — não fazer agora, e a razão é a mesma do Pro**: o relógio só vale COM o patrocinador. Construído antes, é um espaço vazio piscando — e, pior, gasta a atenção que depois se quer vender. Sequência: **transmissão bonita → tração → o flip como espaço patrocinável quando houver quem pague.**
+
+**CUSTO TÉCNICO** (o que não é óbvio): exige saber o **fuso horário do local do jogo**. A hora do aparelho de quem assiste não serve — quem vê de outro estado ou país veria uma hora que não é a da quadra, e o patrocínio de relojoaria pousaria sobre um dado errado. Isso amarra a ideia ao cadastro de venue (o clube precisa ter fuso), não só ao front da transmissão.
+
+CONEXÃO: é a mesma família do Pro/corpo-inteiro — **superfície de marca que se constrói depois da audiência, nunca antes**. Some com a lista de superfícies já registradas na seção seguinte (QR contextual, card de abertura, "Powered by Flow", telão).
+
 ## Distribuição, parcerias e white-label (visão estratégica)
 O Flow foi construído com "superfícies de marca" que já existem (QR contextual, card de patrocinador na abertura, "Powered by Flow" clicável/rastreável, placar compartilhado, telão futuro). A mesma infraestrutura de sponsors que serve professor/clube serve parceiros comerciais — o Flow é WHITE-LABEL-READY sem reconstrução.
 
