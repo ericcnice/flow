@@ -43,6 +43,7 @@ export function PlayerAvatar({
   nome,
   size = 40,
   isFallback,
+  iniciais,
   className = "",
 }: {
   /** URL pública do Storage. null/ausente → cai na inicial. */
@@ -51,12 +52,21 @@ export function PlayerAvatar({
   size?: number
   /** Força o estado VAZIO. Ausente → deduz do próprio nome. */
   isFallback?: boolean
+  /**
+   * Texto do fallback, quando o chamador quer algo além da inicial.
+   *
+   * OPCIONAL e ADITIVO: ausente = comportamento de sempre (1ª letra, ou vazio
+   * se o nome é rótulo automático). A transmissão usa para mostrar duas
+   * iniciais ("EN") e, nos slots sem ninguém, o número do lugar ("P2") — de
+   * longe, num telão, uma letra só não distingue jogador nenhum.
+   */
+  iniciais?: string
   className?: string
 }) {
   const [falhou, setFalhou] = useState(false)
   const mostraFoto = Boolean(url) && !falhou
   const vazio = isFallback ?? nomeEhFallback(nome)
-  const inicial = vazio ? "" : (nome ?? "").trim().charAt(0).toUpperCase()
+  const inicial = iniciais ?? (vazio ? "" : (nome ?? "").trim().charAt(0).toUpperCase())
 
   return (
     <span

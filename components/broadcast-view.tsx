@@ -255,6 +255,18 @@ export function BroadcastView() {
   /** DADO 2b — o sacador INDIVIDUAL por lado (0|1), que o broadcast ignorava. */
   const [initialServer, setInitialServer] = useState<{ A: 0 | 1; B: 0 | 1 }>({ A: 0, B: 0 })
 
+  /**
+   * O MODO DE CONTAGEM — "pontos" ou "games".
+   *
+   * ⚠️ ERA A CAUSA DO NÚMERO CONGELADO. Em modo GAMES, cada toque no /jogo
+   * envia `kind:"game"` e o motor fecha um game inteiro: `points` fica em 0
+   * para sempre e quem sobe é `games`. A transmissão formatava sempre o PONTO,
+   * então exibia um "0" imóvel enquanto o placar do juiz avançava. O dado
+   * viajava no state e no hook (`remoteScoreType`) — o broadcast é que não o
+   * lia.
+   */
+  const [scoreType, setScoreType] = useState<"pontos" | "games">("pontos")
+
   const [elapsedTime, setElapsedTime] = useState("00:00:00")
   const [startTime, setStartTime] = useState<Date | null>(null)
 
@@ -351,6 +363,9 @@ export function BroadcastView() {
         if (rState.initialServer && typeof rState.initialServer === "object") {
           setInitialServer(normalizaServer(rState.initialServer))
         }
+        if (rState.scoreType === "games" || rState.scoreType === "pontos") {
+          setScoreType(rState.scoreType)
+        }
 
         rebuildEngine(rRules, rFirst, cleanActions)
         // O cronômetro do espectador conta desde a abertura (o startTime real não
@@ -405,6 +420,9 @@ export function BroadcastView() {
     if (rt.remoteInitialServer && typeof rt.remoteInitialServer === "object") {
       setInitialServer(normalizaServer(rt.remoteInitialServer))
     }
+    if (rt.remoteScoreType === "games" || rt.remoteScoreType === "pontos") {
+      setScoreType(rt.remoteScoreType)
+    }
     if (rt.remoteTheme) setTheme(rt.remoteTheme as ThemeId)
 
     let nextFirst = firstServerRef.current
@@ -430,6 +448,7 @@ export function BroadcastView() {
     rt.remoteInitialServer,
     rt.remoteFirstServer,
     rt.remoteRules,
+    rt.remoteScoreType,
     rt.remoteTheme,
     gameType,
   ])
@@ -550,6 +569,23 @@ export function BroadcastView() {
     actionsRef.current,
   )
   const pointOf = (side: Side): string => (finished ? "" : formatPoint(sport, gs[side], isTiebreak))
+
+  /**
+   * O NÚMERO HERÓI — o MESMO que o juiz vê no /jogo (`bigNumber` de lá).
+   *
+   * Espelhar é o requisito, não um detalhe de estilo: se a transmissão
+   * mostrasse outra coisa, quem assiste e quem marca estariam olhando placares
+   * diferentes — e o espectador não tem como saber qual é o certo.
+   *  • tiebreak → os pontos do tiebreak;
+   *  • modo GAMES → os games (é o que cada toque incrementa lá);
+   *  • modo PONTOS → 0/15/30/40/AD no tênis, contagem corrida nos de rally.
+   */
+  const numeroHeroi = (side: Side): string => {
+    if (finished) return gs.winner === side ? "★" : ""
+    if (isTiebreak) return gs[side].tiebreakPoints.toString()
+    if (scoreType === "games") return gs[side].games.toString()
+    return formatPoint(sport, gs[side], false)
+  }
   const viewClub = clube ? clubFromCacheOrBundle(clube) : null
   const winnerName = gs.winner === "B" ? nameB : gs.winner === "A" ? nameA : ""
 
@@ -562,6 +598,21 @@ export function BroadcastView() {
       : gameType === "duplas"
         ? ["red1", "red2"]
         : ["red1"]
+
+  /** Número GLOBAL do lugar (blue1=1 … red2=4) — vira o "P2" do avatar vazio. */
+  const numeroDoSlot = (slot: SlotKey): number => SLOTS.indexOf(slot) + 1
+
+  /**
+   * O texto do avatar sem foto. DUAS letras, não uma: num telão, "P" e "P" não
+   * distinguem ninguém. Nome real → iniciais ("Eric Nice" → EN; nome único →
+   * as duas primeiras letras). Slot vazio → o número do lugar ("P2").
+   */
+  const iniciaisDoSlot = (slot: SlotKey, nome: string, temNome: boolean): string => {
+    if (!temNome) return `P${numeroDoSlot(slot)}`
+    const partes = nome.trim().split(/\s+/).filter(Boolean)
+    if (partes.length >= 2) return (partes[0][0] + partes[partes.length - 1][0]).toUpperCase()
+    return partes[0].slice(0, 2).toUpperCase()
+  }
 
   /** Tudo que a linha de um jogador precisa, já com os fallbacks resolvidos. */
   const infoDoSlot = (slot: SlotKey, side: Side, idx: number) => {
@@ -577,6 +628,7 @@ export function BroadcastView() {
     return {
       nome: bruto || rotulo,
       avatarUrl: card?.avatarUrl ?? null,
+      iniciais: iniciaisDoSlot(slot, bruto, Boolean(bruto)),
       verificado: Boolean(id),
       // SÓ o parceiro que saca fica amarelo — é para isto que a T1a trouxe o
       // serverPlayerIdx. Em simples o índice é sempre 0.
@@ -594,7 +646,7 @@ export function BroadcastView() {
           Colado nos jogadores diria "estes jogadores são daqui" — outra coisa,
           que só se separa no interclubes (a filiação por lado é camada futura). */}
       <header className="tv-faixa flex items-center justify-between gap-3 px-3 py-2 md:px-6 md:py-3">
-        <span className="min-w-0 flex-1 truncate text-[10px] font-bold uppercase tracking-[0.2em] opacity-60 md:text-xs">
+        <span className="min-w-0 flex-1 truncate text-xs font-bold uppercase tracking-[0.15em] opacity-80 md:text-lg">
           Quadra {quadra}
         </span>
 
@@ -606,32 +658,45 @@ export function BroadcastView() {
           <span aria-hidden className="shrink-0" />
         )}
 
-        {/* AO VIVO com DESTAQUE: o pulso e o relógio correndo são o que dizem
-            "isto está acontecendo agora" — é o que separa uma transmissão de
-            uma captura de tela. Por isso ganham peso, e não opacidade baixa. */}
-        <span className="flex min-w-0 flex-1 items-center justify-end gap-2">
+        {/* AO VIVO no VERDE DA MARCA (#00FF6F). O pulso e o relógio correndo são
+            o que dizem "isto está acontecendo agora" — é o que separa uma
+            transmissão de uma captura de tela —, então têm peso, não opacidade
+            baixa. Verde e não vermelho: o vermelho é a cor de gravação/alerta;
+            aqui é a cor do Flow, e a tela inteira ganha a assinatura. */}
+        <span className="flex min-w-0 flex-1 items-center justify-end gap-2 md:gap-3">
           {!finished && (
             <span className="flex items-center gap-1.5">
-              <span className="h-2 w-2 animate-pulse rounded-full bg-red-500 md:h-2.5 md:w-2.5" aria-hidden />
-              <span className="text-[10px] font-black uppercase tracking-[0.18em] text-red-400 md:text-xs">
+              <span
+                className="h-2 w-2 animate-pulse rounded-full md:h-2.5 md:w-2.5"
+                style={{ backgroundColor: "var(--l-green)" }}
+                aria-hidden
+              />
+              <span
+                className="text-xs font-black uppercase tracking-[0.15em] md:text-lg"
+                style={{ color: "var(--l-green)" }}
+              >
                 Live
               </span>
             </span>
           )}
-          <span className="text-sm font-bold tabular-nums md:text-xl">
+          <span
+            className="text-sm font-bold tabular-nums md:text-xl"
+            style={{ color: "var(--l-green)" }}
+          >
             {elapsedTime}
             {isTiebreak ? " · TB" : ""}
           </span>
         </span>
       </header>
 
-      {/* ================= OS DOIS LADOS: pílula em cima, ponto no centro ===== */}
+      {/* ================= OS DOIS LADOS: pílula NO TOPO, ponto no centro ===== */}
       <main
         className="flex min-h-0 flex-1 flex-col landscape:flex-row"
         style={{ gap: "1px", backgroundColor: "var(--palco-divisor)" }}
       >
         {(["A", "B"] as Side[]).map((side) => {
           const venceu = gs.winner === side
+          const slots = slotsDoLado(side)
           return (
             <section
               key={side}
@@ -639,94 +704,107 @@ export function BroadcastView() {
               className="tv-lado"
               style={finished && !venceu ? { opacity: 0.5 } : undefined}
             >
-              <div className="tv-pilula">
-                {slotsDoLado(side).map((slot, idx, arr) => {
+              {/* A PÍLULA ancorada NO TOPO (shrink-0), largura cheia: os dois
+                  avatares vão para as PONTAS e os nomes ocupam o meio. */}
+              <div className="tv-pilula w-full shrink-0">
+                {slots.map((slot, idx, arr) => {
                   const info = infoDoSlot(slot, side, idx)
+                  const ultimo = idx === arr.length - 1 && arr.length > 1
+                  // O 2º parceiro é ESPELHADO: nome primeiro, avatar na ponta
+                  // direita. É o que faz os dois rostos emoldurarem a pílula.
                   return (
-                    <span key={slot} className="flex min-w-0 items-center gap-1.5 md:gap-2">
-                      {/* O AVATAR ocupa o lugar onde antes ficava a bolinha de
-                          saque. A bola encolheu e virou confirmação; a estrela
-                          agora é o rosto. */}
+                    <span
+                      key={slot}
+                      className={`flex min-w-0 flex-1 items-center gap-1.5 md:gap-2 ${
+                        ultimo ? "flex-row-reverse" : ""
+                      }`}
+                    >
                       <PlayerAvatar
                         url={info.avatarUrl}
                         nome={info.nome}
+                        iniciais={info.iniciais}
                         size={30}
                         className="md:!h-12 md:!w-12"
                       />
-                      {info.saca && <span className="tv-bola" aria-label="saque" />}
-                      <span className={`tv-nome truncate ${info.saca ? "tv-nome-saque" : ""}`}>
-                        {info.nome}
+                      <span
+                        className={`flex min-w-0 flex-1 items-center gap-1.5 ${
+                          ultimo ? "flex-row-reverse" : ""
+                        }`}
+                      >
+                        <span className={`tv-nome truncate ${info.saca ? "tv-nome-saque" : ""}`}>
+                          {info.nome}
+                        </span>
+                        {info.verificado && (
+                          <BadgeCheck
+                            className="h-3.5 w-3.5 shrink-0 text-emerald-400 md:h-5 md:w-5"
+                            aria-label="Identidade verificada pelo Flow"
+                          />
+                        )}
+                        {info.saca && <span className="tv-bola" aria-label="saque" />}
                       </span>
-                      {info.verificado && (
-                        <BadgeCheck
-                          className="h-3.5 w-3.5 shrink-0 text-emerald-400 md:h-5 md:w-5"
-                          aria-label="Identidade verificada pelo Flow"
-                        />
-                      )}
-                      {idx < arr.length - 1 && <span className="tv-dash">|</span>}
                     </span>
                   )
                 })}
+                {slots.length > 1 && <span className="tv-dash order-none">|</span>}
               </div>
 
-              {/* O HERÓI: o ponto atual, sozinho e gigante. */}
-              <span className="tv-ponto">{finished ? (venceu ? "★" : "") : pointOf(side)}</span>
+              {/* O HERÓI ocupa TODO o resto do lado, centralizado. */}
+              <span className="flex min-h-0 flex-1 items-center justify-center">
+                <span className="tv-ponto">{numeroHeroi(side)}</span>
+              </span>
             </section>
           )
         })}
       </main>
 
       {/* ================= FAIXA INFERIOR: o resumo + a marca ================= */}
-      <footer className="tv-faixa flex items-end justify-between gap-3 px-3 py-2 md:px-6 md:py-3">
-        {/* RESUMO no MESMO vocabulário das pílulas (avatar + nome), para as duas
-            faixas parecerem a mesma tela e não dois componentes empilhados. */}
-        <div className="flex min-w-0 flex-1 flex-col gap-1 md:gap-1.5">
-          {(["A", "B"] as Side[]).map((side) => (
-            <div key={side} className="flex min-w-0 items-center gap-2">
-              <span className="flex min-w-0 flex-1 items-center gap-1.5">
-                {slotsDoLado(side).map((slot, idx) => {
-                  const info = infoDoSlot(slot, side, idx)
-                  return (
-                    <PlayerAvatar
-                      key={slot}
-                      url={info.avatarUrl}
-                      nome={info.nome}
-                      size={18}
-                      className="md:!h-6 md:!w-6"
-                    />
-                  )
-                })}
-                <span className="truncate text-[11px] font-bold uppercase tracking-wide opacity-80 md:text-sm">
+      <footer className="tv-faixa flex flex-wrap items-center justify-center gap-x-4 gap-y-2 px-3 py-2 md:gap-x-8 md:px-6 md:py-3">
+        {/* RESUMO COMPACTO: uma caixa que se ajusta ao conteúdo, centralizada —
+            e não duas colunas esticadas de ponta a ponta, que no desktop abriam
+            um vazio no meio. Mesmo vocabulário das pílulas (avatar + nome), para
+            as duas faixas parecerem a mesma tela. */}
+        <div className="tv-resumo">
+          {(["A", "B"] as Side[]).map((side) => {
+            const primeiro = slotsDoLado(side)[0]
+            const info = infoDoSlot(primeiro, side, 0)
+            return (
+              <div key={side} className="flex items-center gap-2 md:gap-3">
+                <PlayerAvatar
+                  url={info.avatarUrl}
+                  nome={info.nome}
+                  iniciais={info.iniciais}
+                  size={20}
+                  className="md:!h-7 md:!w-7"
+                />
+                <span className="w-28 truncate text-[11px] font-bold uppercase tracking-wide opacity-85 md:w-56 md:text-sm">
                   {side === "A" ? nameA : nameB}
                 </span>
-              </span>
-              <span className="flex shrink-0 items-center gap-2 md:gap-3">
                 {cols.map((c) => (
                   <span
                     key={c.setNum}
-                    className={`w-4 text-center text-xs font-bold tabular-nums md:w-6 md:text-base ${
-                      !c.played ? "opacity-25" : c.current ? "opacity-100" : "opacity-70"
+                    className={`w-4 shrink-0 text-center text-xs font-bold tabular-nums md:w-7 md:text-lg ${
+                      !c.played ? "opacity-25" : c.current ? "tv-nome-saque" : "opacity-75"
                     }`}
                   >
                     {c.played ? (side === "A" ? c.a : c.b) : "–"}
                   </span>
                 ))}
-              </span>
-            </div>
-          ))}
+              </div>
+            )
+          })}
         </div>
 
-        {/* A MARCA, canto inferior direito e CLICÁVEL: quem assiste a
-            transmissão de um amigo é exatamente quem ainda não conhece o Flow.
-            É o único elemento interativo da tela — e por isso não conflita com
-            "transmissão é exibição": ele não controla o jogo, abre a porta. */}
+        {/* A MARCA, CLICÁVEL: quem assiste a transmissão de um amigo é
+            exatamente quem ainda não conhece o Flow. É o único elemento
+            interativo, e não contradiz "transmissão é exibição" — ele não
+            controla o jogo, abre a porta. */}
         <Link
           href="/"
           data-flow-cta="placar-marca"
           aria-label="Conhecer o Flow"
-          className="shrink-0 self-end opacity-70 transition-opacity hover:opacity-100"
+          className="shrink-0 opacity-80 transition-opacity hover:opacity-100"
         >
-          <FlowWordmark size={18} />
+          <FlowWordmark size={22} />
         </Link>
       </footer>
 

@@ -463,7 +463,7 @@
 /* A PÍLULA de jogadores — mesmo vocabulário da pílula do /jogo (glass +
    rounded-full), para a transmissão ler como a mesma família. */
 .tv-pilula {
-  display: inline-flex;
+  display: flex;
   align-items: center;
   gap: clamp(6px, 1.2vw, 12px);
   max-width: 100%;
@@ -474,6 +474,19 @@
 }
 /* O traço que separa os parceiros. NÃO é o escudo do clube: o escudo diz
    "onde", e no meio de dois nomes ele diria "de quem" — que é outra coisa. */
+/* O RESUMO do rodapé: caixa que se AJUSTA ao conteúdo (inline-flex), não uma
+   coluna esticada. No desktop, esticar abria um vazio enorme entre os nomes e
+   os sets — o olho perdia a relação entre as duas coisas. */
+.tv-resumo {
+  display: inline-flex;
+  flex-direction: column;
+  gap: clamp(2px, 0.6vh, 8px);
+  padding: clamp(6px, 1vw, 12px) clamp(10px, 1.6vw, 20px);
+  border-radius: clamp(12px, 1.6vw, 22px);
+  background: rgba(255, 255, 255, 0.05);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.09);
+}
+
 .tv-dash {
   opacity: 0.35;
   font-weight: 300;
@@ -483,8 +496,8 @@
 .tv-lado {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
+  align-items: stretch;
+  justify-content: flex-start;
   gap: clamp(6px, 1.5vh, 20px);
   flex: 1 1 0;
   min-width: 0;
