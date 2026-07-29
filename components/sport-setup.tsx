@@ -18,7 +18,7 @@
  * NÃO fala com o motor nem com localStorage. NÃO altera lib/scoring.
  */
 
-import { useMemo, useState, type ReactNode } from "react"
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import { X, ChevronDown } from "lucide-react"
 import { SlotRow, type SlotPreview } from "@/components/slot-row"
 import { QRCodeGenerator } from "@/components/qr-code"
@@ -162,6 +162,7 @@ function AbaPlayers({
   onFormato,
   nomes,
   setNomes,
+  onSujar,
   previews,
   perfilHref,
   onSalvar,
@@ -175,6 +176,8 @@ function AbaPlayers({
   onFormato: (v: string) => void
   nomes: SetupPlayers
   setNomes: (fn: (p: SetupPlayers) => SetupPlayers) => void
+  /** Marca que o USUÁRIO editou este slot (só a digitação suja). */
+  onSujar: (slot: SetupSlotKey) => void
   previews?: Partial<Record<SetupSlotKey, SlotPreview | null>>
   perfilHref: string
   onSalvar: () => void
@@ -189,7 +192,13 @@ function AbaPlayers({
       variant="card"
       label={label}
       valor={nomes[slot]}
-      onChange={(v) => setNomes((p) => ({ ...p, [slot]: v }))}
+      onChange={(v) => {
+        // SUJEIRA POR SLOT, marcada AQUI e só aqui: digitar é a única coisa que
+        // torna um slot "editado". Antes a sujeira era inferida comparando o
+        // estado local com a prop — e isso confundia CHEGADA REMOTA com edição.
+        onSujar(slot)
+        setNomes((p) => ({ ...p, [slot]: v }))
+      }}
       onEnter={onSalvar}
       onBlur={onSalvar}
       preview={previews?.[slot] ?? null}
@@ -313,7 +322,8 @@ export function SportSetup({
   /** Carteirinha por slot (foto/tick/souEu). Ausente = todos editáveis. */
   playerPreviews?: Partial<Record<SetupSlotKey, SlotPreview | null>>
   /** Salva os QUATRO nomes de uma vez (um único set_config no pai). */
-  onPlayersSave?: (players: SetupPlayers) => void
+  /** Salva SÓ os slots editados (patch parcial; o pai mescla no config atual). */
+  onPlayersSave?: (players: Partial<SetupPlayers>) => void
   /**
    * FORMATO ao vivo. Presente (ingame) → tocar Simples/Duplas aplica NA HORA e
    * propaga; a aba Players revela/oculta o 3º e 4º slots no mesmo instante.
@@ -383,9 +393,54 @@ export function SportSetup({
   const [nomes, setNomes] = useState<SetupPlayers>(
     players ?? { blue1: "", blue2: "", red1: "", red2: "" },
   )
-  const nomesSujos = players
-    ? (Object.keys(players) as SetupSlotKey[]).some((k) => nomes[k] !== players[k])
-    : false
+
+  /**
+   * OS SLOTS QUE O USUÁRIO REALMENTE EDITOU — dirty check POR SLOT.
+   *
+   * ⚠️ ISTO EXISTE PARA CORRIGIR UM BUG REAL, não por elegância. Antes a
+   * sujeira era INFERIDA comparando o estado local com a prop
+   * (`nomes[k] !== players[k]`), e essa comparação não distingue "o usuário
+   * digitou" de "chegou coisa nova do outro aparelho".
+   *
+   * O estrago: o dono fica na aba Players vendo os jogadores entrarem (o caso
+   * COMUM). Um convidado reivindica um slot → a prop muda → a comparação passa
+   * a acusar sujeira SOZINHA → a próxima saída da aba (JOGAR, trocar de aba,
+   * um blur) manda o RETRATO VELHO com uma rev de Lamport nova, que vence em
+   * todos os aparelhos. O nome do convidado voltava para "Player N" e a
+   * carteirinha dele ficava — slot verde, travado, com nome de ninguém.
+   *
+   * Com o conjunto explícito, só a digitação suja. O que chega de fora nunca
+   * volta ao remetente.
+   *
+   * REF e não state: mudar isto não precisa repintar nada, e o `salvarNomes`
+   * (chamado de handlers e do CTA) precisa do valor do INSTANTE, não o do
+   * render em que a closure nasceu.
+   */
+  const sujosRef = useRef<Set<SetupSlotKey>>(new Set())
+  const sujar = (slot: SetupSlotKey) => {
+    sujosRef.current.add(slot)
+  }
+
+  /**
+   * RECONCILIAÇÃO: o que chega de fora atualiza a tela — menos onde o usuário
+   * está escrevendo. Sem isto, o dono veria "Player 3" até fechar a aba, mesmo
+   * com o convidado já dentro; o retrato do mount ficaria eterno.
+   */
+  useEffect(() => {
+    if (!players) return
+    setNomes((prev) => {
+      let mudou = false
+      const proximo = { ...prev }
+      for (const k of Object.keys(players) as SetupSlotKey[]) {
+        if (sujosRef.current.has(k)) continue // o usuário está editando: não encostar
+        if (proximo[k] !== players[k]) {
+          proximo[k] = players[k]
+          mudou = true
+        }
+      }
+      return mudou ? proximo : prev // devolve o MESMO objeto quando nada muda
+    })
+  }, [players])
   // A aba Players só existe quando HÁ jogadores (ingame). No /setup a partida
   // ainda não nasceu — sem dado, sem aba.
   const temPlayers = Boolean(players)
@@ -407,8 +462,15 @@ export function SportSetup({
   }
 
   const salvarNomes = () => {
-    if (!nomesSujos) return
-    onPlayersSave?.(nomes)
+    const sujos = sujosRef.current
+    if (sujos.size === 0) return // nada que o usuário tenha editado: nada a enviar
+    // PATCH ENXUTO: só os slots editados. O pai mescla sobre o config ATUAL
+    // (`{ ...cfg.players, ...novos }`), então o mapa que vai para a sala nasce
+    // fresco — sem carregar de volta o retrato do momento em que a aba abriu.
+    const novos: Partial<SetupPlayers> = {}
+    for (const k of sujos) novos[k] = nomes[k]
+    sujos.clear()
+    onPlayersSave?.(novos)
   }
 
   const controls = useMemo<RuleControl[]>(() => ruleControlsFor(sport), [sport])
@@ -543,6 +605,7 @@ export function SportSetup({
               entrarUrl={entrarUrl}
               nomes={nomes}
               setNomes={setNomes}
+              onSujar={sujar}
               previews={playerPreviews}
               perfilHref={perfilHref}
               onSalvar={salvarNomes}

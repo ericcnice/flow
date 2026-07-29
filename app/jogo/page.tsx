@@ -1804,14 +1804,30 @@ export default function JogoPage() {
     }
   }
 
-  // SALVA OS QUATRO NOMES de uma vez (aba Players). Um ÚNICO set_config: o
-  // patch.players SUBSTITUI a chave inteira no jsonb, então dois patches em
-  // sequência fariam o segundo apagar o primeiro. `playerIds` não entra —
-  // renomear não mexe em carteirinha.
-  const saveAllNames = (novos: Record<SlotKey, string>) => {
+  // SALVA os nomes EDITADOS (aba Players). Um ÚNICO set_config: o patch.players
+  // SUBSTITUI a chave inteira no jsonb, então dois patches em sequência fariam o
+  // segundo apagar o primeiro. `playerIds` não entra — renomear não mexe em
+  // carteirinha.
+  //
+  // `novos` é PARCIAL de propósito: só os slots que o usuário editou de fato. O
+  // mapa que vai para a sala é montado aqui, sobre o config ATUAL — e é isso que
+  // impede a aba de reenviar um retrato velho por cima do que chegou dos outros
+  // aparelhos enquanto ela estava aberta.
+  const saveAllNames = (novos: Partial<Record<SlotKey, string>>) => {
     const cfg = gameConfigRef.current
     if (!cfg) return
-    const players = { ...cfg.players, ...novos }
+    // ÚLTIMA LINHA DE DEFESA (atomicidade): renomear NUNCA devolve um slot com
+    // carteirinha ao fallback. Nome e identidade viajam em campos separados, e
+    // um slot com `playerId` e nome "Player N" é um estado contraditório —
+    // verde, travado e sem dono visível, sem caminho de conserto pela UI.
+    // Não atrapalha o apagar deliberado: slot com carteirinha nem tem input.
+    const limpos: Partial<Record<SlotKey, string>> = {}
+    for (const [k, v] of Object.entries(novos)) {
+      const slot = k as SlotKey
+      if (cfg.playerIds?.[slot] && isFallbackName(v ?? "")) continue
+      limpos[slot] = v
+    }
+    const players = { ...cfg.players, ...limpos }
     const newConfig: GameConfig = { ...cfg, players }
     setGameConfig(newConfig)
     gameConfigRef.current = newConfig
