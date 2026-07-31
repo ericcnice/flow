@@ -527,7 +527,7 @@ Dois refinamentos sobre a landing já no ar. NÃO urgentes: a L1 já destrava a 
 
 É o "Scan. Play." materializado no gesto principal da página. A L1 já intuiu metade disso (o QR de marca no hero só aparece no desktop, `components/landing/brand-qr.tsx`) — falta levar a ideia para o CTA que importa. O QR do seletor deve carregar o esporte escolhido (`/setup?sport=<id>`), senão a ponte perde a escolha que a pessoa acabou de fazer.
 
-## Analytics leve do app (v2 — já esquecido 2x, REGISTRAR)
+## Analytics leve do app — ✅ IMPLEMENTADO em 30/07 (commit `83e6cb5`)
 Analytics PRÓPRIO e LEVE para o Flow. Duas prioridades, nesta ordem:
 
 1. **NA LANDING — em QUAL esporte as pessoas clicam.** É a pergunta de DESCOBERTA, não de vaidade: serve para achar o público REAL. Eric mira tênis, mas pode descobrir que ping pong (ou beach) adere mais — e a resposta muda para onde o produto vai. É o dado mais barato de coletar e o de maior consequência estratégica.
@@ -538,6 +538,26 @@ REGRA DE CONSTRUÇÃO (o que fazer AGORA, de graça): construir landing e app de
 NÃO É V1 — a distribuição vem primeiro (sem porta de entrada não há o que medir). É v2. Registrado aqui porque **já foi esquecido DUAS vezes**; a terceira não pode acontecer.
 
 A UI disso é o dashboard super admin (ver cadastros/uso). Por ora, os números saem de QUERIES no Supabase — o que basta enquanto o volume for pequeno, e é coerente com a telemetria que já existe em `court_visits` (mesmo espírito: dado próprio, sem terceiros).
+
+**O QUE FOI FEITO** (o texto acima fica como registro da intenção original): Umami Cloud (leve, sem cookies, sem PII), com `lib/analytics.ts` + o script gated por `NEXT_PUBLIC_UMAMI_SRC`/`NEXT_PUBLIC_UMAMI_WEBSITE_ID`. **Cinco eventos**, todos carimbados com `origem`: `landing_view`, `sport_selected` (+`sport`), `game_started`, `game_completed` (+`sport`, `mode`) e `broadcast_opened`. A **atribuição** lê `utm_source` ou o atalho `?f=` e guarda na SESSÃO, então sobrevive à navegação landing → setup → jogo. A pergunta nº 1 (qual esporte o público escolhe) está respondida pelo `sport_selected`.
+**A decisão central**: `game_completed` é DESACOPLADO do histórico — dispara sem exigir login, enquanto `matches` continua exigindo `owner_id`. Medir só quem loga seria medir a minoria e achar que é o todo.
+`court_visits` NÃO foi tocado: mede o QR físico, e as duas telemetrias coexistem com perguntas diferentes.
+
+## CONEXÃO (Eric): a instrumentação de validação É a fundação do sistema de AFILIADOS
+Percepção do Eric ao conversar com a **Mais** (empresa de afiliados do ExpoCommerce): o que eles descreveram que o Flow precisaria ter é **exatamente o que acabamos de construir para validar**.
+
+Um sistema de afiliados precisa de três peças:
+1. **Link único por afiliado** → é o `?f=` / `utm_source` que já lemos e guardamos na sessão;
+2. **Rastrear a conversão pós-clique** → é o funil `landing_view → sport_selected → game_started → game_completed` que já emitimos, com a origem carimbada em todos;
+3. **Regras de remuneração** → é onde a Mais entra.
+
+**O Flow já tem 1 e 2. A Mais entra na 3 — e a 3 DEPENDE de 1 e 2 existirem.**
+
+A IMPLICAÇÃO: a mesma máquina serve **duas perguntas diferentes**. Hoje, validação — *"de qual canal vêm os que mais jogam?"*. Amanhã, afiliados — *"qual afiliado trouxe quem converteu, para remunerar?"*. Ao instrumentar para validar, a base de afiliados foi construída **de graça**.
+
+FASE: afiliados continua **DESTINO**, não próximo passo — depende de pagamento integrado, de conversão e de tração, como já registrado. O que mudou é que a **peça de rastreio deixou de ser trabalho futuro**. Quando a fase chegar, falta integrar pagamento e as regras (Mais ou próprio), não construir atribuição.
+
+⚠️ O QUE AINDA FALTA para afiliados de verdade (e não estava na spec de validação): **RETENÇÃO/identidade de retorno** — hoje a origem vive na SESSÃO, então não se sabe se o mesmo aparelho voltou noutro dia. Para remunerar por conversão que acontece dias depois do clique, a atribuição precisa durar mais que a visita. É a rodada que ficou adiada de propósito na auditoria (device id), e é o pré-requisito real da peça 3.
 
 ## PWA — pendência a arrumar (Eric sinalizou)
 O PWA instalado está BAGUNÇANDO o app e precisa ser arrumado depois. Dois problemas observados:
