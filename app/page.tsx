@@ -27,6 +27,7 @@ import { SectionInvite } from '@/components/landing/section-invite'
 import { SectionBenefits } from '@/components/landing/section-benefits'
 import { SectionPro } from '@/components/landing/section-pro'
 import { SiteFooter } from '@/components/landing/site-footer'
+import { TrackView } from '@/components/analytics/track-view'
 
 export const metadata = {
   title: 'Flow — seu jogo, levado a sério',
@@ -37,6 +38,9 @@ export const metadata = {
 export default function Home() {
   return (
     <div className="tema-landing min-h-screen bg-background text-foreground">
+      {/* Topo do funil. A página segue Server Component estático — só este
+          componente (que não renderiza nada) é cliente. */}
+      <TrackView evento="landing_view" />
       <SiteHeader />
       <main>
         <Hero />

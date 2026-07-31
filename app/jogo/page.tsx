@@ -37,6 +37,7 @@ import { FlowMark } from "@/components/brand/flow-mark"
 import { useSession } from "@/lib/hooks/use-session"
 import { createBrowserSupabaseClient } from "@/lib/supabase/browser-client"
 import { saveMatch, flushPendingMatches, type MatchRow } from "@/lib/supabase/matches"
+import { trackUmaVez } from "@/lib/analytics"
 import { resolvePlayerCards, type PlayerCard } from "@/lib/supabase/player-cards"
 import { buildEditUrl } from "@/lib/share-links"
 import { resolveSponsor, type Sponsor } from "@/lib/supabase/sponsors"
@@ -2094,9 +2095,49 @@ export default function JogoPage() {
     }
   }, [authUser])
 
+  // ============================ TELEMETRIA DA PARTIDA ========================
+  // DUAS COISAS SEPARADAS, e a separação é o ponto:
+  //  • o SAVE (logo abaixo) grava o HISTÓRICO e exige `authUser` — a regra do
+  //    dono continua exatamente como está, `matches` tem RLS `owner_id`;
+  //  • estes dois effects EMITEM EVENTO e NÃO exigem login nenhum.
+  //
+  // Sem isso, a validação mediria só quem loga — e a maioria do tráfego joga
+  // ANÔNIMO, porque jogar sem login é inviolável. Seria medir a minoria e achar
+  // que é o todo. O evento não grava nada no banco, não identifica ninguém e
+  // não muda o comportamento do jogo: se o Umami não estiver lá, é no-op.
+  //
+  // A CHAVE de dedup é o `startTime` da partida: recarregar a página no meio de
+  // um jogo não é um jogo novo, e contaria em dobro.
+
+  // INÍCIO: a partida existe e ainda não teve nenhuma ação. Cobre as duas
+  // portas (o /setup e a jornada de QR do clube), porque olha o ESTADO, não o
+  // caminho de entrada.
+  useEffect(() => {
+    const cfg = gameConfig
+    if (!cfg?.startTime || actionsRef.current.length !== 0) return
+    trackUmaVez(`start_${cfg.startTime}`, "game_started", {
+      sport: cfg.sport ?? "tennis",
+      mode: cfg.gameType === "duplas" ? "duplas" : "simples",
+    })
+  }, [gameConfig])
+
+  // FIM NATURAL: o app JÁ SABE que acabou (é o mesmo gatilho do save), e aqui
+  // isso vira métrica independentemente de haver sessão. SEM PII — nada de nome
+  // de jogador, foto ou id.
+  useEffect(() => {
+    if (!gameState?.finished || !gameState.winner) return
+    const cfg = gameConfigRef.current
+    if (!cfg?.startTime) return
+    trackUmaVez(`done_${cfg.startTime}`, "game_completed", {
+      sport: sportRef.current,
+      mode: cfg.gameType === "duplas" ? "duplas" : "simples",
+    })
+  }, [gameState?.finished, gameState?.winner])
+
   // Save ao encerrar, UMA vez por partida: finished + vencedor + sessão. Dispara
   // também quando a sessão CHEGA na tela de fim (login pelo CTA) — o jogo
-  // recém-terminado é salvo.
+  // recém-terminado é salvo. INTOCADO: a exigência de `authUser` é a regra do
+  // histórico e continua valendo — a telemetria acima é outra coisa.
   useEffect(() => {
     if (!gameState?.finished || !gameState.winner || !authUser || savedMatchRef.current) return
     savedMatchRef.current = true

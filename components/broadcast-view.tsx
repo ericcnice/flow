@@ -36,6 +36,7 @@ import { PlayerAvatar } from "@/components/player-avatar"
 import { FlowWordmark } from "@/components/brand/flow-wordmark"
 import { FlowMark } from "@/components/brand/flow-mark"
 import { useRealtimeMatch } from "@/lib/hooks/use-realtime-match"
+import { trackUmaVez } from "@/lib/analytics"
 
 // Ação de placar reconstruível por replay (idêntico ao /jogo — o motor não expõe
 // setter de estado, então guardamos o histórico point/game).
@@ -385,6 +386,15 @@ export function BroadcastView() {
         // é transmitido) — mesmo comportamento dos devices remotos do /jogo.
         setStartTime(new Date())
         setLoading(false)
+
+        // TRANSMISSÃO ABERTA — só depois de carregar de VERDADE: um link
+        // expirado cai no `catch` e não conta como audiência. Dedup pela sala,
+        // então recarregar não infla. Quem assiste é sempre anônimo do ponto de
+        // vista do produto, e é justamente esse alcance que se quer medir.
+        trackUmaVez(`bc_${remote.id}`, "broadcast_opened", {
+          sport: resolvedSport,
+          ...(searchParams.get("clube") ? { clube: searchParams.get("clube") as string } : {}),
+        })
 
         // Continua escutando o canal como VIEWER (papel read-only no presence).
         await rt.subscribe(viewParam, remote.id, "viewer")

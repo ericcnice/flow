@@ -21,7 +21,7 @@
  * ritmo.
  */
 
-import Link from 'next/link'
+import { TrackLink } from '@/components/analytics/track-link'
 import { SportCourtGlyph } from '@/components/sport-court'
 import { SPORTS } from '@/lib/sports-catalog'
 
@@ -47,9 +47,16 @@ export function CourtPicker() {
           {SPORTS.map((s) => {
             const destaque = s.id === DESTAQUE
             return (
-              <Link
+              <TrackLink
                 key={s.id}
                 href={`/setup?sport=${s.id}`}
+                /* O CLIQUE no esporte é a 1ª intenção real do funil: separa
+                   quem só leu a landing de quem quis jogar. E responde a
+                   pergunta de descoberta registrada no CLAUDE.md — QUAL esporte
+                   o público real escolhe. O `sport` é o ID CANÔNICO
+                   (`tabletennis`, não `pingpong`), o mesmo que viaja na URL. */
+                evento="sport_selected"
+                props={{ sport: s.id }}
                 /* data-* estáveis: o analytics da v2 (qual esporte as pessoas
                    escolhem) é a pergunta de descoberta mais barata do produto,
                    e só é barata se o identificador já existir. */
@@ -72,7 +79,7 @@ export function CourtPicker() {
                     </span>
                   )}
                 </span>
-              </Link>
+              </TrackLink>
             )
           })}
         </div>
