@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation"
 import Image from "next/image"
 import type { SlotPreview } from "@/components/slot-row"
 import { ConfirmModal } from "@/components/confirm-modal"
-import { Settings, Volume2, VolumeX, Undo2, RotateCcw, LogOut, ArrowLeftRight, Share2, Users, UserMinus, X, BadgeCheck } from "lucide-react"
+import { Settings, Volume2, VolumeX, Undo2, RotateCcw, LogOut, ArrowLeftRight, Share2, Users, UserMinus, X, BadgeCheck, Trophy } from "lucide-react"
 import { ThirdSetModal } from "@/components/third-set-modal"
 import { ShareModal } from "@/components/share-modal"
 // Superfície de configuração ÚNICA: a MESMA tela de setup (esporte + regras),
@@ -38,6 +38,8 @@ import { useSession } from "@/lib/hooks/use-session"
 import { createBrowserSupabaseClient } from "@/lib/supabase/browser-client"
 import { saveMatch, flushPendingMatches, type MatchRow } from "@/lib/supabase/matches"
 import { trackUmaVez } from "@/lib/analytics"
+import { FlowWordmark } from "@/components/brand/flow-wordmark"
+import { PlayerAvatar } from "@/components/player-avatar"
 import { resolvePlayerCards, type PlayerCard } from "@/lib/supabase/player-cards"
 import { buildEditUrl } from "@/lib/share-links"
 import { resolveSponsor, type Sponsor } from "@/lib/supabase/sponsors"
@@ -2922,6 +2924,40 @@ export default function JogoPage() {
   const finishPlayedCols = broadcastCols.filter((c) => c.played)
   const winnerRecap = finishPlayedCols.map((c) => (winnerLetter === "a" ? c.a : c.b))
   const loserRecap = finishPlayedCols.map((c) => (winnerLetter === "a" ? c.b : c.a))
+  /**
+   * OS VENCEDORES, para o(s) avatar(es) da arte.
+   *
+   * LIGAÇÃO NOVA, dado velho: `previewDoSlot` já resolve foto e nome canônico
+   * por slot (as carteirinhas que a 1b.1 trouxe); aqui só perguntamos quais
+   * slots são do lado que venceu. Em SIMPLES é um; em DUPLAS, os dois — e cada
+   * um resolve o próprio fallback, então um pode ter foto e o outro iniciais.
+   *
+   * As INICIAIS têm duas letras porque uma só não distingue ninguém (mesma
+   * regra da transmissão). Slot sem nome vira "P{n}", o número do lugar.
+   */
+  const slotsVencedores: SlotKey[] =
+    gs.winner === "B"
+      ? gameConfig.gameType === "duplas"
+        ? ["red1", "red2"]
+        : ["red1"]
+      : gameConfig.gameType === "duplas"
+        ? ["blue1", "blue2"]
+        : ["blue1"]
+
+  const vencedores = slotsVencedores.map((slot) => {
+    const preview = previewDoSlot(slot)
+    const bruto = (preview?.nome || gameConfig.players[slot] || "").trim()
+    const ehFallback = !bruto || isFallbackName(bruto)
+    const partes = bruto.split(/\s+/).filter(Boolean)
+    const iniciais = ehFallback
+      ? `P${(["blue1", "blue2", "red1", "red2"] as SlotKey[]).indexOf(slot) + 1}`
+      : partes.length >= 2
+        ? (partes[0][0] + partes[partes.length - 1][0]).toUpperCase()
+        : partes[0].slice(0, 2).toUpperCase()
+    return { slot, nome: bruto, avatarUrl: preview?.avatarUrl ?? null, iniciais }
+  })
+  const duplaVenceu = vencedores.length > 1
+
   // Data do jogo formatada (ex. "9 DE JULHO 2026") a partir de startTime.
   const finishMonths = [
     "JANEIRO", "FEVEREIRO", "MARÇO", "ABRIL", "MAIO", "JUNHO",
@@ -4041,107 +4077,148 @@ export default function JogoPage() {
               na captura — mecanismo de captura inalterado. */}
           <div
             ref={finishArtRef}
-            className="w-full max-w-sm flex flex-col items-center gap-4 rounded-3xl px-7 py-8 text-center"
-            style={{ backgroundColor: "#12123a", color: "#ffffff" }}
+            className="fim-card relative w-full max-w-sm overflow-hidden px-7 py-8 text-white"
           >
-            {/* 1. Logo do CLUBE — grande, centralizado no topo. */}
-            {finishClub?.logo && (
-              <div className="relative aspect-square h-24 md:h-28 rounded-full overflow-hidden shadow-lg">
-                <Image src={finishClub.logo} alt={finishClub.nome} fill sizes="128px" className="object-cover" />
-              </div>
-            )}
-
-            {/* 2. Divisor fino. */}
-            <div className="h-px w-full bg-white/15" />
-
-            {/* 3. Nome do ESPORTE (dinâmico), grande, branco, com boa separação. */}
-            <div className="text-2xl md:text-3xl font-black uppercase tracking-[0.22em] leading-tight">
-              {finishSportName}
+            {/* ASSINATURA: 12 pontos neon, 6 de cada lado. Com MARGEM da borda
+                de propósito — colados nela, o glow do box-shadow é cortado na
+                captura e o efeito some justo na imagem que vai ser
+                compartilhada, que é o que importa. */}
+            <div className="pointer-events-none absolute bottom-24 left-4 z-10 flex flex-col gap-2.5" aria-hidden>
+              {[0, 1, 2, 3, 4, 5].map((i) => (
+                <span key={`pa-${i}`} className="fim-ponto fim-ponto-azul" />
+              ))}
+            </div>
+            <div className="pointer-events-none absolute right-4 top-16 z-10 flex flex-col gap-2.5" aria-hidden>
+              {[0, 1, 2, 3, 4, 5].map((i) => (
+                <span key={`pv-${i}`} className="fim-ponto fim-ponto-verde" />
+              ))}
             </div>
 
-            {/* 4. Divisor fino. */}
-            <div className="h-px w-full bg-white/15" />
-
-            {/* 5. Colocação do vencedor: anel azul-claro (só contorno) com "1º"
-                   grande em amarelo (número + "º" sobrescrito menor). */}
-            <div
-              className="flex items-center justify-center rounded-full"
-              style={{ height: "6rem", width: "6rem", border: "3px solid #6c9cff" }}
-            >
-              <span className="font-black leading-none" style={{ color: "#FEE100" }}>
-                <span className="text-5xl md:text-6xl align-baseline">1</span>
-                <span className="text-xl md:text-2xl align-super">º</span>
-              </span>
-            </div>
-
-            {/* 6. Vencedor: nome em amarelo bold + "VENCEDOR" abaixo, branco/menor. */}
-            <div className="flex flex-col items-center gap-1">
-              <div
-                className="max-w-full truncate text-3xl md:text-4xl font-black uppercase leading-none"
-                style={{ color: "#FEE100" }}
-              >
-                {winnerName}
+            <div className="relative z-10 flex flex-col items-center gap-5 px-3 text-center">
+              {/* 1. A MARCA no topo, em disco escuro. */}
+              <div className="flex h-20 w-20 items-center justify-center rounded-full border border-white/15 bg-[#09090e] shadow-[0_0_25px_rgba(0,0,0,0.9)]">
+                <FlowWordmark size={26} />
               </div>
-              <div className="text-xs md:text-sm font-bold uppercase tracking-[0.35em] text-white/85">
-                Vencedor
-              </div>
-            </div>
 
-            {/* 7. Recap do placar: uma linha por jogador — vencedor em cima
-                   (branco), perdedor embaixo (cinza). Cada linha: nome à esquerda
-                   + números por unidade (set no tênis; game/pontos no rally/
-                   side-out) alinhados em coluna entre as duas linhas. */}
-            <div
-              className="w-full flex flex-col gap-1 text-lg md:text-xl font-bold tabular-nums"
-              style={{ display: "grid", gridTemplateColumns: `minmax(0,1fr) repeat(${finishPlayedCols.length}, 1.6rem)` }}
-            >
-              <div className="contents">
-                <span className="truncate text-left uppercase" style={{ color: "#ffffff" }}>
+              {/* 2. O ESPORTE entre duas hairlines em degradê. */}
+              <div className="w-full max-w-xs">
+                <div className="fim-hairline-azul mb-3 w-full" />
+                <h2 className="text-xl font-black uppercase tracking-[0.25em] md:text-2xl">
+                  {finishSportName}
+                </h2>
+                <div className="fim-hairline-verde mt-3 w-full" />
+              </div>
+
+              {/* 3. O(S) VENCEDOR(ES). Simples: UM avatar grande, com o troféu.
+                     Duplas: DOIS menores lado a lado — a dupla inteira é a
+                     vencedora, e mostrar só um seria escolher um dos dois. */}
+              <div className="flex items-end justify-center gap-3">
+                {vencedores.map((v, i) => (
+                  <div key={v.slot} className="relative">
+                    <div className="fim-anel">
+                      <PlayerAvatar
+                        url={v.avatarUrl}
+                        nome={v.nome}
+                        iniciais={v.iniciais}
+                        size={duplaVenceu ? 68 : 100}
+                        className="!bg-[#07070a] !ring-0"
+                      />
+                    </div>
+                    {/* O troféu marca a vitória UMA vez: no avatar único do
+                        simples, ou no primeiro da dupla. Repetido nos dois
+                        viraria enfeite. */}
+                    {i === 0 && (
+                      <span className="absolute -bottom-1 -right-1 rounded-full border border-[#00FF66] bg-[#09090d] p-1.5 text-[#00FF66]">
+                        <Trophy className="h-3.5 w-3.5" />
+                      </span>
+                    )}
+                  </div>
+                ))}
+              </div>
+
+              {/* 4. O NOME do vencedor, o pico da tela. */}
+              <div className="w-full">
+                <h1
+                  className="truncate text-2xl font-black uppercase leading-tight tracking-tight md:text-3xl"
+                  style={{ color: "#FFF500" }}
+                >
                   {winnerName}
+                </h1>
+                <span className="mt-1 block text-[11px] font-extrabold uppercase tracking-[0.35em] text-white/70">
+                  Vencedor
                 </span>
-                {winnerRecap.map((v, i) => (
-                  <span key={`w-${i}`} className="text-center" style={{ color: "#ffffff" }}>
-                    {v}
-                  </span>
-                ))}
               </div>
-              <div className="contents">
-                <span className="truncate text-left uppercase" style={{ color: "#8a8ab0" }}>
-                  {loserName}
-                </span>
-                {loserRecap.map((v, i) => (
-                  <span key={`l-${i}`} className="text-center" style={{ color: "#8a8ab0" }}>
-                    {v}
-                  </span>
-                ))}
-              </div>
-            </div>
 
-            {/* 9 + 10. Oferecimento: divisor + "OFERECIMENTO" à esquerda e o logo
-                   do patrocinador em CARTÃO CLARO à direita (só se houver `ad`
-                   resolvido). Cartão claro — e não preto como antes — porque o
-                   logo vem de fora e pode ter arte escura, que sumia no preto;
-                   é o mesmo tratamento da Tela 2 da abertura e do /placar. */}
-            {finishAd?.logoUrl && (
-              <>
-                <div className="h-px w-full bg-white/15" />
-                <div className="w-full flex items-center justify-between gap-3">
-                  <span className="text-[11px] md:text-xs font-bold uppercase tracking-[0.2em] text-white/70">
+              {/* 5. O PLACAR: vencedor em verde, perdedor recuado. */}
+              <div className="w-full rounded-2xl border border-white/10 bg-white/[0.03] p-4 text-left">
+                <div
+                  className="grid items-center gap-2 py-1"
+                  style={{ gridTemplateColumns: `minmax(0,1fr) repeat(${finishPlayedCols.length}, 1.5rem)` }}
+                >
+                  <span className="truncate text-sm font-extrabold uppercase tracking-wide md:text-base">
+                    {winnerName}
+                  </span>
+                  {winnerRecap.map((v, i) => (
+                    <span key={`w-${i}`} className="text-center text-lg font-black" style={{ color: "#00FF66" }}>
+                      {v}
+                    </span>
+                  ))}
+                </div>
+                <div
+                  className="mt-1 grid items-center gap-2 border-t border-white/5 pt-2"
+                  style={{ gridTemplateColumns: `minmax(0,1fr) repeat(${finishPlayedCols.length}, 1.5rem)` }}
+                >
+                  <span className="truncate text-xs font-semibold uppercase text-white/45 md:text-sm">
+                    {loserName}
+                  </span>
+                  {loserRecap.map((v, i) => (
+                    <span key={`l-${i}`} className="text-center text-sm font-semibold text-white/40">
+                      {v}
+                    </span>
+                  ))}
+                </div>
+              </div>
+
+              {/* 6. OFERECIMENTO — cartão CLARO: o logo vem de fora e pode ter
+                     arte escura, que sumiria no preto. */}
+              {finishAd?.logoUrl && (
+                <div className="flex w-full flex-col items-center gap-2">
+                  <span className="text-[10px] font-bold uppercase tracking-[0.3em] text-white/50">
                     Oferecimento
                   </span>
-                  <div className="rounded-xl bg-white p-2.5 shadow-md ring-1 ring-black/5">
-                    <div className="relative h-12 md:h-14 w-32 md:w-36">
-                      <Image src={finishAd.logoUrl} alt={finishAd.name} fill sizes="160px" className="object-contain" />
+                  <div className="rounded-2xl bg-white px-6 py-3 shadow-md">
+                    <div className="relative h-8 w-32">
+                      <Image
+                        src={finishAd.logoUrl}
+                        alt={finishAd.name}
+                        fill
+                        sizes="160px"
+                        className="object-contain"
+                      />
                     </div>
                   </div>
                 </div>
-              </>
-            )}
+              )}
 
-            {/* 11. Divisor + data do jogo (dinâmica). */}
-            <div className="h-px w-full bg-white/15" />
-            <div className="text-[11px] md:text-xs font-bold uppercase tracking-[0.25em] text-white/60">
-              {finishDate}
+              {/* 7. DATA e, quando há clube, o escudo dele — o LOCAL é o logo,
+                     nunca texto: é assim que as outras telas do produto dizem
+                     "onde", e repetir em palavras seria dizer duas vezes. */}
+              <div className="flex items-center justify-center gap-2.5">
+                {finishClub?.logo && (
+                  <span className="relative aspect-square h-6 overflow-hidden rounded-full ring-1 ring-white/20">
+                    <Image
+                      src={finishClub.logo}
+                      alt={finishClub.nome}
+                      fill
+                      sizes="24px"
+                      className="object-cover"
+                    />
+                  </span>
+                )}
+                <span className="text-[11px] font-bold uppercase tracking-[0.25em] text-white/55">
+                  {finishDate}
+                </span>
+              </div>
             </div>
           </div>
 

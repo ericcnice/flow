@@ -13,7 +13,7 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { Check, Loader2, LogIn } from 'lucide-react'
+import { Check, Loader2, UserPlus } from 'lucide-react'
 import { createBrowserSupabaseClient } from '@/lib/supabase/browser-client'
 import { useSession } from '@/lib/hooks/use-session'
 import { useAppAuthFlag } from '@/lib/hooks/use-app-auth-flag'
@@ -65,14 +65,34 @@ export function AppAuthCta({
       {!user ? (
         // SEM sessão: o CTA promete o que agora cumpre. Ao logar, o jogo
         // recém-terminado é salvo (o save da tela de jogo dispara com a sessão).
-        <button
-          type="button"
-          onClick={() => setLoginAberto(true)}
-          className="mt-1 inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-widest text-white/70 underline decoration-white/30 underline-offset-4 transition-colors hover:text-white"
-        >
-          <LogIn className="h-3.5 w-3.5" />
-          Salve este jogo no seu histórico
-        </button>
+        // DESTAQUE MÁXIMO, e é decisão de produto: a tela de fim é o PICO de
+        // atenção do funil — a pessoa acabou de ganhar e está prestes a
+        // compartilhar. Um link de 11px ali era o convite mais fraco no momento
+        // mais forte. Agora é botão em degradê da marca, com o glow pulsando.
+        //
+        // ⚠️ O TEXTO PROMETE SÓ O QUE EXISTE: salvar os jogos e ter um perfil.
+        // Nada de ranking, torneio ou estatística — nenhuma dessas coisas está
+        // no ar, e prometer no pico do funil é onde a promessa falsa custa mais
+        // caro: a pessoa se cadastra por algo que não vai encontrar.
+        //
+        // Fica FORA do finishArtRef, como sempre esteve: o pulso não entra no
+        // PNG compartilhado, e a imagem continua sendo só o resultado.
+        <div className="relative mt-1 w-full max-w-sm">
+          <div className="fim-cta-glow absolute -inset-0.5 rounded-2xl" aria-hidden />
+          <button
+            type="button"
+            onClick={() => setLoginAberto(true)}
+            data-flow-cta="fim-cadastrar"
+            className="relative flex w-full items-center justify-center gap-2.5 rounded-2xl border border-white/40 px-6 py-4 text-sm font-black uppercase tracking-wider text-black transition-transform active:scale-[0.98] md:text-base"
+            style={{ backgroundImage: 'linear-gradient(to right, #0080FF, #00D4BD, #00FF66)' }}
+          >
+            <UserPlus className="h-5 w-5 shrink-0" />
+            <span>Cadastre-se grátis no Flow</span>
+          </button>
+          <p className="mt-2 text-center text-[11px] font-bold text-cyan-300">
+            Salve seus jogos e crie seu perfil de jogador.
+          </p>
+        </div>
       ) : saveState === 'saved' ? (
         // Salvo → vira o ATALHO para ver o histórico (o ponto de entrada do /perfil).
         <Link
