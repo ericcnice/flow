@@ -79,6 +79,31 @@ export function origem(): string {
 type Props = Record<string, string | number | boolean>
 
 /**
+ * Deixa as propriedades no formato que o Umami aceita: PLANAS e primitivas.
+ *
+ * Um valor `undefined`, `null`, objeto ou array no payload faz o `/api/send`
+ * responder 400 — e o erro chega como um 400 mudo, sem dizer qual campo é o
+ * culpado. Filtrar aqui é mais barato que descobrir depois pelo Network.
+ * Strings são cortadas em 200 (o limite do Umami é maior; isto é folga).
+ */
+function saneia(props?: Props): Props {
+  const out: Props = {}
+  for (const [k, v] of Object.entries(props ?? {})) {
+    if (v === null || v === undefined) continue
+    if (typeof v === "string") {
+      const t = v.trim()
+      if (t) out[k] = t.slice(0, 200)
+    } else if (typeof v === "number") {
+      if (Number.isFinite(v)) out[k] = v
+    } else if (typeof v === "boolean") {
+      out[k] = v
+    }
+    // objeto/array/função: descartados de propósito — o Umami não os aceita.
+  }
+  return out
+}
+
+/**
  * Emite um evento. No-op silencioso se o Umami não estiver lá.
  *
  * SEM PII, por contrato: nunca passar nome, e-mail, foto ou id de jogador. Os
@@ -88,8 +113,12 @@ export function track(evento: string, props?: Props): void {
   if (typeof window === "undefined") return
   try {
     const umami = (window as unknown as { umami?: { track?: (e: string, p?: Props) => void } }).umami
+    // GUARDA: sem o script carregado, não há o que chamar. Cobre o bloqueador
+    // de anúncios, o offline e a janela entre o mount e o `afterInteractive`.
     if (typeof umami?.track !== "function") return
-    umami.track(evento, { origem: origem(), ...(props ?? {}) })
+    const nome = evento.trim().slice(0, 50) // limite de nome de evento do Umami
+    if (!nome) return
+    umami.track(nome, { origem: origem(), ...saneia(props) })
   } catch {
     // Telemetria NUNCA propaga erro para a tela.
   }

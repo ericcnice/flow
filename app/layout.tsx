@@ -7,6 +7,21 @@ import { CoachBridge } from "@/components/auth/coach-bridge"
 
 const inter = Inter({ subsets: ["latin"] })
 
+/**
+ * Limpa um valor de env que veio de painel (Vercel).
+ *
+ * ⚠️ NÃO É PARANOIA. Colar `"abc"` ou `abc ` num campo de env é o erro mais
+ * comum do fluxo, e o Next INLINA o valor no bundle exatamente como está — o
+ * `data-website-id` sai com aspas ou espaço, o Umami não reconhece o site e
+ * devolve 400 sem dizer por quê. Aqui aspas nas pontas e espaços caem fora.
+ */
+function envLimpa(v: string | undefined): string {
+  return (v ?? "").trim().replace(/^["']|["']$/g, "").trim()
+}
+
+const umamiSrc = envLimpa(process.env.NEXT_PUBLIC_UMAMI_SRC)
+const umamiId = envLimpa(process.env.NEXT_PUBLIC_UMAMI_WEBSITE_ID)
+
 export const metadata = {
   title: "PWER Flow — O placar inteligente para esportes de raquete",
   description:
@@ -29,12 +44,8 @@ export default function RootLayout({
               produção medindo, sem `if` espalhado pelo código.
               `afterInteractive`: nada de telemetria disputa a abertura da tela
               com a jornada de QR, que é offline-first e cronometrada. */}
-          {process.env.NEXT_PUBLIC_UMAMI_SRC && process.env.NEXT_PUBLIC_UMAMI_WEBSITE_ID && (
-            <Script
-              src={process.env.NEXT_PUBLIC_UMAMI_SRC}
-              data-website-id={process.env.NEXT_PUBLIC_UMAMI_WEBSITE_ID}
-              strategy="afterInteractive"
-            />
+          {umamiSrc && umamiId && (
+            <Script src={umamiSrc} data-website-id={umamiId} strategy="afterInteractive" />
           )}
           {/* Ponte do coach (A2.2): pós-login, chama claim_coach_membership.
               Inerte para anônimo/jogador comum; mostra o feedback só ao promover. */}
