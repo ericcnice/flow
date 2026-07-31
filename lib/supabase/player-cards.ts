@@ -19,6 +19,12 @@
  * mais que logo de patrocinador, então aqui há TTL + stale-while-revalidate:
  * devolve o cache na hora (render imediato, offline-safe) e revalida por trás.
  *
+ * ⚠️ O QUE O TTL SIGNIFICA (corrigido): ele é o limite do que se pode servir
+ * OFFLINE — não a licença para ignorar a rede quando ela está disponível. A
+ * revalidação de fundo roda para TUDO que veio do cache, fresco ou não, desde
+ * que haja conexão. Antes só os vencidos eram revalidados, e uma foto trocada
+ * há duas horas ficava velha por até vinte e duas.
+ *
  * Usa o client ANÔNIMO (lib/supabase/client), igual sponsors.ts — a RPC é
  * pública e o espectador do /placar tipicamente não tem sessão.
  */
@@ -152,6 +158,26 @@ async function buscarNaRpc(ids: string[]): Promise<Map<string, PlayerCard>> {
  *
  * NUNCA lança: qualquer falha devolve o que houver (possivelmente vazio).
  */
+/**
+ * APAGA o cartão cacheado de UMA pessoa neste aparelho.
+ *
+ * Serve ao momento em que alguém troca a própria foto: a revalidação de fundo
+ * já corrigiria isso, mas só na PRÓXIMA vez que a tela pedisse os cartões — e
+ * quem acabou de subir uma foto quer vê-la agora, não na próxima partida.
+ * Apagando a entrada, a leitura seguinte cai em `semCache` e vai à rede.
+ *
+ * Mora AQUI, e não no uploader, porque o formato da chave é assunto deste
+ * módulo: espalhar `player_card_${id}` pelo código é como o cache de
+ * patrocinador acumulou dívida.
+ */
+export function invalidatePlayerCard(id: string): void {
+  try {
+    localStorage.removeItem(cacheKey(id))
+  } catch {
+    // Aba privada / cota: sem cache para apagar, e a revalidação cobre.
+  }
+}
+
 export async function resolvePlayerCards(
   ids: string[],
   onRevalidado?: (cards: Map<string, PlayerCard>) => void,
@@ -163,7 +189,7 @@ export async function resolvePlayerCards(
   if (unicos.length === 0) return out
 
   const semCache: string[] = []
-  const vencidos: string[] = []
+  const doCache: string[] = []
 
   for (const id of unicos) {
     const c = readCache(id)
@@ -172,7 +198,7 @@ export async function resolvePlayerCards(
       continue
     }
     out.set(id, c.card)
-    if (!c.fresco) vencidos.push(id)
+    doCache.push(id)
   }
 
   // Sem cache: precisa da rede para ter QUALQUER coisa. Falha/timeout → o id
@@ -182,11 +208,22 @@ export async function resolvePlayerCards(
     for (const [id, card] of novos) out.set(id, card)
   }
 
-  // Vencidos: já devolvemos o stale acima; a revalidação é fire-and-forget e
-  // não segura ninguém.
-  if (vencidos.length > 0) {
+  // REVALIDAÇÃO DE TUDO QUE VEIO DO CACHE — inclusive do que ainda está DENTRO
+  // do TTL. Antes só os VENCIDOS eram revalidados, e era esse o buraco: uma
+  // foto trocada há duas horas continuava velha por até vinte e duas, porque
+  // `fresco: true` significava "nem pergunta". O TTL virou o que deveria ter
+  // sido desde o início — o limite do que se pode servir OFFLINE, não a licença
+  // para ignorar a rede quando ela está ali.
+  //
+  // O offline-first não muda em nada: o cache já foi devolvido acima, na hora.
+  // Isto aqui é fire-and-forget, não segura render nenhum, e a guarda de
+  // `onLine` evita bater numa rede que não existe. Lote único, teto de 8 e
+  // timeout de 2s continuam valendo — é UMA requisição por abertura de tela,
+  // não uma por jogador.
+  const online = typeof navigator === "undefined" || navigator.onLine !== false
+  if (doCache.length > 0 && online) {
     void (async () => {
-      const frescos = await buscarNaRpc(vencidos)
+      const frescos = await buscarNaRpc(doCache)
       if (frescos.size === 0) return
       let mudou = false
       for (const [id, card] of frescos) {

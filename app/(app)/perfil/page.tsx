@@ -22,6 +22,7 @@ import { AlertTriangle, ArrowLeft, BadgeCheck, Check, Copy, Loader2, LogOut, Mes
 import type { User } from '@supabase/supabase-js'
 import { createBrowserSupabaseClient } from '@/lib/supabase/browser-client'
 import { avatarUrlOf } from '@/lib/auth-avatar'
+import { invalidatePlayerCard } from '@/lib/supabase/player-cards'
 import { AvatarUploader } from '@/components/auth/avatar-uploader'
 import { TOS_VERSION } from '@/lib/legal'
 import { acceptTos, getConsent, setMarketing, type Consent } from '@/lib/supabase/consents'
@@ -1484,7 +1485,17 @@ function PerfilLogado({ user }: { user: User }) {
           carregando={perfil === null}
           displayUrl={perfil ? avatarUrlOf(user, perfil.avatarUrl) : null}
           inicial={inicial}
-          onUploaded={(url) => setPerfil((p) => (p ? { ...p, avatarUrl: url } : p))}
+          onUploaded={(url) => {
+            setPerfil((p) => (p ? { ...p, avatarUrl: url } : p))
+            // INVALIDA O CARTÃO CACHEADO deste usuário NESTE aparelho. O /perfil
+            // e o slot do dono no jogo leem o profile direto e já mostrariam a
+            // foto nova; quem serve a foto ANTIGA é o cache de carteirinha, que
+            // alimenta a aba Players e a transmissão. A revalidação de fundo
+            // também corrigiria — mas só na próxima vez que uma tela pedisse os
+            // cartões, e quem acabou de subir uma foto quer vê-la agora.
+            // Alcança só ESTE aparelho; os outros dependem da revalidação.
+            invalidatePlayerCard(user.id)
+          }}
         />
         <div className="min-w-0">
           <div className="flex items-center gap-1.5">
