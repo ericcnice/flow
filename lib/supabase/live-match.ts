@@ -141,3 +141,68 @@ export async function getLiveMatchTopic(viewToken: string, matchId: string): Pro
     .join('')
   return `live_match:${hex}`
 }
+
+/**
+ * CÓDIGO CURTO do controle remoto — o celular pede, o relógio resolve.
+ *
+ * A URL de editor tem 100+ caracteres; ninguém digita isso num relógio. O
+ * código de 6 dígitos é a ponte. As três defesas (expira em 10min, uso único,
+ * um ativo por partida) vivem na RPC — aqui é só o cliente.
+ *
+ * Devolve null em qualquer falha: sem código, a tela mostra a URL/QR de sempre.
+ */
+export async function createRemoteCode(
+  matchId: string,
+  editToken: string,
+  extras?: { sport?: string; theme?: string; scoreType?: string },
+): Promise<string | null> {
+  const { data, error } = await supabase.rpc('create_remote_code', {
+    p_match_id: matchId,
+    p_edit_token: editToken,
+    p_sport: extras?.sport ?? null,
+    p_theme: extras?.theme ?? null,
+    p_score_type: extras?.scoreType ?? null,
+  })
+  if (error) {
+    console.error('createRemoteCode failed:', error.message)
+    return null
+  }
+  return typeof data === 'string' && data ? data : null
+}
+
+/** O que o controle recebe ao trocar o código pelos tokens. */
+export type RemoteCodeResolved = {
+  matchId: string
+  editToken: string
+  sport: string | null
+  theme: string | null
+  scoreType: string | null
+}
+
+/**
+ * Troca o código pelos tokens. null = inválido, EXPIRADO ou JÁ USADO — a RPC
+ * não distingue os três de propósito: dizer "existe mas expirou" a quem chuta
+ * confirmaria que o chute acertou um código real.
+ */
+export async function resolveRemoteCode(code: string): Promise<RemoteCodeResolved | null> {
+  const { data, error } = await supabase.rpc('resolve_remote_code', { p_code: code })
+  if (error) {
+    console.error('resolveRemoteCode failed:', error.message)
+    return null
+  }
+  const row = firstRow<{
+    match_id: string
+    edit_token: string
+    sport: string | null
+    theme: string | null
+    score_type: string | null
+  }>(data)
+  if (!row?.match_id || !row?.edit_token) return null
+  return {
+    matchId: row.match_id,
+    editToken: row.edit_token,
+    sport: row.sport,
+    theme: row.theme,
+    scoreType: row.score_type,
+  }
+}

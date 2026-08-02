@@ -34,6 +34,7 @@ import { ArrowLeftRight, Undo2 } from "lucide-react"
 import {
   applyLiveMatchAction,
   getLiveMatchState,
+  resolveRemoteCode,
   type LiveMatchAction,
 } from "@/lib/supabase/live-match"
 import { themeClassName, type ThemeId } from "@/lib/themes"
@@ -55,10 +56,16 @@ function vibrar(ms: number) {
 function ControleRemoto() {
   const searchParams = useSearchParams()
 
-  // TUDO da URL — nada de estado que não sobreviva a um reload.
-  const matchId = searchParams.get("match") ?? ""
-  const editToken = searchParams.get("edit") ?? ""
-  const theme = (searchParams.get("theme") ?? "neutro") as ThemeId
+  // TUDO da URL — nada de estado que não sobreviva a um reload. Os tokens
+  // podem chegar de dois jeitos: já na URL (o atalho de dev, e o estado APÓS
+  // resolver um código) ou por CÓDIGO digitado, que os grava na URL logo em
+  // seguida. Daí serem estado, e não constantes: a tela troca de modo sem
+  // navegar.
+  const [matchId, setMatchId] = useState(searchParams.get("match") ?? "")
+  const [editToken, setEditToken] = useState(searchParams.get("edit") ?? "")
+  const [theme, setTheme] = useState<ThemeId>(
+    (searchParams.get("theme") ?? "neutro") as ThemeId,
+  )
   // O MODO DE CONTAGEM importa: em "games" cada toque concede um GAME inteiro,
   // e é o que a tela de jogo envia. Mandar "point" aqui faria o controle e o
   // placar contarem coisas diferentes.
@@ -72,9 +79,50 @@ function ControleRemoto() {
   // Agora o modo vem do STATE DA SALA, por dois caminhos que não custam nada:
   // uma leitura na montagem e a resposta de cada toque (a RPC de ação já
   // devolve o state inteiro). A URL só vale até a primeira das duas chegar.
-  const scoreTypeUrl: ModoContagem =
-    searchParams.get("scoreType") === "games" ? "games" : "pontos"
-  const [scoreType, setScoreType] = useState<ModoContagem>(scoreTypeUrl)
+  const [scoreType, setScoreType] = useState<ModoContagem>(
+    searchParams.get("scoreType") === "games" ? "games" : "pontos",
+  )
+
+  // ENTRADA POR CÓDIGO — o estado da telinha de digitação.
+  const [codigo, setCodigo] = useState("")
+  const [entrando, setEntrando] = useState(false)
+  const [erroCodigo, setErroCodigo] = useState<string | null>(null)
+
+  /**
+   * Troca o código pelos tokens e ENTRA no controle.
+   *
+   * ⚠️ GRAVA OS TOKENS NA URL (replaceState) — e isso não é conveniência, é o
+   * que faz o relógio funcionar. O código é de USO ÚNICO: se a página
+   * recarregar (e o relógio recarrega ao acordar), pedir o código de novo seria
+   * impossível, porque aquele já foi consumido. Com os tokens na URL, o reload
+   * cai no mesmo caminho do atalho de dev e não pergunta nada.
+   */
+  const entrarComCodigo = async () => {
+    const limpo = codigo.replace(/\D/g, "").slice(0, 6)
+    if (limpo.length !== 6 || entrando) return
+    setEntrando(true)
+    setErroCodigo(null)
+    const r = await resolveRemoteCode(limpo)
+    if (!r) {
+      setErroCodigo("Código inválido ou expirado. Gere outro no celular.")
+      setCodigo("")
+      setEntrando(false)
+      return
+    }
+    const t = (r.theme || "neutro") as ThemeId
+    setMatchId(r.matchId)
+    setEditToken(r.editToken)
+    setTheme(t)
+    if (r.scoreType === "games" || r.scoreType === "pontos") setScoreType(r.scoreType)
+    try {
+      const q = new URLSearchParams({ match: r.matchId, edit: r.editToken, theme: t })
+      if (r.scoreType) q.set("scoreType", r.scoreType)
+      window.history.replaceState(null, "", `/remoto?${q.toString()}`)
+    } catch {
+      // Sem history: o controle funciona nesta sessão; só o reload pediria de novo.
+    }
+    setEntrando(false)
+  }
 
   /** Extrai o modo da raiz do state (é de lá que o /jogo e o /placar leem). */
   const aprenderModo = useCallback((state: unknown) => {
@@ -163,14 +211,49 @@ function ControleRemoto() {
     void enviar({ kind: scoreType === "games" ? "game" : "point", side })
   }
 
-  // Sem os tokens não há o que controlar. Mensagem curta — cabe num relógio.
+  // SEM TOKENS: pede o código. É a porta principal — a URL com tokens é o
+  // atalho. Um input numérico só, grande: num relógio, quatro caixinhas
+  // separadas seriam quatro alvos minúsculos e quatro chances de errar.
   if (!matchId || !editToken) {
     return (
-      <div className="flex h-[100dvh] flex-col items-center justify-center gap-2 bg-black p-5 text-center text-white">
-        <p className="text-sm font-bold uppercase tracking-wide">Controle sem partida</p>
-        <p className="text-xs leading-snug opacity-60">
-          Abra pelo link de editor da partida.
+      <div className="flex h-[100dvh] flex-col items-center justify-center gap-3 bg-black px-4 text-center text-white">
+        <p className="text-[11px] font-bold uppercase tracking-[0.2em] opacity-50">
+          Controle remoto
         </p>
+        <input
+          value={codigo}
+          onChange={(e) => {
+            setCodigo(e.target.value.replace(/\D/g, "").slice(0, 6))
+            setErroCodigo(null)
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") void entrarComCodigo()
+          }}
+          /* `inputMode=numeric` + `pattern` fazem o teclado NUMÉRICO subir —
+             num relógio, o teclado completo é praticamente inutilizável. */
+          inputMode="numeric"
+          pattern="[0-9]*"
+          autoComplete="one-time-code"
+          maxLength={6}
+          placeholder="000000"
+          aria-label="Código de 6 dígitos"
+          className="w-full max-w-[220px] rounded-2xl bg-white/10 py-3 text-center font-mono text-3xl font-black tracking-[0.25em] text-white outline-none ring-1 ring-white/20 placeholder:text-white/20 focus:ring-2 focus:ring-white/50"
+        />
+        <button
+          type="button"
+          onClick={() => void entrarComCodigo()}
+          disabled={codigo.length !== 6 || entrando}
+          className="w-full max-w-[220px] rounded-full bg-white px-5 py-3 text-sm font-black uppercase tracking-wide text-black active:scale-95 transition disabled:opacity-35"
+        >
+          {entrando ? "Entrando…" : "Entrar"}
+        </button>
+        {erroCodigo ? (
+          <p className="max-w-[240px] text-xs leading-snug text-red-400">{erroCodigo}</p>
+        ) : (
+          <p className="max-w-[240px] text-[11px] leading-snug opacity-45">
+            Gere o código em Compartilhar, no celular do jogo.
+          </p>
+        )}
       </div>
     )
   }

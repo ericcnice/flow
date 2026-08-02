@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react"
 import { X, Copy, Check, Share2, Users } from "lucide-react"
 import { QRCodeGenerator } from "@/components/qr-code"
 import { buildEditUrl, buildViewUrl } from "@/lib/share-links"
+import { createRemoteCode } from "@/lib/supabase/live-match"
 
 interface ShareModalProps {
   isOpen: boolean
@@ -81,6 +82,23 @@ export function ShareModal({
     () => ({ origin, quadra, matchId, viewToken, editToken, sport, theme, scoreType, clube, ad, gameType }),
     [origin, quadra, matchId, viewToken, editToken, sport, theme, scoreType, clube, ad, gameType],
   )
+  // CÓDIGO do controle remoto. Só existe sob demanda: gerar sempre que o modal
+  // abre criaria códigos vivos que ninguém pediu — e cada código vivo é mais
+  // uma chance de um chute acertar.
+  const [codigo, setCodigo] = useState<string | null>(null)
+  const [gerando, setGerando] = useState(false)
+  const [erroCodigo, setErroCodigo] = useState(false)
+
+  const gerarCodigo = async () => {
+    if (!matchId || !editToken || gerando) return
+    setGerando(true)
+    setErroCodigo(false)
+    const c = await createRemoteCode(matchId, editToken, { sport, theme, scoreType })
+    setCodigo(c)
+    setErroCodigo(c === null)
+    setGerando(false)
+  }
+
   const editUrl = useMemo(() => buildEditUrl(linkParams), [linkParams])
   const viewUrl = useMemo(() => buildViewUrl(linkParams), [linkParams])
 
@@ -255,6 +273,61 @@ export function ShareModal({
                   </span>
                   <span className="text-white/60 font-normal">editando agora</span>
                 </div>
+              )}
+            </section>
+
+            {/* a2) CONTROLE REMOTO por CÓDIGO.
+                 A URL de editor tem 100+ caracteres — ninguém digita isso num
+                 relógio, e o QR acima também não serve (relógio não escaneia).
+                 O código de 6 dígitos é a ponte: aqui gera, lá se digita.
+                 Fica ABAIXO do QR de propósito: o QR resolve o caso comum (2º
+                 celular) e o código é a saída para quem não escaneia. */}
+            <section className="px-5 py-5 flex flex-col gap-3">
+              <h3 className="text-sm font-semibold uppercase tracking-wide text-white/80">
+                Controle remoto
+              </h3>
+
+              {codigo ? (
+                <div className="flex flex-col items-center gap-1.5">
+                  <span className="font-mono text-4xl font-black tracking-[0.3em] text-white">
+                    {codigo}
+                  </span>
+                  <p className="text-center text-xs text-white/60">
+                    Abra <span className="font-mono text-white/80">flow.pwer.com.br/remoto</span> no
+                    outro aparelho e digite o código.
+                  </p>
+                  {/* A VALIDADE é informação, não enfeite: o código morre em 10
+                      minutos e é de uso único, e quem não sabe disso acha que
+                      quebrou quando ele expira. */}
+                  <p className="text-[11px] text-white/40">Vale por 10 minutos, uma vez só.</p>
+                  <button
+                    type="button"
+                    onClick={gerarCodigo}
+                    disabled={gerando}
+                    className="mt-1 text-[11px] font-bold uppercase tracking-widest text-white/50 underline underline-offset-4 disabled:opacity-50"
+                  >
+                    Gerar outro
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    onClick={gerarCodigo}
+                    disabled={gerando}
+                    className="rounded-full bg-white/10 px-5 py-3 text-sm font-bold uppercase tracking-wide text-white ring-1 ring-white/20 active:scale-95 transition disabled:opacity-50"
+                  >
+                    {gerando ? "Gerando…" : "Gerar código"}
+                  </button>
+                  <p className="text-center text-xs text-white/50">
+                    Para marcar pontos de outro aparelho sem escanear.
+                  </p>
+                </>
+              )}
+              {erroCodigo && (
+                <p className="text-center text-xs text-red-400">
+                  Não deu para gerar agora. Tente de novo.
+                </p>
               )}
             </section>
 
