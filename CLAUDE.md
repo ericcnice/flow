@@ -447,6 +447,19 @@ O TELEVISOR = PAINEL DE CONTROLE DA FILA (não só telão de placar): o telão d
 
 CHECK-IN FRICTIONLESS (o alvo de UX): cheguei ao clube → escaneio o televisor → se beach, aparece meu lugar na fila (ou "entre, divirta-se" se vazio); se tênis, o sistema sabe que meu grupo foi pré-marcado e me diz "seu parceiro Fulano já fez check-in / ainda não chegou, você ainda não está na fila". Simples, sem humano no balcão.
 
+## O CONTROLE /remoto é DEVICE-AGNOSTIC — qualquer coisa que fale HTTP marca ponto
+CONTEXTO: a rota `/remoto` (fatias 1 e 2, commits `7a54680`, `fa459e5`, `7f0db04`) é um controle de placar SEND-ONLY — dois botões que fazem POST via `applyLiveMatchAction`. Sem WebSocket, sem motor, sem sessão; a autorização é POSSE do `edit_token`, e o pareamento é por código de 6 dígitos (`create_remote_code`/`resolve_remote_code`).
+
+**A DESCOBERTA (Eric): o alvo nunca foi o relógio — foi o PROTOCOLO.** Marcar ponto são três POSTs HTTPS. Sem teclado, sem Bluetooth, sem HID, sem app intermediário. Então **qualquer dispositivo capaz de uma requisição HTTP pode ser um controle do Flow.**
+
+O CONTRASTE QUE EXPLICA POR QUE ISSO IMPORTA — o **clicker HID** (Flic e afins) que Eric tentou e falhou: aquele aparelho manda uma TECLA para o SISTEMA OPERACIONAL, que a entrega ao app de câmera, não ao navegador. Por isso não funcionava no PWA. **O `/remoto` não depende de intermediário nenhum: fala HTTP direto com o servidor.** A falha do clicker não era do Flow — era do modelo HID.
+
+**ESP32 / automação (a visão):** um ESP32 tem WiFi e HTTPS nativos. Com botões físicos, faria POST direto na RPC (`{kind, side}`) — botão de verdade, sem a fragilidade do Bluetooth e sem depender de o SO entregar a tecla ao navegador. Precisaria de: (1) WiFi na quadra; (2) os tokens da partida — e o **código de 6 dígitos já resolve o pareamento**; (3) fazer o POST. Mesma arquitetura, só troca o device.
+
+**A TENSÃO, e é ela que decide o timing:** o ESP32 é **hardware que a PWER PRODUZIRIA** — diferente do relógio ou do celular, que a pessoa já tem. Vira produto físico: montagem, custo unitário, distribuição, suporte, garantia. E depende de **WiFi na quadra**, enquanto celular e relógio usam 4G. É aprofundamento de aprofundamento: construir antes de haver base de usuários seria otimizar profundidade máxima sem largura nenhuma.
+
+**GUARDAR como visão. O VALOR REAL não é o ESP32 — é saber que a arquitetura NÃO ESTÁ PRESA a celular e relógio.** Se um dia fizer sentido (parceria de hardware, um clube que queira botões fixos na quadra, um telão com controle), a base técnica já está pronta e não precisa de nada novo: é POST + pareamento por código.
+
 ## Benefício-âncora (marketing): CONVIDE SEUS AMIGOS PARA FAZEREM PARTE DA SUA HISTÓRIA
 > "Convide seus amigos para fazerem parte da sua história. Cadastro rápido e fácil, e todos os jogos são compartilhados com eles."
 
