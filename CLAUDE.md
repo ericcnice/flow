@@ -460,6 +460,23 @@ O CONTRASTE QUE EXPLICA POR QUE ISSO IMPORTA — o **clicker HID** (Flic e afins
 
 **GUARDAR como visão. O VALOR REAL não é o ESP32 — é saber que a arquitetura NÃO ESTÁ PRESA a celular e relógio.** Se um dia fizer sentido (parceria de hardware, um clube que queira botões fixos na quadra, um telão com controle), a base técnica já está pronta e não precisa de nada novo: é POST + pareamento por código.
 
+## CONCEITO (Eric): rodar o Flow LOCAL (mini-PC / Raspberry Pi), sem internet
+A IDEIA: o Flow inteiro — front + Supabase auto-hospedado — num mini-PC ou Raspberry Pi na quadra, que também é o access point WiFi. ESP32, botões e celulares falam com o Pi pela rede local; zero internet externa. Edge computing / on-premise.
+
+**VIABILIDADE: é possível, e não é gambiarra.** O Supabase é open-source e auto-hospedável; um Pi dá conta de servir o front, rodar o Supabase local e ser o AP. E a arquitetura device-agnostic (POST HTTP) funciona **igual** apontando para um servidor local — não haveria nada a reescrever.
+
+**OS SENÕES, e o segundo é o que decide:**
+1. **MANUTENÇÃO**: local significa que o Eric vira administrador de servidor — backup, atualização, uptime, e uma falha de hardware **no meio de um torneio**. A nuvem gerenciada existe justamente para tirar esse peso de cima de quem tem um produto para construir.
+2. **⚠️ O ISOLAMENTO MATA O VALOR CONECTADO** — e este não é um custo, é uma contradição com o produto. O card que VIAJA para o Instagram, a transmissão que os pais assistem DE CASA, o histórico na nuvem, o convite viral, o analytics: **tudo isso é internet**. Um Flow 100% local e isolado perde exatamente o que o torna viral. O "phygital" é físico **CONECTADO** ao digital — sem a segunda metade, sobra um placar caro.
+3. **HÍBRIDO** (local + sync com a nuvem) resolveria os dois, mas é engenharia séria: reconciliar conflitos entre local e nuvem é a classe de problema que já custou caro aqui em escala muito menor (o Lamport existe por causa disso, para um único campo).
+4. **CUSTO/BENEFÍCIO**: o problema que isso resolve é "internet na quadra" — e o **hotspot do celular resolve o mesmo com zero complexidade e zero hardware**.
+
+**ONDE FARIA SENTIDO (nicho real, guardar):** torneio grande em local REMOTO sem internet nenhuma — clube no interior, competição num sítio — com muitas quadras simultâneas. Aí um servidor local coordenando, com sync para a nuvem depois, se justifica. É o caso extremo, não o padrão.
+
+**CONCLUSÃO: arquiteturalmente válido e elegante, mas contra a natureza do produto.** O Flow é essencialmente CONECTADO — a nuvem aqui é VALOR, não peso. Para "quadra sem WiFi", o hotspot resolve barato. GUARDAR como possibilidade para o nicho remoto; **não construir**.
+
+NOTA: isto não conflita com o inviolável do OFFLINE. O jogo já roda sem rede no próprio aparelho (localStorage, motor local) — o que a nuvem enriquece é o que vem DEPOIS do ponto marcado. O servidor local resolveria um problema que o offline-first já resolve, ao custo do que ele deliberadamente não tenta resolver sozinho.
+
 ## Benefício-âncora (marketing): CONVIDE SEUS AMIGOS PARA FAZEREM PARTE DA SUA HISTÓRIA
 > "Convide seus amigos para fazerem parte da sua história. Cadastro rápido e fácil, e todos os jogos são compartilhados com eles."
 
