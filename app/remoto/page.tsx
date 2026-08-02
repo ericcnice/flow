@@ -28,11 +28,17 @@
  * relógio) é a Fatia 2.
  */
 
-import { Suspense, useRef, useState } from "react"
+import { Suspense, useCallback, useEffect, useRef, useState } from "react"
 import { useSearchParams } from "next/navigation"
 import { ArrowLeftRight, Undo2 } from "lucide-react"
-import { applyLiveMatchAction, type LiveMatchAction } from "@/lib/supabase/live-match"
+import {
+  applyLiveMatchAction,
+  getLiveMatchState,
+  type LiveMatchAction,
+} from "@/lib/supabase/live-match"
 import { themeClassName, type ThemeId } from "@/lib/themes"
+
+type ModoContagem = "pontos" | "games"
 
 /** O mesmo limiar do palco: 2 toques no MESMO lado dentro disto = desfazer. */
 const DOUBLE_TAP_MS = 300
@@ -56,7 +62,48 @@ function ControleRemoto() {
   // O MODO DE CONTAGEM importa: em "games" cada toque concede um GAME inteiro,
   // e é o que a tela de jogo envia. Mandar "point" aqui faria o controle e o
   // placar contarem coisas diferentes.
-  const scoreType = searchParams.get("scoreType") === "games" ? "games" : "pontos"
+  //
+  // ⚠️ A URL É FALLBACK, NÃO FONTE DA VERDADE — e essa distinção é o conserto de
+  // um bug silencioso. O parâmetro é um RETRATO do momento em que o link foi
+  // montado; quem troca o modo no /jogo depois disso não muda a URL de ninguém.
+  // O controle então mandava `point` numa partida em GAMES — e o jogo não
+  // ignorava: SOMAVA um ponto. O placar saía errado sem nada denunciar.
+  //
+  // Agora o modo vem do STATE DA SALA, por dois caminhos que não custam nada:
+  // uma leitura na montagem e a resposta de cada toque (a RPC de ação já
+  // devolve o state inteiro). A URL só vale até a primeira das duas chegar.
+  const scoreTypeUrl: ModoContagem =
+    searchParams.get("scoreType") === "games" ? "games" : "pontos"
+  const [scoreType, setScoreType] = useState<ModoContagem>(scoreTypeUrl)
+
+  /** Extrai o modo da raiz do state (é de lá que o /jogo e o /placar leem). */
+  const aprenderModo = useCallback((state: unknown) => {
+    const st = (state as { scoreType?: unknown } | null)?.scoreType
+    if (st === "games" || st === "pontos") setScoreType(st)
+  }, [])
+
+  // LEITURA NA MONTAGEM (e ao ACORDAR). Uma RPC, sem canal e sem polling: o
+  // controle nasce com o modo real em vez do modo da URL. O `visibilitychange`
+  // cobre o caso do relógio — a tela apaga, a partida muda de modo, o pulso
+  // sobe: ao voltar a ficar visível, ele relê antes do próximo toque.
+  useEffect(() => {
+    if (!matchId || !editToken) return
+    let vivo = true
+    const ler = () => {
+      void getLiveMatchState(editToken).then((r) => {
+        if (vivo && r) aprenderModo(r.state)
+      })
+    }
+    ler()
+    const aoVoltar = () => {
+      if (document.visibilityState === "visible") ler()
+    }
+    document.addEventListener("visibilitychange", aoVoltar)
+    return () => {
+      vivo = false
+      document.removeEventListener("visibilitychange", aoVoltar)
+    }
+  }, [matchId, editToken, aprenderModo])
 
   /** Espelha os lados NESTE aparelho — para pôr "o seu lado" perto do polegar. */
   const [espelhado, setEspelhado] = useState(false)
@@ -75,8 +122,13 @@ function ControleRemoto() {
   /** Envia e sinaliza falha sem nunca lançar — o controle não pode quebrar. */
   const enviar = async (action: LiveMatchAction) => {
     if (!matchId || !editToken) return
-    const ok = await applyLiveMatchAction(editToken, matchId, action)
-    setErro(ok === null)
+    const r = await applyLiveMatchAction(editToken, matchId, action)
+    setErro(r === null)
+    // APRENDE COM A RESPOSTA: o state inteiro já vinha aqui e era descartado.
+    // Lendo o modo dele, o controle se autocorrige a cada toque, sem UMA
+    // requisição a mais. Se o modo mudou entre o load e agora, o erro dura um
+    // toque — não a partida inteira.
+    if (r) aprenderModo(r.state)
   }
 
   const tocarLado = (side: "A" | "B") => {
@@ -183,6 +235,14 @@ function ControleRemoto() {
           </button>
         )
       })}
+
+      {/* O MODO, em miúdo mas visível. Existe porque o controle não tem placar à
+          vista: sem isto, marcar no modo errado é um erro que só aparece na
+          tela do outro aparelho, minutos depois. Agora que ele SABE o modo,
+          esconder seria desperdiçar a informação que consertou o bug. */}
+      <span className="pointer-events-none absolute left-1/2 top-1.5 z-10 -translate-x-1/2 rounded-full bg-black/55 px-2 py-0.5 text-[9px] font-black uppercase tracking-[0.18em] text-white/80 ring-1 ring-white/20">
+        {scoreType === "games" ? "Game" : "Ponto"}
+      </span>
 
       {/* TROCAR LADOS por toque — o caminho confiável no relógio. Fica no
           centro, sobre a divisória, para não roubar área dos dois botões. */}
