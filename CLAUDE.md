@@ -460,6 +460,29 @@ O CONTRASTE QUE EXPLICA POR QUE ISSO IMPORTA — o **clicker HID** (Flic e afins
 
 **GUARDAR como visão. O VALOR REAL não é o ESP32 — é saber que a arquitetura NÃO ESTÁ PRESA a celular e relógio.** Se um dia fizer sentido (parceria de hardware, um clube que queira botões fixos na quadra, um telão com controle), a base técnica já está pronta e não precisa de nada novo: é POST + pareamento por código.
 
+## LINHA DE PRODUTO: "Flow Button" — hardware de controle com pareamento PERMANENTE
+VISÃO (Eric): com o software tracionando, VENDER hardware de controle. A peça que destrava tudo é o **pareamento PERMANENTE por USUÁRIO** — "o botão do Eric" controla o jogo ativo do Eric. Compra o aparelho, registra UMA vez no perfil, e depois é só ligar e marcar: sem senha, sem código por partida.
+
+**A LINHA:**
+- **Flow Button** (básico): ESP32 + botões, **sem tela**, barato. A lógica é de multi-clique — 1 clique lado A, 2 cliques lado B, 3 cliques ou clique longo desfaz.
+- **Flow Button Pro**: ESP32 + tela colorida, mostrando placar e info da partida ao vivo.
+
+**O que torna o modelo SEM TELA possível é a ausência de senha.** Um aparelho que precisasse de código por jogo exigiria tela e teclado — e aí não haveria versão barata. O pareamento permanente não é conveniência: é o que **viabiliza a linha de entrada**.
+
+**REGISTRO do device** (o modelo que o Eric intuiu, e é o certo): cada aparelho tem um código/ID único, impresso ou em QR. O usuário vai no PERFIL → "adicionar dispositivo" → digita ou escaneia → o device vira "dele". **REVOGAÇÃO** pelo mesmo lugar: perdeu ou foi roubado, remove do perfil e o aparelho para de funcionar.
+
+**SEGURANÇA CALIBRADA AO RISCO** (posição do Eric, e ela está certa): em jogo amador, o pior caso de uma chave vazada é alguém marcar um ponto errado no jogo de sábado. **Aborrecimento, não catástrofe.** Segurança pragmática, não paranoica — over-engineering para esse risco é desperdício de esforço que faz falta em outro lugar.
+⚠️ A calibragem MUDA se o hardware chegar a torneio/ranking: ali o placar vira resultado oficial, e o mesmo "aborrecimento" passa a ter consequência. Revisar quando (e se) esse contexto existir.
+
+**EFÊMERO + PERMANENTE = cobertura de cenários, não redundância:**
+- **EFÊMERO** (código de 6 dígitos, já no ar): casual, emprestado, testar — smartwatch de um amigo, 2º celular. Grátis, sem hardware.
+- **PERMANENTE** (device registrado): dedicado, comprado. O Flow Button.
+- **E o efêmero é FUNIL para o permanente**: experimenta no relógio → gosta → compra o Button. O que já está construído vende o que virá.
+
+**LIÇÃO DE ARQUITETURA (vale além deste caso):** o Eric estava "obcecado pelo Bluetooth". Ao **subir um nível de abstração** — o objetivo é *marcar ponto remoto*, não *fazer o Bluetooth funcionar* — a solução HTTP se provou muito melhor, e sem nenhum dos problemas do BT (o iOS bloqueia, o HID não chega ao navegador, o Flic é proprietário). **Quando uma tecnologia específica dá problema atrás de problema, o movimento certo é perguntar qual era o objetivo real.** Foi o que transformou "não consigo fazer o clicker funcionar" em "qualquer coisa que fale HTTP marca ponto".
+
+TIMING: tudo isto é VISÃO. Hardware é produto físico — produção, estoque, suporte, logística, garantia — e só faz sentido COM tração do software primeiro. A base técnica já existe (o POST device-agnostic) ou é pequena (o registro de device no perfil). GUARDAR.
+
 ## CONCEITO (Eric): rodar o Flow LOCAL (mini-PC / Raspberry Pi), sem internet
 A IDEIA: o Flow inteiro — front + Supabase auto-hospedado — num mini-PC ou Raspberry Pi na quadra, que também é o access point WiFi. ESP32, botões e celulares falam com o Pi pela rede local; zero internet externa. Edge computing / on-premise.
 
