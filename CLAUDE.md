@@ -483,6 +483,23 @@ VISÃO (Eric): com o software tracionando, VENDER hardware de controle. A peça 
 
 TIMING: tudo isto é VISÃO. Hardware é produto físico — produção, estoque, suporte, logística, garantia — e só faz sentido COM tração do software primeiro. A base técnica já existe (o POST device-agnostic) ou é pequena (o registro de device no perfil). GUARDAR.
 
+## Flow Button: a config de WiFi sem tela, e o hardware que RECONVERTE quem recusa o celular
+**O FURO QUE O ERIC ACHOU** — sem tela, como o aparelho recebe a senha do WiFi? É problema clássico de IoT, e resolvido:
+- **(A) CAPTIVE PORTAL — recomendado, universal.** O device sobe uma rede WiFi temporária; a pessoa conecta o CELULAR nela e digita a senha do WiFi da casa/clube numa página; o device guarda e reconecta sozinho para sempre. **A "tela" é emprestada do celular só na configuração inicial** — e é isso que faz o modelo SEM TELA se sustentar.
+- **(B) WPS** — é o "parear apertando um botão" que o Eric imaginou. Existe, mas roteadores modernos costumam **desabilitar por segurança**. Não confiável como caminho único.
+- **(C) Bluetooth só para a config** — irônico e válido: o BT que descartamos para MARCAR PONTO serviria bem para o trabalho pontual de entregar uma senha.
+- **(D) SmartConfig / ESP-Touch** da Espressif.
+
+→ O **básico** (sem tela) usa captive portal; o **Pro** configura na própria tela. **A tela é upgrade de conveniência, não requisito** — o furo não derruba a linha de entrada.
+
+**O HARDWARE RECONVERTE QUEM O CELULAR AFASTA** (o insight mais forte desta seção): o amigo que recusou o Flow — *"celular é trabalho, não quero isso na quadra"* — **não rejeitou marcar pontos. Rejeitou o CELULAR**: o trabalho, as notificações, a distração. Um botão físico dedicado remove exatamente isso: não é celular, é **objeto de jogo**, da mesma família da raquete e do apito. Marca o ponto sem trazer o trabalho para a quadra.
+
+Consequência: o hardware **não é só conveniência para quem já usa — AMPLIA o público**. Ele responde a uma objeção específica e nomeada, alcançando quem o celular afastava. Isso muda a natureza do produto físico: deixa de ser acessório e vira porta de entrada.
+
+⚠️ **RÉGUA — é HIPÓTESE boa, e hipótese continua sendo hipótese.** Não se sabe se AQUELE amigo compraria ou usaria; a objeção dele pode ser mais funda ("nada de tecnologia na quadra"), e aí nenhum botão resolve. **Validar MOSTRANDO um device** — um protótipo ESP32 tosco basta — **e observando a reação**, não construindo a linha inteira para descobrir. O sinal vem do teste, não do raciocínio.
+
+TIMING: hardware é visão de TRAÇÃO. Produção, estoque, suporte, logística e garantia são um negócio diferente de software, e só com o software provado. GUARDAR o insight — ele é o argumento de venda quando a hora chegar.
+
 ## CONCEITO (Eric): rodar o Flow LOCAL (mini-PC / Raspberry Pi), sem internet
 A IDEIA: o Flow inteiro — front + Supabase auto-hospedado — num mini-PC ou Raspberry Pi na quadra, que também é o access point WiFi. ESP32, botões e celulares falam com o Pi pela rede local; zero internet externa. Edge computing / on-premise.
 
