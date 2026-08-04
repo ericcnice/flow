@@ -196,6 +196,25 @@ function normalizaServer(raw: any): { A: 0 | 1; B: 0 | 1 } {
   return { A: raw?.A === 1 ? 1 : 0, B: raw?.B === 1 ? 1 : 0 }
 }
 
+/**
+ * O INÍCIO da partida guardado na sala → a âncora do cronômetro.
+ *
+ * Cai em "agora" (o comportamento antigo) em três casos, e os três são reais:
+ *  - sala ANTIGA, criada antes de o campo existir;
+ *  - valor ilegível (lixo no jsonb);
+ *  - data no FUTURO — relógio do aparelho atrasado em relação ao de quem criou
+ *    a sala daria um tempo NEGATIVO, e o formatador imprimiria "-1:-23:-45" na
+ *    tela de transmissão. Uma tolerância de um minuto absorve a diferença
+ *    normal entre dois celulares.
+ */
+function inicioDaSala(bruto: unknown): Date {
+  if (typeof bruto === "string" && bruto) {
+    const t = new Date(bruto).getTime()
+    if (Number.isFinite(t) && t <= Date.now() + 60_000) return new Date(t)
+  }
+  return new Date()
+}
+
 function teamName(players: any, side: "blue" | "red", gameType?: string | null): string {
   const one = side === "blue" ? players?.blue1 : players?.red1
   const two = side === "blue" ? players?.blue2 : players?.red2
@@ -382,9 +401,16 @@ export function BroadcastView() {
         }
 
         rebuildEngine(rRules, rFirst, cleanActions)
-        // O cronômetro do espectador conta desde a abertura (o startTime real não
-        // é transmitido) — mesmo comportamento dos devices remotos do /jogo.
-        setStartTime(new Date())
+        // CRONÔMETRO ancorado no INÍCIO DA PARTIDA quando a sala o traz.
+        //
+        // Antes contava sempre desde a abertura da tela, porque o `startTime`
+        // real não viajava — vivia só no localStorage do dono. No telão isso
+        // virava um relógio que ZERAVA a cada troca de quadra: o iframe
+        // remonta, e a contagem recomeçava do zero numa partida de 40 minutos.
+        //
+        // Sala ANTIGA (sem o campo) cai no comportamento de sempre, em vez de
+        // ficar sem cronômetro: degradação graciosa, não erro.
+        setStartTime(inicioDaSala(rState.startTime))
         setLoading(false)
 
         // TRANSMISSÃO ABERTA — só depois de carregar de VERDADE: um link

@@ -87,6 +87,12 @@ export default async function TelaoPage({
   const quadras: QuadraTelao[] = club.quadras.map((slug) => {
     const link = porQuadra.get(slug)
     const estado = estados.get(slug) as Record<string, unknown> | undefined
+    // O ESPORTE DA PARTIDA, por quadra. Estava FIXO em "squash" — herança do
+    // piloto, onde acertava por o clube só ter squash. Num clube com vários
+    // esportes (o Flow tem seis) isso fazia o placar de um jogo de TÊNIS
+    // contar com as regras do squash: 11 pontos corridos em vez de 15/30/40.
+    // Não é detalhe cosmético — é o produto contando errado na tela em que se
+    // pede confiança nele. O mesmo valor alimenta o palco e o cartão.
     const esporte =
       typeof estado?.sport === "string" && estado.sport ? estado.sport : esportePadrao
     // FORMATO da partida — o /placar só o aceita pela URL (nunca lê do state),
@@ -113,7 +119,7 @@ export default async function TelaoPage({
             link.matchId ?? "",
           )}&view=${encodeURIComponent(link.viewToken)}&clube=${encodeURIComponent(
             club.id,
-          )}&sport=squash${formato ? `&gameType=${formato}` : ""}`
+          )}&sport=${encodeURIComponent(esporte)}${formato ? `&gameType=${formato}` : ""}`
         : null,
     }
   })

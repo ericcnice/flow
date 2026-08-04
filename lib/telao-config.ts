@@ -31,6 +31,22 @@ export type TelaoConfig = {
 }
 
 export const TELAO: Record<string, TelaoConfig> = {
+  // A VITRINE DO FLOW — o telão que o Eric leva a clubes potenciais.
+  //
+  // Este mapa é o PORTÃO da feature: sem entrada aqui, /[clube]/telao devolve
+  // 404 ANTES de olhar o token de operação (page.tsx e operar/page.tsx barram
+  // no `!cfg`). Era só isso que faltava — o clube `flow` já existe no CLUBS,
+  // já tem quadras e já tem `public/flow.png`.
+  //
+  // CANAL VAZIO é legítimo, não um lugar reservado: `embedDaQuadra` só aceita
+  // o formato `UC+22`, então string vazia devolve null e o placar ocupa a tela
+  // inteira. Uma demonstração sem câmera é o caso normal — e quando quiser
+  // vídeo, o campo "vídeo só desta quadra" da tela de operação resolve por
+  // quadra, sem deploy.
+  flow: {
+    youtubeChannelId: "",
+    quadraPadrao: "q1",
+  },
   squashwall: {
     // Canal da Squash Wall. Enquanto o embed não estiver liberado lá, a tela
     // cinza é o comportamento esperado — o link de escape cobre.

@@ -70,7 +70,16 @@ export const CLUBS: Record<string, ClubConfig> = {
     nome: "Flow Club",
     logo: "/flow.png",
     esportes: ["tennis", "beach", "padel", "squash", "tabletennis", "pickleball"],
-    quadras: ["q1", "q2"],
+    // CINCO quadras (era q1/q2): o telão de demonstração itera esta lista, e
+    // duas quadras deixam a vitrine com cara de clube pequeno. Aditivo — q1/q2
+    // seguem valendo nos QRs e links já existentes.
+    //
+    // ⚠️ A TROCA que isto embute: quadra sem partida ligada mostra "Sem
+    // partida" no carrossel. Com cinco quadras e dois jogos de demonstração,
+    // três cartões ficam vazios — que se lê como realismo de clube (nem toda
+    // quadra está ocupada) ou como produto ocioso, dependendo de quantas o
+    // Eric encher antes da reunião. Voltar a q1/q2 é apagar três strings.
+    quadras: ["q1", "q2", "q3", "q4", "q5"],
   },
 }
 

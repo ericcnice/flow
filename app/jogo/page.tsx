@@ -869,6 +869,12 @@ export default function JogoPage() {
                 // tinha como saber que eram duplas e mostrava um nome só.
                 // Metadado de exibição; o motor não consulta gameType.
                 gameType: seedConfig.gameType,
+                // QUANDO A PARTIDA COMEÇOU. Vivia só no localStorage do dono,
+                // então quem assistia de fora não tinha como saber — e o
+                // cronômetro da transmissão contava desde que a TELA abriu.
+                // No telão isso aparecia como um relógio que zerava a cada
+                // troca de quadra. Metadado de exibição, como o gameType.
+                startTime: seedConfig.startTime,
               }
               const room = await createLiveMatch(config.clube, initialConfig)
               if (!room) return
