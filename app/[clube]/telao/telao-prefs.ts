@@ -39,6 +39,20 @@ export type PrefsTelao = {
   layout: SubLayout
   /** Quadra no palco. null = a que o servidor escolheu (?quadra= ou a padrão). */
   destaque: string | null
+  /**
+   * Quadra FIXADA (a estrela) — vence o `destaque`.
+   *
+   * ⚠️ O QUE ELA FAZ HOJE, dito sem enfeite: como nada move o palco sozinho, o
+   * efeito prático é tornar VISÍVEL e deliberado um compromisso que o
+   * `destaque` já guardava em silêncio ("esta tela é da quadra 3"). Tocar num
+   * cartão é olhar; fixar é decidir.
+   *
+   * O sentido pleno chega quando algo PUDER mover o palco sozinho (rodízio
+   * entre quadras, "seguir o jogo mais disputado"): aí `fixada` é a bandeira
+   * que diz "não me tire daqui". Ela nasce agora para que a preferência salva
+   * já esteja no formato certo quando esse dia chegar.
+   */
+  fixada: string | null
   /** Quadras que ESTA tela quer só com placar, mesmo tendo vídeo disponível. */
   soPlacar: string[]
 }
@@ -49,7 +63,13 @@ export type PrefsTelao = {
  * `split` é o que o telão já fazia — assim a tela nasce no formato certo e a
  * leitura da preferência não causa um salto visível em quem nunca mexeu nela.
  */
-const PADRAO: PrefsTelao = { modo: "hero", layout: "split", destaque: null, soPlacar: [] }
+const PADRAO: PrefsTelao = {
+  modo: "hero",
+  layout: "split",
+  destaque: null,
+  fixada: null,
+  soPlacar: [],
+}
 
 /** Uma chave POR CLUBE: a mesma TV pode alternar entre telões de clubes. */
 function chave(clube: string): string {
@@ -64,6 +84,7 @@ function saneia(bruto: unknown): Partial<PrefsTelao> {
   if (o.modo === "hero" || o.modo === "grid") out.modo = o.modo
   if (o.layout === "stacked" || o.layout === "split") out.layout = o.layout
   if (typeof o.destaque === "string") out.destaque = o.destaque
+  if (typeof o.fixada === "string") out.fixada = o.fixada
   if (Array.isArray(o.soPlacar)) {
     out.soPlacar = o.soPlacar.filter((v): v is string => typeof v === "string")
   }
@@ -108,6 +129,36 @@ export function usePrefsTelao(clube: string) {
     setPrefs((p) => ({ ...p, ...patch }))
   }, [])
 
+  /**
+   * A ESTRELA: fixa esta quadra no palco. Tocar de novo desafixa.
+   *
+   * Fixar também põe a quadra no palco — a estrela é um gesto só ("quero esta,
+   * e quero que fique"), não dois (escolher, depois fixar).
+   */
+  const alternarFixada = useCallback((quadra: string) => {
+    setPrefs((p) =>
+      p.fixada === quadra
+        ? { ...p, fixada: null }
+        : { ...p, fixada: quadra, destaque: quadra },
+    )
+  }, [])
+
+  /**
+   * Escolher uma quadra no carrossel — o "olhar", sem compromisso.
+   *
+   * ⚠️ SOLTA a estrela quando ela apontava para OUTRA quadra. Sem isto, tocar
+   * num cartão com outra quadra fixada não faria nada visível: a preferência
+   * mudaria por baixo e a tela continuaria igual, indistinguível de um toque
+   * que não pegou. Um gesto explícito nunca pode ser engolido em silêncio.
+   */
+  const escolherDestaque = useCallback((quadra: string) => {
+    setPrefs((p) => ({
+      ...p,
+      destaque: quadra,
+      fixada: p.fixada && p.fixada !== quadra ? null : p.fixada,
+    }))
+  }, [])
+
   /** Liga/desliga o "só placar" desta quadra NESTA tela. */
   const alternarSoPlacar = useCallback((quadra: string) => {
     setPrefs((p) => ({
@@ -118,5 +169,5 @@ export function usePrefsTelao(clube: string) {
     }))
   }, [])
 
-  return { prefs, atualizar, alternarSoPlacar }
+  return { prefs, atualizar, alternarFixada, escolherDestaque, alternarSoPlacar }
 }

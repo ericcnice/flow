@@ -17,7 +17,7 @@
 
 import { useEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
-import { Columns2, MonitorPlay, Radio, Rows2, Tv2 } from "lucide-react"
+import { Columns2, MonitorPlay, Radio, Rows2, Star, Tv2 } from "lucide-react"
 import { FlowWordmark } from "@/components/brand/flow-wordmark"
 import { TelaoHero } from "./telao-hero"
 import { usePrefsTelao } from "./telao-prefs"
@@ -46,7 +46,8 @@ export function TelaoTela({
   destaqueFixado: boolean
 }) {
   const router = useRouter()
-  const { prefs, atualizar, alternarSoPlacar } = usePrefsTelao(clubeId)
+  const { prefs, atualizar, alternarFixada, escolherDestaque, alternarSoPlacar } =
+    usePrefsTelao(clubeId)
 
   // A TV fica ligada horas; quem opera está em OUTRO aparelho. Sem isto, trocar
   // a partida no celular exigiria alguém ir até a TV recarregar a página.
@@ -57,14 +58,24 @@ export function TelaoTela({
     return () => clearInterval(t)
   }, [router])
 
-  // A URL VENCE a preferência local: quem abre /telao?quadra=q3 está fixando
-  // aquela TV naquela quadra (é como se pendura um telão numa parede). Sem
-  // ?quadra=, a tela usa a sua escolha; se ela apontar para uma quadra que
-  // sumiu do catálogo, cai na do servidor em vez de ficar em branco.
+  // A PRECEDÊNCIA do que vai ao palco, da mais forte para a mais fraca:
+  //   1. ?quadra= na URL — quem abre /telao?quadra=q3 pendurou aquela TV
+  //      naquela quadra; nenhum toque na tela deve tirá-la de lá;
+  //   2. a ESTRELA — a escolha deliberada desta tela;
+  //   3. o último cartão tocado;
+  //   4. a quadra padrão do servidor.
+  // Se a preferência apontar para uma quadra que saiu do catálogo, cai na do
+  // servidor em vez de deixar a TV em branco.
   const emCartaz = useMemo(() => {
-    const alvo = destaqueFixado ? quadraInicial : (prefs.destaque ?? quadraInicial)
-    return quadras.find((q) => q.slug === alvo) ?? quadras.find((q) => q.slug === quadraInicial) ?? quadras[0]
-  }, [quadras, prefs.destaque, quadraInicial, destaqueFixado])
+    const alvo = destaqueFixado
+      ? quadraInicial
+      : (prefs.fixada ?? prefs.destaque ?? quadraInicial)
+    return (
+      quadras.find((q) => q.slug === alvo) ??
+      quadras.find((q) => q.slug === quadraInicial) ??
+      quadras[0]
+    )
+  }, [quadras, prefs.fixada, prefs.destaque, quadraInicial, destaqueFixado])
 
   if (!emCartaz) return null
 
@@ -163,8 +174,10 @@ export function TelaoTela({
                 key={q.slug}
                 quadra={q}
                 emCartaz={q.slug === emCartaz.slug}
-                fixado={destaqueFixado}
-                onEscolher={() => atualizar({ destaque: q.slug })}
+                fixada={prefs.fixada === q.slug}
+                travado={destaqueFixado}
+                onEscolher={() => escolherDestaque(q.slug)}
+                onFixar={() => alternarFixada(q.slug)}
               />
             ))}
           </nav>
@@ -243,50 +256,83 @@ function Botao({
   )
 }
 
-/** Um canal do carrossel. Diz o que a quadra TEM, para a escolha ser informada. */
+/**
+ * Um canal do carrossel. Diz o que a quadra TEM, para a escolha ser informada.
+ *
+ * ⚠️ DOIS botões IRMÃOS, não um dentro do outro: botão aninhado em botão é HTML
+ * inválido e o navegador desmancha a árvore, com o toque indo parar no elemento
+ * errado. O corpo e a estrela são gestos diferentes e ficam lado a lado.
+ */
 function CartaoQuadra({
   quadra,
   emCartaz,
-  fixado,
+  fixada,
+  travado,
   onEscolher,
+  onFixar,
 }: {
   quadra: QuadraTelao
   emCartaz: boolean
-  /** Com ?quadra= na URL o destaque está travado — o cartão vira informativo. */
-  fixado: boolean
+  fixada: boolean
+  /** Com ?quadra= na URL o palco está travado — o cartão vira informativo. */
+  travado: boolean
   onEscolher: () => void
+  onFixar: () => void
 }) {
   const temPartida = !!quadra.placarUrl
 
   return (
-    <button
-      type="button"
-      onClick={onEscolher}
-      disabled={fixado}
-      aria-current={emCartaz ? "true" : undefined}
-      className={`flex min-w-[104px] shrink-0 flex-col items-start gap-1 rounded-xl px-3 py-2 text-left ring-1 transition-colors ${
-        emCartaz
-          ? "bg-white/[0.08] ring-white/30"
-          : "bg-white/[0.02] ring-white/10 enabled:hover:bg-white/[0.05]"
-      } disabled:cursor-default`}
+    <div
+      className={`relative flex min-w-[116px] shrink-0 rounded-xl ring-1 transition-colors ${
+        emCartaz ? "bg-white/[0.08] ring-white/30" : "bg-white/[0.02] ring-white/10"
+      }`}
     >
-      <span className="flex w-full items-center justify-between gap-2">
-        <span className="text-xs font-black uppercase tracking-[0.15em] text-white/85">
-          Q{quadra.numero}
-        </span>
-        {/* Dica de que a quadra tem câmera. `aria-hidden` porque a informação
-            que decide a escolha (ao vivo / sem partida) está em texto logo
-            abaixo — um ícone sem rótulo lido em voz alta só atrapalharia. */}
-        {quadra.embedUrl && <MonitorPlay className="h-3 w-3 text-white/30" aria-hidden />}
-      </span>
-      <span
-        className={`text-[10px] font-bold uppercase tracking-[0.12em] ${
-          temPartida ? "" : "text-white/25"
-        }`}
-        style={temPartida ? { color: "var(--l-green)" } : undefined}
+      <button
+        type="button"
+        onClick={onEscolher}
+        disabled={travado}
+        aria-current={emCartaz ? "true" : undefined}
+        className="flex flex-1 flex-col items-start gap-1 rounded-xl py-2 pl-3 pr-9 text-left enabled:hover:bg-white/[0.04] disabled:cursor-default"
       >
-        {emCartaz ? "No ar" : temPartida ? "Ao vivo" : "Sem partida"}
-      </span>
-    </button>
+        <span className="flex items-center gap-1.5">
+          <span className="text-xs font-black uppercase tracking-[0.15em] text-white/85">
+            Q{quadra.numero}
+          </span>
+          {/* Dica de que a quadra tem câmera. `aria-hidden` porque a informação
+              que decide a escolha (ao vivo / sem partida) está em texto logo
+              abaixo — um ícone sem rótulo lido em voz alta só atrapalharia. */}
+          {quadra.embedUrl && <MonitorPlay className="h-3 w-3 text-white/30" aria-hidden />}
+        </span>
+        <span
+          className={`text-[10px] font-bold uppercase tracking-[0.12em] ${
+            temPartida ? "" : "text-white/25"
+          }`}
+          style={temPartida ? { color: "var(--l-green)" } : undefined}
+        >
+          {emCartaz ? "No ar" : temPartida ? "Ao vivo" : "Sem partida"}
+        </span>
+      </button>
+
+      {!travado && (
+        <button
+          type="button"
+          onClick={onFixar}
+          aria-pressed={fixada}
+          aria-label={
+            fixada
+              ? `Desafixar a quadra ${quadra.numero} do destaque`
+              : `Fixar a quadra ${quadra.numero} no destaque`
+          }
+          title={fixada ? "Desafixar do destaque" : "Fixar no destaque"}
+          className={`absolute right-1 top-1 rounded-lg p-1.5 transition-colors ${
+            fixada ? "text-amber-300" : "text-white/20 hover:text-white/60"
+          }`}
+        >
+          {/* `fill` só na fixada: a silhueta vazia lê como "dá para fixar" e a
+              cheia como "está fixada", sem precisar de legenda na TV. */}
+          <Star className="h-3.5 w-3.5" fill={fixada ? "currentColor" : "none"} />
+        </button>
+      )}
+    </div>
   )
 }
