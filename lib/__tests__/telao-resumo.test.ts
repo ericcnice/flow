@@ -130,6 +130,54 @@ test("lixo no state não derruba: ações inválidas são descartadas", () => {
   assert.equal(r.A.ponto, "1")
 })
 
+test("duplas: a sala afirmando o formato faz o cartão mostrar o PAR", () => {
+  const r = resumoDoState(
+    sala({
+      gameType: "duplas",
+      players: { blue1: "Eric", blue2: "Rodrigo", red1: "Kika", red2: "Ana" },
+    }),
+    "squash",
+  )
+  assert.ok(r)
+  assert.equal(r.A.nome, "Eric/Rodrigo")
+  assert.equal(r.B.nome, "Kika/Ana")
+})
+
+test("simples: um nome de cada lado, mesmo com parceiro preenchido", () => {
+  // A REGRESSÃO que este teste tranca: deduzir "duplas" da presença de um nome
+  // de parceiro inventaria uma dupla que não existe — uma afirmação falsa
+  // sobre quem está jogando, na tela que todo mundo olha.
+  const r = resumoDoState(
+    sala({
+      gameType: "simples",
+      players: { blue1: "Eric", blue2: "Rodrigo", red1: "Kika", red2: "Ana" },
+    }),
+    "squash",
+  )
+  assert.ok(r)
+  assert.equal(r.A.nome, "Eric")
+  assert.equal(r.B.nome, "Kika")
+})
+
+test("sala SEM gameType (partida antiga) trata como simples, não adivinha", () => {
+  const r = resumoDoState(
+    sala({ players: { blue1: "Eric", blue2: "Rodrigo", red1: "Kika" } }),
+    "squash",
+  )
+  assert.ok(r)
+  assert.equal(r.A.nome, "Eric")
+})
+
+test("duplas SEM parceiro: um nome só, nunca 'Eric/' nem 'Eric/Jogador 2'", () => {
+  const r = resumoDoState(
+    sala({ gameType: "duplas", players: { blue1: "Eric", blue2: "  ", red1: "Kika" } }),
+    "squash",
+  )
+  assert.ok(r)
+  assert.equal(r.A.nome, "Eric")
+  assert.equal(r.B.nome, "Kika")
+})
+
 test("sem nomes no state, cai nos rótulos genéricos em vez de vazio", () => {
   const r = resumoDoState(sala({ players: {} }), "squash")
   assert.ok(r)

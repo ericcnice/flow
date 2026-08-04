@@ -862,6 +862,13 @@ export default function JogoPage() {
                 ...(seedConfig.playerIds ? { playerIds: seedConfig.playerIds } : {}),
                 theme: config.theme ?? theme,
                 sport: config.sport ?? sportRef.current,
+                // FORMATO no seed. Sem isto a sala só ficava sabendo se o juiz
+                // TOCASSE no toggle (o único set_config que manda gameType):
+                // uma partida de duplas aberta pelo QR nascia sem o campo, e
+                // quem lesse a sala de fora — a transmissão do telão — não
+                // tinha como saber que eram duplas e mostrava um nome só.
+                // Metadado de exibição; o motor não consulta gameType.
+                gameType: seedConfig.gameType,
               }
               const room = await createLiveMatch(config.clube, initialConfig)
               if (!room) return

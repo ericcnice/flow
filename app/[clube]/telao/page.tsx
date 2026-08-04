@@ -89,6 +89,16 @@ export default async function TelaoPage({
     const estado = estados.get(slug) as Record<string, unknown> | undefined
     const esporte =
       typeof estado?.sport === "string" && estado.sport ? estado.sport : esportePadrao
+    // FORMATO da partida — o /placar só o aceita pela URL (nunca lê do state),
+    // então sem este parâmetro uma dupla aparece com um nome só no palco.
+    //
+    // Vai apenas quando a SALA AFIRMA o formato. Nada de deduzir "duplas" de um
+    // slot de parceiro preenchido: um jogo de simples com um nome sobrando de
+    // antes viraria "Eric/Fulano" no telão — uma afirmação falsa sobre quem
+    // está jogando, na tela que todo mundo olha. Sem certeza, um nome só.
+    const formato = estado?.gameType === "duplas" || estado?.gameType === "simples"
+      ? estado.gameType
+      : null
     return {
       slug,
       numero: quadraLabel(slug),
@@ -103,7 +113,7 @@ export default async function TelaoPage({
             link.matchId ?? "",
           )}&view=${encodeURIComponent(link.viewToken)}&clube=${encodeURIComponent(
             club.id,
-          )}&sport=squash`
+          )}&sport=squash${formato ? `&gameType=${formato}` : ""}`
         : null,
     }
   })

@@ -63,19 +63,24 @@ export type ResumoPartida = {
 }
 
 /**
- * O nome de um lado, IGUAL ao que o /placar mostra no destaque.
+ * O nome de um lado, com a MESMA regra do /placar (`teamName` lá):
+ * em duplas mostra o par "A/B"; em simples, só o jogador principal.
  *
- * ⚠️ Só o primeiro jogador, mesmo em duplas — e isso é deliberado, não
- * descuido: o `gameType` viaja pela URL do /placar, e a URL que o telão monta
- * não o inclui. Mostrar "Eric/Rodrigo" no cartão e "Eric" no palco seria uma
- * incoerência na mesma tela. Quando o telão passar o `gameType` adiante, os
- * dois passam a mostrar a dupla — juntos.
+ * ⚠️ A dupla exige as DUAS condições — a sala afirmando "duplas" E o parceiro
+ * tendo nome. Uma só não basta: sem o formato, um nome sobrando de um jogo
+ * anterior viraria uma dupla que não existe; sem o nome, sairia "Eric/" ou
+ * "Eric/Jogador 2", que é pior que mostrar um nome só.
  */
-function nomeDoLado(players: unknown, lado: "blue" | "red"): string {
+function nomeDoLado(players: unknown, lado: "blue" | "red", duplas: boolean): string {
   const p = (players ?? {}) as Record<string, unknown>
-  const um = p[`${lado}1`]
-  if (typeof um === "string" && um.trim()) return um.trim()
-  return lado === "blue" ? "Jogador 1" : "Jogador 2"
+  const bruto = p[`${lado}1`]
+  const um = typeof bruto === "string" && bruto.trim() ? bruto.trim() : ""
+  if (!um) return lado === "blue" ? "Jogador 1" : "Jogador 2"
+
+  if (!duplas) return um
+  const brutoDois = p[`${lado}2`]
+  const dois = typeof brutoDois === "string" && brutoDois.trim() ? brutoDois.trim() : ""
+  return dois ? `${um}/${dois}` : um
 }
 
 /** Só o que o motor sabe reexecutar; qualquer outra chave da sala é ignorada. */
@@ -128,8 +133,12 @@ export function resumoDoState(bruto: unknown, sportId: string): ResumoPartida | 
   const emAndamento = cols.find((c) => c.current)
   const saca = gs.finished ? null : displayServer(gs)
 
+  // O cartão e o palco leem a MESMA afirmação da sala — é o que garante que os
+  // dois digam a mesma coisa sobre quem está jogando.
+  const duplas = st.gameType === "duplas"
+
   const lado = (s: Side): ResumoLado => ({
-    nome: nomeDoLado(st.players, s === "A" ? "blue" : "red"),
+    nome: nomeDoLado(st.players, s === "A" ? "blue" : "red", duplas),
     encerradas: encerradas.map((c) => (s === "A" ? (c.a ?? 0) : (c.b ?? 0))),
     atual:
       familiaTenis && emAndamento ? ((s === "A" ? emAndamento.a : emAndamento.b) ?? 0) : null,
