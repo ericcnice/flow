@@ -54,6 +54,17 @@ export const CLUBS: Record<string, ClubConfig> = {
   // de Instagram, q2 = demonstrações ao vivo. Separar os canais mantém a
   // telemetria limpa (court_visits grava venue+sport+court). Logo: adicionar
   // public/flow.png (senão a abertura mostra logo vazio).
+  // PARCERIA SQUASH WALL (piloto do TELÃO). Cinco quadras de squash, todas com
+  // câmera e transmissão no YouTube do clube. Entra aqui como qualquer outro
+  // clube — o telão não inventa estrutura, usa a mesma que a jornada de QR já
+  // valida (Pacto Rule 1: o slug precisa existir também em `venues`).
+  squashwall: {
+    id: "squashwall",
+    nome: "Squash Wall",
+    logo: "/squashwall.png",
+    esportes: ["squash"],
+    quadras: ["q1", "q2", "q3", "q4", "q5"],
+  },
   flow: {
     id: "flow",
     nome: "Flow Club",
