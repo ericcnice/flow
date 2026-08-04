@@ -36,3 +36,13 @@ create table if not exists public.telao_links (
 alter table public.telao_links enable row level security;
 revoke all on public.telao_links from anon;
 revoke all on public.telao_links from authenticated;
+
+-- ⚠️ O service_role BYPASSA a RLS, mas ainda precisa do GRANT de tabela: são
+-- duas camadas separadas do PostgreSQL, e o bypass não cobre a permissão. Sem
+-- esta linha o servidor não lê nem escreve, e o telão falha EM SILÊNCIO —
+-- "aguardando partida" para sempre, sem erro em lugar nenhum.
+-- NÃO viola o "zero policies": grant ≠ policy. `anon` e `authenticated` seguem
+-- bloqueados pelos revokes acima; só o servidor alcança a tabela.
+-- (Já aplicado manualmente no banco — esta linha sincroniza o arquivo
+-- versionado com o estado real.)
+grant all on public.telao_links to service_role;
