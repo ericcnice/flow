@@ -27,7 +27,7 @@ import { resolveClubContextLayered } from "@/lib/club-context"
 import { readClubCache, fetchPublicClub } from "@/lib/supabase/club-catalog"
 import { resolveSponsor, resolveSponsorForCourt, type Sponsor } from "@/lib/supabase/sponsors"
 import { supabase } from "@/lib/supabase/client"
-import { defaultRulesFor } from "@/lib/sports-catalog"
+import { defaultRulesFor, defaultGameTypeFor } from "@/lib/sports-catalog"
 import { DEFAULT_THEME } from "@/lib/themes"
 
 // Duração de cada tela da abertura: Tela 1 (logo do clube + esporte/quadra) e o
@@ -277,10 +277,16 @@ export function ClubOpening({ ad }: { ad?: string }) {
       // closure antiga, e só o ref tem o adCfg final. Grava o SLUG, que é o que
       // /jogo e /placar re-resolvem depois. Sem patrocinador o campo nem aparece.
       ...(adCfgRef.current ? { ad: adCfgRef.current.slug } : {}),
-      // Padrão do clube: 95% dos jogos são DUPLAS (QUADRA 2.0, B1a QA). Só o
-      // valor default muda — o fluxo da jornada (branding/patrocinador/timing)
-      // é idêntico. O juiz troca no card de setup ou no popup de nomes.
-      gameType: "duplas",
+      // Formato padrão POR ESPORTE. Era 'duplas' fixo — o perfil do SPAC, onde
+      // 95% dos jogos de tênis são de dupla (QUADRA 2.0, B1a QA). Só que o QR
+      // também abre squash e ping pong, que são um contra um: a quadra de
+      // squash montava a tela para quatro em todo jogo, e alguém tinha que
+      // corrigir antes do primeiro ponto.
+      //
+      // Só o VALOR default muda — o fluxo da jornada (branding, patrocinador,
+      // timing dos 4s, chaves gravadas) é idêntico. O juiz troca no card de
+      // setup ou no popup de nomes, como sempre.
+      gameType: defaultGameTypeFor(sportId),
       scoreType: "pontos",
       players: { blue1: "Jogador 1", blue2: "Jogador 2", red1: "Jogador 3", red2: "Jogador 4" },
       startTime: new Date().toISOString(),

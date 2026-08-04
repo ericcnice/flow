@@ -28,7 +28,7 @@ import { createSpeechSynthesisSpeaker, type Speaker } from "@/lib/voice/speaker"
 // pong/pickleball). O "catálogo" (lib/sports-catalog) é a cola entre a UI e os
 // módulos — ele NÃO altera lib/scoring, só o consome.
 import { ScoringEngine } from "@/lib/scoring/engine"
-import { sportById, familyOf, formatPoint, defaultRulesFor, buildScoreCols, concededUnitFlags, displayServer, sideChangeOf, migrateRacketRules, type SideChangeMode, type SportId } from "@/lib/sports-catalog"
+import { sportById, familyOf, formatPoint, defaultRulesFor, defaultGameTypeFor, buildScoreCols, concededUnitFlags, displayServer, sideChangeOf, migrateRacketRules, type SideChangeMode, type SportId } from "@/lib/sports-catalog"
 import { themeClassName, type ThemeId } from "@/lib/themes"
 import { clubFromCacheOrBundle } from "@/lib/supabase/club-catalog"
 import { AppAuthCta } from "@/components/auth/app-auth"
@@ -728,8 +728,14 @@ export default function JogoPage() {
             clube: clubeParam ?? undefined,
             ad: adParam ?? undefined,
             // Join de link compartilhado: HERDA o formato do host pela URL
-            // (&gameType=); fallback 'duplas' (padrão do clube) p/ links antigos.
-            gameType: gameTypeParam === "simples" || gameTypeParam === "duplas" ? gameTypeParam : "duplas",
+            // (&gameType=). Link ANTIGO, sem o parâmetro, cai no padrão do
+            // ESPORTE em vez de 'duplas' fixo — um convidado entrando num
+            // squash veria a tela montada para quatro. É só o valor de partida:
+            // o formato real do host chega pelo merge da sala logo em seguida.
+            gameType:
+              gameTypeParam === "simples" || gameTypeParam === "duplas"
+                ? gameTypeParam
+                : defaultGameTypeFor(resolvedSport),
             scoreType: loadedScoreType,
             players: { blue1: "Player 1", blue2: "Player 2", red1: "Player 3", red2: "Player 4" },
             startTime: new Date().toISOString(),

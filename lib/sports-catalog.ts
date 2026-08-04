@@ -57,16 +57,38 @@ export type SportMeta = {
   family: ScoreFamily
   /** Como/quando o esporte troca de lado (para o aviso automático na UI). */
   sideChange: SideChangeMode
+  /**
+   * Formato NATURAL do esporte — o que a tela de setup pré-seleciona.
+   *
+   * ⚠️ É SÓ O PADRÃO INICIAL, nunca uma trava: o toggle Simples/Duplas segue
+   * editável em todos os esportes, e nada no motor consulta este campo. Ele
+   * responde "como a tela abre", não "o que pode ser jogado".
+   */
+  defaultGameType: GameTypeId
 }
 
-/** Ordem do carrossel na tela de setup. */
+/** Formato da partida. Vive no gameConfig; o motor não o consulta. */
+export type GameTypeId = "simples" | "duplas"
+
+/**
+ * Ordem do carrossel na tela de setup.
+ *
+ * O PADRÃO DE FORMATO por esporte segue o que se joga de fato:
+ *  • padel — a quadra tem paredes e o jogo nasceu para quatro; simples existe,
+ *    mas em quadra própria e como exceção;
+ *  • beach tennis — competitivo e recreativo são duplas; simples é raro;
+ *  • pickleball — o recreativo é esmagadoramente duplas (é o formato das
+ *    quadras públicas e das ligas sociais);
+ *  • squash, ping pong — um contra um; duplas é a exceção;
+ *  • tênis — simples é o formato canônico do esporte.
+ */
 export const SPORTS: SportMeta[] = [
-  { id: "tennis", name: "Tênis", module: tennisModule, family: "tennis", sideChange: "tennis-odd-games" },
-  { id: "beach", name: "Beach Tennis", module: beachModule, family: "tennis", sideChange: "tennis-odd-games" },
-  { id: "padel", name: "Padel", module: padelModule, family: "tennis", sideChange: "tennis-odd-games" },
-  { id: "squash", name: "Squash", module: squashModule, family: "rally", sideChange: "none" },
-  { id: "tabletennis", name: "Ping Pong", module: tableTennisModule, family: "rally", sideChange: "each-game" },
-  { id: "pickleball", name: "Pickleball", module: pickleballModule, family: "sideout", sideChange: "none" },
+  { id: "tennis", name: "Tênis", module: tennisModule, family: "tennis", sideChange: "tennis-odd-games", defaultGameType: "simples" },
+  { id: "beach", name: "Beach Tennis", module: beachModule, family: "tennis", sideChange: "tennis-odd-games", defaultGameType: "duplas" },
+  { id: "padel", name: "Padel", module: padelModule, family: "tennis", sideChange: "tennis-odd-games", defaultGameType: "duplas" },
+  { id: "squash", name: "Squash", module: squashModule, family: "rally", sideChange: "none", defaultGameType: "simples" },
+  { id: "tabletennis", name: "Ping Pong", module: tableTennisModule, family: "rally", sideChange: "each-game", defaultGameType: "simples" },
+  { id: "pickleball", name: "Pickleball", module: pickleballModule, family: "sideout", sideChange: "none", defaultGameType: "duplas" },
 ]
 
 /** Índice por id (fallback: tênis) — não quebra com id desconhecido. */
@@ -87,6 +109,14 @@ export function sideChangeOf(id: string | null | undefined): SideChangeMode {
 /** Regras padrão do esporte (delegadas ao módulo). */
 export function defaultRulesFor(id: string | null | undefined): any {
   return sportById(id).module.defaultRules()
+}
+
+/**
+ * Formato padrão (simples/duplas) do esporte — o que a tela de setup abre
+ * marcado. Editável pelo usuário em qualquer esporte; ver `defaultGameType`.
+ */
+export function defaultGameTypeFor(id: string | null | undefined): GameTypeId {
+  return sportById(id).defaultGameType
 }
 
 /**

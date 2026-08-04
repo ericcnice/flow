@@ -23,7 +23,7 @@ import { X, ChevronDown, ArrowLeftRight } from "lucide-react"
 import { SlotRow, type SlotPreview } from "@/components/slot-row"
 import { QRCodeGenerator } from "@/components/qr-code"
 import { SportCourtGlyph } from "@/components/sport-court"
-import { SPORTS, ruleControlsFor, defaultRulesFor, sideChangeOf, type RuleControl, type SportId } from "@/lib/sports-catalog"
+import { SPORTS, ruleControlsFor, defaultRulesFor, defaultGameTypeFor, sideChangeOf, type RuleControl, type SportId } from "@/lib/sports-catalog"
 import { THEMES, DEFAULT_THEME, themeClassName, type ThemeId } from "@/lib/themes"
 
 export type SportSetupContext = "new" | "ingame"
@@ -380,7 +380,14 @@ export function SportSetup({
   /** Aviso de troca de lado ligado? Padrão DESLIGADO. Só aparece o toggle em
    *  esportes com troca de lado (sideChange !== 'none'). */
   initialSideChangeAlert?: boolean
-  /** Simples/duplas inicial. Ausente = 'duplas' (95% dos jogos do clube). */
+  /**
+   * Simples/duplas inicial (ingame: o formato vigente da partida).
+   *
+   * Ausente = partida NOVA → o padrão vem do ESPORTE (`defaultGameTypeFor`).
+   * Antes era 'duplas' fixo, herdado do perfil do SPAC, onde quase todo jogo de
+   * tênis é de dupla — o que fazia squash e ping pong, que são um contra um,
+   * abrirem no formato errado toda vez.
+   */
   initialGameType?: string
   /** Esporte veio do CONTEXTO DE QUADRA (QR): o seletor nasce RECOLHIDO (o
    *  professor raramente troca; as regras ganham a 1ª dobra). Ausente/false =
@@ -461,8 +468,16 @@ export function SportSetup({
   const [rules, setRules] = useState<any>(initialRules)
   const [theme, setTheme] = useState<ThemeId>(initialTheme ?? DEFAULT_THEME)
   const [sideChangeAlert, setSideChangeAlert] = useState<boolean>(initialSideChangeAlert ?? false)
-  // Simples/duplas. Default 'duplas' para partida nova (initialGameType ausente).
-  const [gameType, setGameType] = useState<string>(initialGameType ?? "duplas")
+  // Simples/duplas. Sem `initialGameType` (partida NOVA), o padrão vem do
+  // ESPORTE: abrir squash em duplas é errar o formato de quase todo jogo, e
+  // abrir padel em simples erraria do mesmo jeito na direção oposta.
+  const [gameType, setGameType] = useState<string>(
+    initialGameType ?? defaultGameTypeFor(initialSport),
+  )
+  // A pessoa MEXEU no toggle? Enquanto não mexeu, o formato acompanha o esporte
+  // escolhido; depois de mexer, para de acompanhar — escolha explícita não é
+  // desfeita por um efeito colateral de trocar de esporte.
+  const formatoEscolhidoRef = useRef(false)
   // Seletor de esportes: RECOLHIDO por padrão quando o esporte veio da quadra
   // (QR) — o banner-título mostra o esporte e as regras ganham a 1ª dobra;
   // EXPANDIDO quando aberto sem contexto (a escolha do esporte importa mais).
@@ -539,6 +554,7 @@ export function SportSetup({
   // na hora (a prop existe); no /setup a prop é ausente e a escolha fica para o
   // CTA — o comportamento da fatia (f), agora com duas entradas.
   const escolherFormato = (v: string) => {
+    formatoEscolhidoRef.current = true
     setGameType(v)
     onGameTypeChange?.(v)
   }
@@ -565,6 +581,20 @@ export function SportSetup({
     // Voltar ao esporte inicial restaura as regras vigentes; trocar para outro
     // esporte usa os padrões dele.
     setRules(id === initialSport ? initialRules : defaultRulesFor(id))
+
+    // O FORMATO acompanha o esporte — mas só enquanto ninguém tiver tocado no
+    // toggle. Sem isto, o padrão por esporte só valeria na primeira abertura:
+    // quem entrasse no seletor e escolhesse padel continuaria em simples.
+    //
+    // ⚠️ Diferente das regras logo acima, que são sobrescritas sempre: regras
+    // são ESPECÍFICAS do esporte (as do padel não significam nada no squash) e
+    // não têm como viajar. O formato é o mesmo conceito nos seis esportes, então
+    // uma escolha explícita dele PODE viajar — e apagá-la seria perdê-la.
+    if (!formatoEscolhidoRef.current) {
+      const padrao = id === initialSport ? (initialGameType ?? defaultGameTypeFor(id)) : defaultGameTypeFor(id)
+      setGameType(padrao)
+      onGameTypeChange?.(padrao)
+    }
   }
 
   return (
