@@ -21,6 +21,7 @@ import { Columns2, MonitorPlay, Radio, Rows2, Star, Tv2 } from "lucide-react"
 import { FlowWordmark } from "@/components/brand/flow-wordmark"
 import { TelaoHero } from "./telao-hero"
 import { usePrefsTelao } from "./telao-prefs"
+import type { ResumoLado } from "@/lib/telao-resumo"
 import type { QuadraTelao } from "./tipos"
 
 /** De quanto em quanto tempo a TV procura por uma troca de partida. */
@@ -257,6 +258,43 @@ function Botao({
 }
 
 /**
+ * Um lado no placar-resumo: nome à esquerda, números à direita.
+ *
+ * A hierarquia é deliberada — quem olha de longe precisa achar "onde está o
+ * jogo bom" num relance. O PONTO ATUAL é o número forte (é ele que muda); as
+ * unidades encerradas ficam apagadas, como contexto. O ponto do sacador ganha
+ * a cor da marca, que é o mesmo código que a transmissão usa para dizer "a
+ * bola é dele".
+ */
+function LinhaResumo({ lado }: { lado: ResumoLado }) {
+  return (
+    <span className="flex items-baseline gap-1.5 tabular-nums">
+      <span
+        className={`min-w-0 flex-1 truncate text-[11px] font-bold ${
+          lado.venceu ? "text-white" : "text-white/70"
+        }`}
+      >
+        {lado.nome}
+      </span>
+      {lado.encerradas.map((n, i) => (
+        <span key={i} className="text-[10px] font-bold text-white/30">
+          {n}
+        </span>
+      ))}
+      {lado.atual !== null && (
+        <span className="text-[11px] font-black text-white/55">{lado.atual}</span>
+      )}
+      <span
+        className="min-w-[18px] text-right text-[13px] font-black"
+        style={{ color: lado.saca ? "var(--l-green)" : "rgba(255,255,255,0.9)" }}
+      >
+        {lado.ponto}
+      </span>
+    </span>
+  )
+}
+
+/**
  * Um canal do carrossel. Diz o que a quadra TEM, para a escolha ser informada.
  *
  * ⚠️ DOIS botões IRMÃOS, não um dentro do outro: botão aninhado em botão é HTML
@@ -283,7 +321,7 @@ function CartaoQuadra({
 
   return (
     <div
-      className={`relative flex min-w-[116px] shrink-0 rounded-xl ring-1 transition-colors ${
+      className={`relative flex w-[168px] shrink-0 rounded-xl ring-1 transition-colors ${
         emCartaz ? "bg-white/[0.08] ring-white/30" : "bg-white/[0.02] ring-white/10"
       }`}
     >
@@ -292,25 +330,44 @@ function CartaoQuadra({
         onClick={onEscolher}
         disabled={travado}
         aria-current={emCartaz ? "true" : undefined}
-        className="flex flex-1 flex-col items-start gap-1 rounded-xl py-2 pl-3 pr-9 text-left enabled:hover:bg-white/[0.04] disabled:cursor-default"
+        className="flex flex-1 flex-col items-stretch gap-1 rounded-xl py-2 pl-3 pr-9 text-left enabled:hover:bg-white/[0.04] disabled:cursor-default"
       >
         <span className="flex items-center gap-1.5">
           <span className="text-xs font-black uppercase tracking-[0.15em] text-white/85">
             Q{quadra.numero}
           </span>
           {/* Dica de que a quadra tem câmera. `aria-hidden` porque a informação
-              que decide a escolha (ao vivo / sem partida) está em texto logo
-              abaixo — um ícone sem rótulo lido em voz alta só atrapalharia. */}
+              que decide a escolha está em texto — um ícone sem rótulo lido em
+              voz alta só atrapalharia. */}
           {quadra.embedUrl && <MonitorPlay className="h-3 w-3 text-white/30" aria-hidden />}
+          {emCartaz && (
+            <span
+              className="ml-auto text-[9px] font-black uppercase tracking-[0.18em]"
+              style={{ color: "var(--l-green)" }}
+            >
+              No ar
+            </span>
+          )}
         </span>
-        <span
-          className={`text-[10px] font-bold uppercase tracking-[0.12em] ${
-            temPartida ? "" : "text-white/25"
-          }`}
-          style={temPartida ? { color: "var(--l-green)" } : undefined}
-        >
-          {emCartaz ? "No ar" : temPartida ? "Ao vivo" : "Sem partida"}
-        </span>
+
+        {/* O PLACAR-RESUMO substitui o rótulo de estado quando existe: dizer
+            "Ao vivo" ao lado do próprio placar seria repetir o óbvio, e o
+            cartão é estreito demais para gastar uma linha com isso. */}
+        {quadra.resumo ? (
+          <span className="flex flex-col gap-0.5">
+            <LinhaResumo lado={quadra.resumo.A} />
+            <LinhaResumo lado={quadra.resumo.B} />
+          </span>
+        ) : (
+          <span
+            className={`text-[10px] font-bold uppercase tracking-[0.12em] ${
+              temPartida ? "" : "text-white/25"
+            }`}
+            style={temPartida ? { color: "var(--l-green)" } : undefined}
+          >
+            {temPartida ? "Ao vivo" : "Sem partida"}
+          </span>
+        )}
       </button>
 
       {!travado && (

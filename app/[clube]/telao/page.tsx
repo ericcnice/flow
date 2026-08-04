@@ -23,6 +23,8 @@ import { clubBySlug, quadraLabel } from "@/lib/clubs-config"
 import { telaoConfig } from "@/lib/telao-config"
 import { embedDaQuadra, linkDeEscape } from "@/lib/telao-youtube"
 import { lerLinks, lerCanal } from "@/lib/supabase/telao"
+import { lerEstados } from "@/lib/supabase/telao-estado"
+import { resumoDoState } from "@/lib/telao-resumo"
 import { TelaoTela } from "./telao-tela"
 import type { QuadraTelao } from "./tipos"
 
@@ -65,11 +67,32 @@ export default async function TelaoPage({
   // justamente para o parceiro poder trocá-lo sem depender de deploy.
   const canal = canalSalvo || cfg.youtubeChannelId || null
 
+  // O PLACAR-RESUMO das quadras COM partida, para os cartões do carrossel.
+  //
+  // ⚠️ Aqui, e não no cliente: buscar o placar de cada quadra pelo navegador
+  // exigiria mandar o `view_token` de cada sala para lá — o telão viraria um
+  // distribuidor das credenciais de leitura de todas as transmissões do clube.
+  // O servidor lê, resume, e o cliente recebe nomes e números.
+  //
+  // Custa uma segunda ida ao banco (depende dos tokens que a primeira trouxe),
+  // com teto de 2s e falha isolada por quadra — ver lib/supabase/telao-estado.
+  const comPartida = links.filter((l) => l.viewToken)
+  const estados = await lerEstados(
+    comPartida.map((l) => ({ quadra: l.courtSlug, viewToken: l.viewToken! })),
+  )
+  // O esporte do clube quando ele só tem um (o caso do piloto) — o `state` da
+  // sala manda, quando a traz. Erra o esporte, erra a REGRA do placar.
+  const esportePadrao = club.esportes.length === 1 ? club.esportes[0] : "tennis"
+
   const quadras: QuadraTelao[] = club.quadras.map((slug) => {
     const link = porQuadra.get(slug)
+    const estado = estados.get(slug) as Record<string, unknown> | undefined
+    const esporte =
+      typeof estado?.sport === "string" && estado.sport ? estado.sport : esportePadrao
     return {
       slug,
       numero: quadraLabel(slug),
+      resumo: estado ? resumoDoState(estado, esporte) : null,
       embedUrl: embedDaQuadra(link?.videoUrl, canal),
       canalUrl: linkDeEscape(link?.videoUrl, canal),
       // A URL do placar é MONTADA aqui a partir dos campos guardados — nunca

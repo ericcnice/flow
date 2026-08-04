@@ -4,8 +4,12 @@
  * ⚠️ NENHUM SEGREDO CRU AQUI. O `view_token` da partida nunca chega ao cliente
  * como campo: ele já vem embutido dentro de `placarUrl`, montada no servidor a
  * partir dos campos guardados. O cliente recebe um endereço para pôr num
- * iframe, não a credencial para construir outros.
+ * iframe, não a credencial para construir outros. O mesmo vale para o resumo:
+ * o servidor lê o estado das salas e manda nomes e números — nunca os tokens
+ * que permitiriam ler qualquer outra.
  */
+
+import type { ResumoPartida } from "@/lib/telao-resumo"
 
 export type QuadraTelao = {
   /** Slug da quadra (ex.: "q1"). */
@@ -18,4 +22,12 @@ export type QuadraTelao = {
   canalUrl: string | null
   /** /placar já montado. null = nenhuma partida ligada a esta quadra. */
   placarUrl: string | null
+  /**
+   * O placar-resumo para o cartão do carrossel — nomes e números, nada mais.
+   *
+   * null quando não há partida, ou quando a leitura falhou/estourou o prazo. O
+   * cartão trata os dois casos igual: mostra o estado em texto, sem inventar
+   * zeros que pareceriam um jogo empatado.
+   */
+  resumo: ResumoPartida | null
 }
