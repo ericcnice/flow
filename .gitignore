@@ -25,3 +25,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+# Lixo do Finder (macOS). Aparece em qualquer pasta aberta no Finder —
+# public/ pegou um ao trocar o logo. Nunca deve entrar no repositorio.
+.DS_Store

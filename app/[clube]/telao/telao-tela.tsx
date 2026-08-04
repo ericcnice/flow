@@ -33,8 +33,9 @@ export function TelaoTela({
   clubeNome: string
   clubeLogo: string
   quadra: string
-  embedUrl: string
-  canalUrl: string
+  /** null = esta quadra não tem vídeo configurado — o placar ocupa a tela. */
+  embedUrl: string | null
+  canalUrl: string | null
   /** null = ninguém ligou uma partida a esta quadra ainda. */
   placarUrl: string | null
 }) {
@@ -50,23 +51,35 @@ export function TelaoTela({
   }, [router])
 
   const [videoFalhou, setVideoFalhou] = useState(false)
+  const [logoFalhou, setLogoFalhou] = useState(false)
 
   return (
     <div className="flex h-[100dvh] flex-col overflow-hidden bg-[#04060d] text-white">
       {/* FAIXA: o clube à esquerda, a quadra ao centro, o Flow à direita. */}
       <header className="flex shrink-0 items-center justify-between gap-4 px-5 py-3">
         <span className="flex min-w-0 items-center gap-3">
-          {clubeLogo && (
-            /* eslint-disable-next-line @next/next/no-img-element */
-            <img
-              src={clubeLogo}
-              alt={clubeNome}
-              className="h-9 w-9 shrink-0 rounded-full object-cover ring-1 ring-white/15 md:h-12 md:w-12"
-              onError={(e) => {
-                e.currentTarget.style.display = "none"
-              }}
-            />
-          )}
+          {/* PLACEHOLDER VISÍVEL quando o logo não carrega — antes a imagem era
+              simplesmente ESCONDIDA, e um asset faltando ficava idêntico a "este
+              clube não tem logo mesmo". Foi o que fez procurar o problema no
+              lugar errado. A inicial num disco marcado diz "falta algo aqui". */}
+          <span
+            className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-white/5 ring-1 ring-white/15 md:h-12 md:w-12"
+            aria-hidden
+          >
+            {clubeLogo && !logoFalhou ? (
+              /* eslint-disable-next-line @next/next/no-img-element */
+              <img
+                src={clubeLogo}
+                alt=""
+                className="h-full w-full object-cover"
+                onError={() => setLogoFalhou(true)}
+              />
+            ) : (
+              <span className="text-sm font-black text-white/45 md:text-lg">
+                {clubeNome.trim().charAt(0).toUpperCase() || "?"}
+              </span>
+            )}
+          </span>
           <span className="truncate text-sm font-black uppercase tracking-[0.15em] md:text-xl">
             {clubeNome}
           </span>
@@ -87,7 +100,10 @@ export function TelaoTela({
       {/* O SPLIT. Empilhado no estreito, lado a lado no largo — um telão é
           horizontal, mas a mesma página serve para conferir num celular. */}
       <main className="grid min-h-0 flex-1 grid-cols-1 gap-3 px-3 pb-3 lg:grid-cols-12">
-        {/* VÍDEO */}
+        {/* VÍDEO — só quando a quadra TEM vídeo. Sem ele, o placar ocupa a
+            tela inteira: um retângulo preto vazio pareceria transmissão
+            quebrada, e há quadras que legitimamente não têm câmera. */}
+        {embedUrl && (
         <section className="relative min-h-0 overflow-hidden rounded-2xl bg-black ring-1 ring-white/10 lg:col-span-7">
           <iframe
             src={embedUrl}
@@ -101,6 +117,7 @@ export function TelaoTela({
               devolve uma tela cinza SEM avisar quando o dono do canal não
               liberou o embed, e nenhum evento dispara. Um link discreto é a
               única saída que funciona nos dois casos. */}
+          {canalUrl && (
           <a
             href={canalUrl}
             target="_blank"
@@ -111,10 +128,16 @@ export function TelaoTela({
             Abrir no YouTube
             {videoFalhou && <span className="ml-1 text-amber-400">• embed bloqueado</span>}
           </a>
+          )}
         </section>
+        )}
 
         {/* PLACAR */}
-        <section className="relative min-h-0 overflow-hidden rounded-2xl bg-black ring-1 ring-white/10 lg:col-span-5">
+        <section
+          className={`relative min-h-0 overflow-hidden rounded-2xl bg-black ring-1 ring-white/10 ${
+            embedUrl ? "lg:col-span-5" : "lg:col-span-12"
+          }`}
+        >
           {placarUrl ? (
             <iframe
               key={placarUrl}

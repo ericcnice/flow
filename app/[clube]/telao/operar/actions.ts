@@ -18,7 +18,8 @@
 
 import { revalidatePath } from "next/cache"
 import { clubBySlug } from "@/lib/clubs-config"
-import { gravarLink, apagarLink } from "@/lib/supabase/telao"
+import { gravarLink, apagarLink, gravarCanal, gravarVideoDaQuadra } from "@/lib/supabase/telao"
+import { ehChannelId, idDoVideo } from "@/lib/telao-youtube"
 import { operacaoAutorizada } from "@/lib/telao-auth"
 
 export type ResultadoOperacao = { ok: boolean; erro?: string }
@@ -87,6 +88,81 @@ export async function desligarQuadra(
   const ok = await apagarLink(club.id, quadra)
   if (!ok) return { ok: false, erro: "Não deu para salvar agora." }
 
+  revalidatePath(`/${club.id}/telao`)
+  return { ok: true }
+}
+
+/**
+ * O CANAL DO CLUBE — o fallback de todas as quadras sem vídeo próprio.
+ *
+ * Aceita o id cru (UC…) ou uma URL de canal, porque é isso que se copia do
+ * YouTube. Guarda sempre o ID: é o único formato que o embed aceita, e
+ * normalizar na ESCRITA evita ter que adivinhar formato em toda leitura.
+ */
+export async function salvarCanal(
+  _prev: ResultadoOperacao | null,
+  formData: FormData,
+): Promise<ResultadoOperacao> {
+  const token = String(formData.get("token") ?? "")
+  const clube = String(formData.get("clube") ?? "")
+  const bruto = String(formData.get("canal") ?? "").trim()
+
+  if (!operacaoAutorizada(token)) return { ok: false, erro: "Sem permissão." }
+  const club = clubBySlug(clube)
+  if (!club) return { ok: false, erro: "Clube inválido." }
+
+  // Vazio = remover o canal (as quadras passam a depender só do vídeo próprio).
+  if (!bruto) {
+    const ok = await gravarCanal(club.id, null)
+    if (!ok) return { ok: false, erro: "Não deu para salvar agora." }
+    revalidatePath(`/${club.id}/telao`)
+    return { ok: true }
+  }
+
+  const id = ehChannelId(bruto) ? bruto.trim() : (bruto.match(/UC[\w-]{22}/)?.[0] ?? "")
+  if (!id) {
+    return { ok: false, erro: "Não achei o ID do canal (ele começa com UC…)." }
+  }
+
+  const ok = await gravarCanal(club.id, id)
+  if (!ok) return { ok: false, erro: "Não deu para salvar agora." }
+  revalidatePath(`/${club.id}/telao`)
+  return { ok: true }
+}
+
+/**
+ * O VÍDEO PRÓPRIO de uma quadra — vence o canal do clube.
+ *
+ * Serve ao clube que tem uma transmissão dedicada por quadra. Guarda só o ID de
+ * 11 caracteres: aceitar a URL inteira significaria jogar num iframe algo que
+ * alguém colou, e o telão passaria a poder apontar para qualquer lugar.
+ */
+export async function salvarVideoQuadra(
+  _prev: ResultadoOperacao | null,
+  formData: FormData,
+): Promise<ResultadoOperacao> {
+  const token = String(formData.get("token") ?? "")
+  const clube = String(formData.get("clube") ?? "")
+  const quadra = String(formData.get("quadra") ?? "")
+  const bruto = String(formData.get("video") ?? "").trim()
+
+  if (!operacaoAutorizada(token)) return { ok: false, erro: "Sem permissão." }
+  const club = clubBySlug(clube)
+  if (!club || !club.quadras.includes(quadra)) return { ok: false, erro: "Quadra inválida." }
+
+  // Vazio = a quadra volta a usar o canal do clube.
+  if (!bruto) {
+    const ok = await gravarVideoDaQuadra(club.id, quadra, null)
+    if (!ok) return { ok: false, erro: "Não deu para salvar agora." }
+    revalidatePath(`/${club.id}/telao`)
+    return { ok: true }
+  }
+
+  const id = idDoVideo(bruto)
+  if (!id) return { ok: false, erro: "Não achei o vídeo nesse link." }
+
+  const ok = await gravarVideoDaQuadra(club.id, quadra, id)
+  if (!ok) return { ok: false, erro: "Não deu para salvar agora." }
   revalidatePath(`/${club.id}/telao`)
   return { ok: true }
 }

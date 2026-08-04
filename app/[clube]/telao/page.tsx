@@ -14,8 +14,9 @@
 
 import { notFound } from "next/navigation"
 import { clubBySlug } from "@/lib/clubs-config"
-import { telaoConfig, embedDoCanal, linkDoCanal } from "@/lib/telao-config"
-import { lerLink } from "@/lib/supabase/telao"
+import { telaoConfig } from "@/lib/telao-config"
+import { embedDaQuadra, linkDeEscape } from "@/lib/telao-youtube"
+import { lerLink, lerCanal } from "@/lib/supabase/telao"
 import { TelaoTela } from "./telao-tela"
 
 // Sem cache: a ligação muda quando o parceiro troca a partida, e a TV relê a
@@ -41,12 +42,19 @@ export default async function TelaoPage({
   const quadra =
     quadraParam && club.quadras.includes(quadraParam) ? quadraParam : cfg.quadraPadrao
 
-  const link = await lerLink(club.id, quadra)
+  const [link, canalSalvo] = await Promise.all([lerLink(club.id, quadra), lerCanal(club.id)])
+
+  // PRECEDÊNCIA DO VÍDEO: o da quadra vence o do clube, e o do clube vence o do
+  // catálogo. O último é só compatibilidade — o canal saiu do código nesta
+  // fatia justamente para o parceiro poder trocá-lo sem depender de deploy.
+  const canal = canalSalvo || cfg.youtubeChannelId || null
+  const embedUrl = embedDaQuadra(link?.videoUrl, canal)
+  const canalUrl = linkDeEscape(link?.videoUrl, canal)
 
   // A URL do placar é MONTADA aqui a partir dos campos guardados — nunca uma
   // URL colada inteira. Colocar num iframe o que alguém digitou seria abrir a
   // porta para apontar o telão do clube para qualquer lugar.
-  const placarUrl = link
+  const placarUrl = link?.viewToken
     ? `/placar?quadra=${encodeURIComponent(quadra)}&match=${encodeURIComponent(
         link.matchId ?? "",
       )}&view=${encodeURIComponent(link.viewToken)}&clube=${encodeURIComponent(
@@ -59,8 +67,8 @@ export default async function TelaoPage({
       clubeNome={club.nome}
       clubeLogo={club.logo}
       quadra={quadra}
-      embedUrl={embedDoCanal(cfg.youtubeChannelId)}
-      canalUrl={linkDoCanal(cfg.youtubeChannelId)}
+      embedUrl={embedUrl}
+      canalUrl={canalUrl}
       placarUrl={placarUrl}
     />
   )

@@ -14,9 +14,9 @@
 import { notFound } from "next/navigation"
 import { clubBySlug } from "@/lib/clubs-config"
 import { telaoConfig } from "@/lib/telao-config"
-import { lerLinks } from "@/lib/supabase/telao"
+import { lerLinks, lerCanal } from "@/lib/supabase/telao"
 import { operacaoAutorizada } from "@/lib/telao-auth"
-import { LinhaQuadra } from "./operar-form"
+import { CampoCanal, LinhaQuadra } from "./operar-form"
 
 export const dynamic = "force-dynamic"
 
@@ -38,8 +38,11 @@ export default async function OperarPage({
   // confirmaria que a rota existe e que há algo a adivinhar ali.
   if (!operacaoAutorizada(token)) notFound()
 
-  const links = await lerLinks(club.id)
-  const ligadas = new Set(links.map((l) => l.courtSlug))
+  const [links, canal] = await Promise.all([lerLinks(club.id), lerCanal(club.id)])
+  // "Ligada" = TEM PARTIDA. Uma linha pode existir só por causa do vídeo da
+  // quadra, então a presença da linha não basta como sinal.
+  const ligadas = new Set(links.filter((l) => l.viewToken).map((l) => l.courtSlug))
+  const videos = new Map(links.map((l) => [l.courtSlug, l.videoUrl]))
 
   return (
     <main className="min-h-[100dvh] bg-neutral-950 px-4 py-8 text-white">
@@ -55,6 +58,8 @@ export default async function OperarPage({
           </p>
         </header>
 
+        <CampoCanal clube={club.id} token={token ?? ""} atual={canal} />
+
         {club.quadras.map((q) => (
           <LinhaQuadra
             key={q}
@@ -62,6 +67,7 @@ export default async function OperarPage({
             quadra={q}
             token={token ?? ""}
             ligada={ligadas.has(q)}
+            videoAtual={videos.get(q) ?? null}
           />
         ))}
 
